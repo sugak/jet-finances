@@ -4,51 +4,13 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title><%= title %> · Jet Finances</title>
-
+    
     <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    
-    <!-- Custom CSS - Load after Bootstrap to override -->
-    <link href="/public/css/custom.css" rel="stylesheet">
-    
-    <style>
-      /* Override Bootstrap styles */
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-        background-color: #f9fafb !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      
-      .app-container {
-        display: flex !important;
-        min-height: 100vh !important;
-      }
-      
-      .sidebar {
-        width: 280px !important;
-        background-color: #ffffff !important;
-        border-right: 1px solid #e5e7eb !important;
-        position: fixed !important;
-        height: 100vh !important;
-        overflow-y: auto !important;
-        z-index: 1000 !important;
-      }
-      
-      .main-content {
-        flex: 1 !important;
-        margin-left: 280px !important;
-        display: flex !important;
-        flex-direction: column !important;
-      }
-    </style>
-
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-
+    
     <meta name="csrf-token" content="<%= locals.csrfToken %>">
     <script>
       document.addEventListener('htmx:configRequest', (ev) => {
@@ -58,26 +20,10 @@
     </script>
   </head>
   <body>
-    <div class="app-container">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <%- include('_partials/sidebar') %>
-      </aside>
-      
-      <!-- Main Content -->
-      <div class="main-content">
-        <!-- Header -->
-        <header class="header">
-          <%- include('_partials/header') %>
-        </header>
-        
-        <!-- Page Content -->
-        <main class="page-content">
-          <%- body %>
-        </main>
-      </div>
+    <div class="container mt-4">
+      <%- body %>
     </div>
-
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   </body>
 </html>

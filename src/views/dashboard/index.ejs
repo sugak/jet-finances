@@ -1,131 +1,77 @@
-<!-- Page Header -->
-<div class="page-header">
-  <div>
-    <h1 class="page-title">Dashboard</h1>
-    <p class="breadcrumb">Home / Dashboard</p>
-  </div>
-  <a href="/transactions" class="btn-primary">
-    <i class="bi bi-plus"></i>
-    Add new transaction
-  </a>
-</div>
+<h1>Dashboard</h1>
 
-<!-- Dashboard Content -->
-<div class="card">
-  <div class="card-header">
-    <h3>Financial Overview</h3>
-  </div>
-  <div class="card-body">
-    <div class="row">
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body text-center">
-            <h4 class="text-success">$45,678</h4>
-            <p class="text-muted">Total Balance</p>
+<div class="row">
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Welcome to Jet Finances</h5>
+      </div>
+      <div class="card-body">
+        <p class="card-text">This is your financial dashboard. Here you can manage your transactions, invoices, and reports.</p>
+        
+        <div class="row mt-4">
+          <div class="col-md-3">
+            <div class="card text-center">
+              <div class="card-body">
+                <h5 class="card-title">Total Balance</h5>
+                <h3 class="text-success">$45,678</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card text-center">
+              <div class="card-body">
+                <h5 class="card-title">Monthly Income</h5>
+                <h3 class="text-primary">$12,345</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card text-center">
+              <div class="card-body">
+                <h5 class="card-title">Monthly Expenses</h5>
+                <h3 class="text-warning">$8,765</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card text-center">
+              <div class="card-body">
+                <h5 class="card-title">Net Profit</h5>
+                <h3 class="text-info">$3,580</h3>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body text-center">
-            <h4 class="text-primary">$12,345</h4>
-            <p class="text-muted">Monthly Income</p>
+        
+        <div class="mt-4">
+          <h5>Quick Actions</h5>
+          <div class="btn-group" role="group">
+            <a href="/transactions" class="btn btn-primary">View Transactions</a>
+            <a href="/invoices" class="btn btn-success">Manage Invoices</a>
+            <a href="/reports" class="btn btn-info">Generate Reports</a>
           </div>
         </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body text-center">
-            <h4 class="text-warning">$8,765</h4>
-            <p class="text-muted">Monthly Expenses</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body text-center">
-            <h4 class="text-info">$3,580</h4>
-            <p class="text-muted">Net Profit</p>
-          </div>
+        
+        <div class="mt-4">
+          <h5>System Status</h5>
+          <p>Supabase Connection: <span class="badge bg-success">Connected</span></p>
+          <button class="btn btn-sm btn-outline-primary" onclick="testConnection()">Test Connection</button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Recent Transactions -->
-<div class="card mt-4">
-  <div class="card-header">
-    <h3>Recent Transactions</h3>
-  </div>
-  <div class="card-body">
-    <div class="table-responsive">
-      <table class="table table-hover">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Description</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>#001</td>
-            <td>Flight Booking - NYC to LA</td>
-            <td class="text-danger">-$450.00</td>
-            <td><span class="status-active">Completed</span></td>
-            <td>Dec 15, 2024</td>
-            <td><i class="bi bi-eye text-primary"></i></td>
-          </tr>
-          <tr>
-            <td>#002</td>
-            <td>Invoice Payment - Client ABC</td>
-            <td class="text-success">+$2,500.00</td>
-            <td><span class="status-active">Completed</span></td>
-            <td>Dec 14, 2024</td>
-            <td><i class="bi bi-eye text-primary"></i></td>
-          </tr>
-          <tr>
-            <td>#003</td>
-            <td>Dispute Resolution</td>
-            <td class="text-warning">-$150.00</td>
-            <td><span class="status-inactive">Pending</span></td>
-            <td>Dec 13, 2024</td>
-            <td><i class="bi bi-eye text-primary"></i></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- System Status -->
-<div class="card mt-4">
-  <div class="card-header">
-    <h3>System Status</h3>
-  </div>
-  <div class="card-body">
-    <div class="row">
-      <div class="col-md-6">
-        <h5>Supabase Connection</h5>
-        <p>Check database connection status:</p>
-        <a href="/api/health/supabase" class="btn-secondary" target="_blank">
-          <i class="bi bi-database"></i>
-          Test Connection
-        </a>
-      </div>
-      <div class="col-md-6">
-        <h5>Quick Actions</h5>
-        <p>Available features:</p>
-        <div class="d-flex gap-2">
-          <a href="/flights" class="btn-secondary btn-sm">Flights</a>
-          <a href="/invoices" class="btn-secondary btn-sm">Invoices</a>
-          <a href="/reports" class="btn-secondary btn-sm">Reports</a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<script>
+function testConnection() {
+  fetch('/api/health/supabase')
+    .then(response => response.json())
+    .then(data => {
+      alert('Connection Status: ' + JSON.stringify(data, null, 2));
+    })
+    .catch(error => {
+      alert('Connection Error: ' + error.message);
+    });
+}
+</script>
