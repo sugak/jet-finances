@@ -1,0 +1,24 @@
+<nav class="nav flex-column">
+  <a class="nav-link <%= title === 'Dashboard' ? 'active' : '' %>" href="/">
+    <i class="bi bi-house-door"></i> Dashboard
+  </a>
+  <a class="nav-link <%= title === 'Transactions' ? 'active' : '' %>" href="/transactions">
+    <i class="bi bi-credit-card"></i> Transactions
+  </a>
+  <a class="nav-link <%= title === 'Invoices' ? 'active' : '' %>" href="/invoices">
+    <i class="bi bi-receipt"></i> Invoices
+  </a>
+  <a class="nav-link <%= title === 'Flights' ? 'active' : '' %>" href="/flights">
+    <i class="bi bi-airplane"></i> Flights
+  </a>
+  <a class="nav-link <%= title === 'Reports' ? 'active' : '' %>" href="/reports">
+    <i class="bi bi-graph-up"></i> Reports
+  </a>
+  <a class="nav-link <%= title === 'Disputes' ? 'active' : '' %>" href="/disputes">
+    <i class="bi bi-exclamation-triangle"></i> Disputes
+  </a>
+  <hr class="my-3">
+  <a class="nav-link <%= title === 'Settings' ? 'active' : '' %>" href="/settings">
+    <i class="bi bi-gear"></i> Settings
+  </a>
+</nav>
