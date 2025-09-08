@@ -14,6 +14,38 @@
     <!-- Custom CSS -->
     <link href="/public/css/custom.css" rel="stylesheet">
     
+    <style>
+      /* Critical styles to override Bootstrap */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        background-color: hsl(210, 11%, 98%) !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
+      .app-layout {
+        display: flex !important;
+        min-height: 100vh !important;
+      }
+      
+      .sidebar {
+        width: 256px !important;
+        background-color: hsl(0, 0%, 100%) !important;
+        border-right: 1px solid hsl(210, 11%, 90%) !important;
+        position: fixed !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        z-index: 1000 !important;
+      }
+      
+      .main-content {
+        flex: 1 !important;
+        margin-left: 256px !important;
+        display: flex !important;
+        flex-direction: column !important;
+      }
+    </style>
+    
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     
