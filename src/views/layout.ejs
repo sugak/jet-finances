@@ -26,16 +26,22 @@
     </script>
   </head>
   <body>
-    <div class="container-fluid">
-      <div class="row min-vh-100">
-        <aside class="col-12 col-md-3 col-lg-2 p-3 sidebar">
-          <%- include('_partials/sidebar') %>
-        </aside>
-        <main class="col-12 col-md-9 col-lg-10 p-4">
-          <%- include('_partials/topbar') %>
-          <div class="content mt-3">
-            <%- body %>
-          </div>
+    <div class="app-container">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <%- include('_partials/sidebar') %>
+      </aside>
+      
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Header -->
+        <header class="header">
+          <%- include('_partials/header') %>
+        </header>
+        
+        <!-- Page Content -->
+        <main class="page-content">
+          <%- body %>
         </main>
       </div>
     </div>

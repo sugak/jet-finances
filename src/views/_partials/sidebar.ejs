@@ -1,24 +1,65 @@
-<nav class="nav flex-column">
-  <a class="nav-link <%= title === 'Dashboard' ? 'active' : '' %>" href="/">
-    <i class="bi bi-house-door"></i> Dashboard
-  </a>
-  <a class="nav-link <%= title === 'Transactions' ? 'active' : '' %>" href="/transactions">
-    <i class="bi bi-credit-card"></i> Transactions
-  </a>
-  <a class="nav-link <%= title === 'Invoices' ? 'active' : '' %>" href="/invoices">
-    <i class="bi bi-receipt"></i> Invoices
-  </a>
-  <a class="nav-link <%= title === 'Flights' ? 'active' : '' %>" href="/flights">
-    <i class="bi bi-airplane"></i> Flights
-  </a>
-  <a class="nav-link <%= title === 'Reports' ? 'active' : '' %>" href="/reports">
-    <i class="bi bi-graph-up"></i> Reports
-  </a>
-  <a class="nav-link <%= title === 'Disputes' ? 'active' : '' %>" href="/disputes">
-    <i class="bi bi-exclamation-triangle"></i> Disputes
-  </a>
-  <hr class="my-3">
-  <a class="nav-link <%= title === 'Settings' ? 'active' : '' %>" href="/settings">
-    <i class="bi bi-gear"></i> Settings
-  </a>
+<!-- Sidebar Header -->
+<div class="sidebar-header">
+  <div class="logo-icon">J</div>
+  <div class="logo-text">Jet Finances</div>
+</div>
+
+<!-- Sidebar Navigation -->
+<nav class="sidebar-nav">
+  <!-- GENERAL Section -->
+  <div class="nav-section">
+    <div class="nav-section-title">GENERAL</div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Dashboard' ? 'active' : '' %>" href="/">
+        <i class="bi bi-house-door"></i>
+        Dashboard
+      </a>
+    </div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Flights' ? 'active' : '' %>" href="/flights">
+        <i class="bi bi-airplane"></i>
+        Flights
+      </a>
+    </div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Invoices' ? 'active' : '' %>" href="/invoices">
+        <i class="bi bi-receipt"></i>
+        Invoices
+      </a>
+    </div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Disputes' ? 'active' : '' %>" href="/disputes">
+        <i class="bi bi-exclamation-triangle"></i>
+        Disputes
+      </a>
+    </div>
+  </div>
+
+  <!-- MANAGEMENT Section -->
+  <div class="nav-section">
+    <div class="nav-section-title">MANAGEMENT</div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Reports' ? 'active' : '' %>" href="/reports">
+        <i class="bi bi-graph-up"></i>
+        Reports
+      </a>
+    </div>
+  </div>
+
+  <!-- SUPPORT Section -->
+  <div class="nav-section">
+    <div class="nav-section-title">SUPPORT</div>
+    
+    <div class="nav-item">
+      <a class="nav-link <%= title === 'Settings' ? 'active' : '' %>" href="/settings">
+        <i class="bi bi-gear"></i>
+        Settings
+      </a>
+    </div>
+  </div>
 </nav>
