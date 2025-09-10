@@ -174,7 +174,7 @@ app.get('/api/test/rest', async (_req, res) => {
         .json({ error: 'Supabase credentials not configured' });
     }
 
-    const results = {};
+    const results: any = {};
 
     // Тест внешних соединений
     try {
@@ -298,7 +298,7 @@ app.get('/api/health/supabase', async (_req, res) => {
     const isConnected = await testSupabaseConnection();
 
     // Дополнительные тесты если соединение работает
-    let additionalTests = {};
+    let additionalTests: any = {};
     if (isConnected && supabase) {
       try {
         // Тест auth

@@ -1,15 +1,16 @@
 name: Auto Push on Changes
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - '.eslintrc.cjs'
-      - '.prettierrc'
+# Disabled to prevent infinite commit loops during development
+# on:
+#   push:
+#     branches: [main]
+#     paths:
+#       - 'src/**'
+#       - 'package.json'
+#       - 'package-lock.json'
+#       - 'tsconfig.json'
+#       - '.eslintrc.cjs'
+#       - '.prettierrc'
 
 jobs:
   auto-commit:
