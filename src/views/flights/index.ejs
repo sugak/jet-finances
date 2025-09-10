@@ -2,7 +2,6 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Flights</h1>
-    <p class="page-description">Manage and track all flight operations and schedules.</p>
   </div>
 </div>
 
@@ -128,70 +127,118 @@ async function loadFlights() {
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = '';
     
+    // Sort flights by date (newest first)
+    flights.sort((a, b) => new Date(b.flt_date) - new Date(a.flt_date));
+    
+    // Group flights by month
+    const groupedFlights = {};
     flights.forEach(flight => {
-      const row = document.createElement('tr');
-      
-      // Format date
       const date = new Date(flight.flt_date);
-      const formattedDate = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      
+      if (!groupedFlights[monthKey]) {
+        groupedFlights[monthKey] = {
+          month: date.getMonth(),
+          year: date.getFullYear(),
+          flights: []
+        };
+      }
+      groupedFlights[monthKey].flights.push(flight);
+    });
+    
+    // Sort months (newest first) - proper numeric sorting
+    const sortedMonths = Object.keys(groupedFlights).sort((a, b) => {
+      const [yearA, monthA] = a.split('-').map(Number);
+      const [yearB, monthB] = b.split('-').map(Number);
+      
+      // First compare years, then months
+      if (yearA !== yearB) {
+        return yearB - yearA; // Newest year first
+      }
+      return monthB - monthA; // Newest month first within same year
+    });
+    
+    sortedMonths.forEach(monthKey => {
+      const monthData = groupedFlights[monthKey];
+      
+      // Add month separator
+      const monthRow = document.createElement('tr');
+      const monthName = new Date(monthData.year, monthData.month).toLocaleDateString('en-US', { 
+        month: 'long', 
+        year: 'numeric' 
       });
-      
-      // Format route: flt_dep - flt_arr
-      const route = `${flight.flt_dep} - ${flight.flt_arr}`;
-      
-      // Format time (convert from HH:MM:SS to HH:MM format)
-      const formatTime = (timeString) => {
-        const [hours, minutes] = timeString.split(':');
-        return `${hours}:${minutes}`;
-      };
-      
-      row.innerHTML = `
-        <td class="checkbox-col">
-          <input type="checkbox" class="form-check-input">
-        </td>
-        <td>
-          <div class="date-badge">${formattedDate}</div>
-        </td>
-        <td>
-          <div class="flight-number">${flight.flt_number}</div>
-        </td>
-        <td>
-          <div class="route-info">
-            <div class="route-main">${route}</div>
-            <div class="route-details">Flight Route</div>
-          </div>
-        </td>
-        <td>
-          <div class="time-info">
-            <div class="time-main">${formatTime(flight.flt_time)}</div>
-            <div class="time-details">Flight Time</div>
-          </div>
-        </td>
-        <td>
-          <div class="time-info">
-            <div class="time-main">${formatTime(flight.flt_block)}</div>
-            <div class="time-details">Block Time</div>
-          </div>
-        </td>
-        <td>
-          <div class="action-buttons">
-            <button class="btn-action" title="View Details" onclick="viewFlight('${flight.id}')">
-              <i class="bi bi-eye"></i>
-            </button>
-            <button class="btn-action" title="Edit" onclick="editFlight('${flight.id}')">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button class="btn-action" title="Delete" onclick="deleteFlight('${flight.id}')">
-              <i class="bi bi-trash"></i>
-            </button>
+      monthRow.innerHTML = `
+        <td colspan="7" class="month-separator">
+          <div class="month-divider">
+            <span class="month-label">${monthName}</span>
           </div>
         </td>
       `;
+      tbody.appendChild(monthRow);
       
-      tbody.appendChild(row);
+      // Add flights for this month
+      monthData.flights.forEach(flight => {
+        const row = document.createElement('tr');
+        
+        // Format date
+        const date = new Date(flight.flt_date);
+        const formattedDate = date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric' 
+        });
+        
+        // Format route: flt_dep - flt_arr
+        const route = `${flight.flt_dep} - ${flight.flt_arr}`;
+        
+        // Format time (convert from HH:MM:SS to HH:MM format)
+        const formatTime = (timeString) => {
+          const [hours, minutes] = timeString.split(':');
+          return `${hours}:${minutes}`;
+        };
+        
+        row.innerHTML = `
+          <td class="checkbox-col">
+            <input type="checkbox" class="form-check-input">
+          </td>
+          <td>
+            <div class="date-badge">${formattedDate}</div>
+          </td>
+          <td>
+            <div class="flight-number">${flight.flt_number}</div>
+          </td>
+          <td>
+            <div class="route-info">
+              <div class="route-main">${route}</div>
+            </div>
+          </td>
+          <td>
+            <div class="time-info">
+              <div class="time-main">${formatTime(flight.flt_time)}</div>
+            </div>
+          </td>
+          <td>
+            <div class="time-info">
+              <div class="time-main">${formatTime(flight.flt_block)}</div>
+            </div>
+          </td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn-action" title="View Details" onclick="viewFlight('${flight.id}')">
+                <i class="bi bi-eye"></i>
+              </button>
+              <button class="btn-action" title="Edit" onclick="editFlight('${flight.id}')">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn-action" title="Delete" onclick="deleteFlight('${flight.id}')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        
+        tbody.appendChild(row);
+      });
     });
   } catch (error) {
     console.error('Error loading flights:', error);
@@ -620,6 +667,36 @@ document.addEventListener('DOMContentLoaded', function() {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Month separator styles */
+.month-separator {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  height: 1px !important;
+}
+
+.month-divider {
+  position: relative !important;
+  height: 1px !important;
+  background-color: hsl(210, 11%, 85%) !important;
+  margin: 1rem 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.month-label {
+  background-color: white !important;
+  color: hsl(210, 6%, 46%) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  padding: 0.25rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
 }
 
 /* Responsive design */
