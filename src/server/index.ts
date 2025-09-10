@@ -447,7 +447,7 @@ app.get('/api/flights', async (_req, res) => {
       const { data, error } = await supabase
         .from('flights')
         .select('*')
-        .order('departure_time', { ascending: false });
+        .order('flt_date', { ascending: false });
 
       if (error) {
         console.log('Supabase error, using mock data:', error.message);
@@ -493,7 +493,7 @@ app.get('/api/expenses', async (_req, res) => {
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
-        .order('date', { ascending: false });
+        .order('id', { ascending: false });
 
       if (error) {
         console.log('Supabase error, using mock data:', error.message);
