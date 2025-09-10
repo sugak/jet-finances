@@ -15,7 +15,7 @@
         <span class="table-subtitle">All scheduled and completed flights</span>
       </div>
       <div class="table-actions">
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" id="addFlightBtn">
           <i class="bi bi-plus-lg"></i>
           Add Flight
         </button>
@@ -57,6 +57,64 @@
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<!-- Add Flight Modal -->
+<div id="addFlightModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h3>Add New Flight</h3>
+      <button class="modal-close" id="closeModalBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <form id="addFlightForm" class="modal-form">
+      <div class="form-group">
+        <label for="flightDate">Date</label>
+        <input type="date" id="flightDate" name="flt_date" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="flightNumber">Flight Number</label>
+        <input type="text" id="flightNumber" name="flt_number" placeholder="e.g., F9105" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="departure">Departure</label>
+        <input type="text" id="departure" name="flt_dep" placeholder="e.g., Abu Dhabi" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="arrival">Arrival</label>
+        <input type="text" id="arrival" name="flt_arr" placeholder="e.g., Dubai" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="flightTime">Flight Time</label>
+        <input type="text" id="flightTime" name="flt_time" placeholder="e.g., 0130 (01:30)" maxlength="4" pattern="[0-9]{4}" required>
+        <small class="form-help">Enter 4 digits (e.g., 0130 for 01:30)</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="blockTime">Block Time</label>
+        <input type="text" id="blockTime" name="flt_block" placeholder="e.g., 0215 (02:15)" maxlength="4" pattern="[0-9]{4}" required>
+        <small class="form-help">Enter 4 digits (e.g., 0215 for 02:15)</small>
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="cancelBtn">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-save" id="saveFlightBtn">
+          <span class="btn-text">Save</span>
+          <span class="btn-spinner" style="display: none;">
+            <i class="bi bi-arrow-clockwise"></i>
+          </span>
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -167,5 +225,425 @@ function deleteFlight(id) {
 }
 
 // Load data when page loads
-document.addEventListener('DOMContentLoaded', loadFlights);
+// Modal functions
+function openAddFlightModal() {
+  console.log('openAddFlightModal called');
+  const modal = document.getElementById('addFlightModal');
+  console.log('Modal element:', modal);
+  
+  if (modal) {
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    console.log('Modal should be visible now');
+    
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('flightDate');
+    if (dateInput) {
+      dateInput.value = today;
+    }
+  } else {
+    console.error('Modal element not found!');
+  }
+}
+
+function closeAddFlightModal() {
+  const modal = document.getElementById('addFlightModal');
+  modal.classList.remove('show');
+  document.body.style.overflow = 'auto';
+  
+  // Reset form
+  document.getElementById('addFlightForm').reset();
+}
+
+// Time validation and formatting functions
+function formatTimeInput(input) {
+  let value = input.value.replace(/\D/g, ''); // Remove non-digits
+  
+  // Limit to 4 digits
+  if (value.length > 4) {
+    value = value.substring(0, 4);
+  }
+  
+  input.value = value;
+  
+  // Auto-format to HH:MM when 4 digits are entered
+  if (value.length === 4) {
+    const hours = value.substring(0, 2);
+    const minutes = value.substring(2, 4);
+    
+    // Validate hours (00-23)
+    if (parseInt(hours) > 23) {
+      input.setCustomValidity('Hours must be between 00 and 23');
+      return false;
+    }
+    
+    // Validate minutes (00-59)
+    if (parseInt(minutes) > 59) {
+      input.setCustomValidity('Minutes must be between 00 and 59');
+      return false;
+    }
+    
+    input.setCustomValidity(''); // Clear any previous validation errors
+    return true;
+  }
+  
+  input.setCustomValidity(''); // Clear validation errors
+  return true;
+}
+
+function validateTimeInput(input) {
+  const value = input.value;
+  
+  if (value.length === 4) {
+    const hours = parseInt(value.substring(0, 2));
+    const minutes = parseInt(value.substring(2, 4));
+    
+    if (hours > 23) {
+      input.setCustomValidity('Hours must be between 00 and 23');
+      return false;
+    }
+    
+    if (minutes > 59) {
+      input.setCustomValidity('Minutes must be between 00 and 59');
+      return false;
+    }
+  }
+  
+  input.setCustomValidity('');
+  return true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Load flights data
+  loadFlights();
+  
+  // Test if modal functions are available
+  console.log('DOM loaded, testing modal functions...');
+  console.log('openAddFlightModal function:', typeof openAddFlightModal);
+  console.log('closeAddFlightModal function:', typeof closeAddFlightModal);
+  
+  // Add event listeners for modal buttons
+  const addFlightBtn = document.getElementById('addFlightBtn');
+  if (addFlightBtn) {
+    addFlightBtn.addEventListener('click', openAddFlightModal);
+    console.log('Add Flight button event listener added');
+  }
+  
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeAddFlightModal);
+    console.log('Close Modal button event listener added');
+  }
+  
+  const cancelBtn = document.getElementById('cancelBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', closeAddFlightModal);
+    console.log('Cancel button event listener added');
+  }
+  
+  // Handle form submission
+  const addFlightForm = document.getElementById('addFlightForm');
+  if (addFlightForm) {
+    addFlightForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const saveBtn = document.getElementById('saveFlightBtn');
+      const btnText = saveBtn.querySelector('.btn-text');
+      const btnSpinner = saveBtn.querySelector('.btn-spinner');
+      
+      // Show spinner
+      btnText.style.display = 'none';
+      btnSpinner.style.display = 'inline-block';
+      saveBtn.disabled = true;
+      
+      try {
+        const formData = new FormData(this);
+        const flightData = Object.fromEntries(formData.entries());
+        
+        // Convert 4-digit time format to HH:MM:SS for database
+        if (flightData.flt_time && flightData.flt_time.length === 4) {
+          const hours = flightData.flt_time.substring(0, 2);
+          const minutes = flightData.flt_time.substring(2, 4);
+          flightData.flt_time = `${hours}:${minutes}:00`;
+        }
+        
+        if (flightData.flt_block && flightData.flt_block.length === 4) {
+          const hours = flightData.flt_block.substring(0, 2);
+          const minutes = flightData.flt_block.substring(2, 4);
+          flightData.flt_block = `${hours}:${minutes}:00`;
+        }
+        
+        const response = await fetch('/api/flights', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(flightData)
+        });
+        
+        if (response.ok) {
+          // Close modal and reload flights
+          closeAddFlightModal();
+          await loadFlights();
+          
+          // Show success message (optional)
+          console.log('Flight added successfully');
+        } else {
+          throw new Error('Failed to add flight');
+        }
+      } catch (error) {
+        console.error('Error adding flight:', error);
+        alert('Failed to add flight. Please try again.');
+      } finally {
+        // Hide spinner
+        btnText.style.display = 'inline-block';
+        btnSpinner.style.display = 'none';
+        saveBtn.disabled = false;
+      }
+    });
+  }
+  
+  // Close modal when clicking outside
+  const addFlightModal = document.getElementById('addFlightModal');
+  if (addFlightModal) {
+    addFlightModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeAddFlightModal();
+      }
+    });
+  }
+  
+  // Add time input validation and formatting
+  const flightTimeInput = document.getElementById('flightTime');
+  const blockTimeInput = document.getElementById('blockTime');
+  
+  if (flightTimeInput) {
+    flightTimeInput.addEventListener('input', function() {
+      formatTimeInput(this);
+    });
+    
+    flightTimeInput.addEventListener('blur', function() {
+      validateTimeInput(this);
+    });
+    
+    // Prevent non-numeric input
+    flightTimeInput.addEventListener('keypress', function(e) {
+      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+  }
+  
+  if (blockTimeInput) {
+    blockTimeInput.addEventListener('input', function() {
+      formatTimeInput(this);
+    });
+    
+    blockTimeInput.addEventListener('blur', function() {
+      validateTimeInput(this);
+    });
+    
+    // Prevent non-numeric input
+    blockTimeInput.addEventListener('keypress', function(e) {
+      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+  }
+});
 </script>
+
+<style>
+/* Modal styles */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  display: none !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 10000 !important;
+}
+
+.modal-overlay.show {
+  display: flex !important;
+}
+
+.modal-container {
+  background: white !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  width: 90% !important;
+  max-width: 500px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.modal-header h3 {
+  margin: 0 !important;
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-close {
+  background: none !important;
+  border: none !important;
+  font-size: 1.25rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  cursor: pointer !important;
+  padding: 0.25rem !important;
+  border-radius: 0.25rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.modal-close:hover {
+  background-color: hsl(210, 11%, 95%) !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-form {
+  padding: 0 1.5rem 1.5rem 1.5rem !important;
+}
+
+.form-group {
+  margin-bottom: 1.25rem !important;
+}
+
+.form-group label {
+  display: block !important;
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.875rem !important;
+}
+
+.form-group input {
+  width: 100% !important;
+  padding: 0.75rem !important;
+  border: 1px solid hsl(210, 11%, 90%) !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  transition: all 0.2s ease !important;
+  background-color: white !important;
+}
+
+.form-group input:focus {
+  outline: none !important;
+  border-color: hsl(142, 76%, 36%) !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1) !important;
+}
+
+.form-group input::placeholder {
+  color: hsl(210, 6%, 60%) !important;
+}
+
+.form-help {
+  display: block !important;
+  margin-top: 0.25rem !important;
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 60%) !important;
+  font-style: italic !important;
+}
+
+.form-group input:invalid {
+  border-color: hsl(0, 84%, 60%) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.form-group input:valid {
+  border-color: hsl(142, 76%, 36%) !important;
+}
+
+.modal-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.75rem !important;
+  margin-top: 2rem !important;
+  padding-top: 1.5rem !important;
+  border-top: 1px solid hsl(210, 11%, 90%) !important;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+.btn-cancel {
+  background-color: hsl(0, 84%, 60%) !important;
+  color: white !important;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background-color: hsl(0, 84%, 55%) !important;
+}
+
+.btn-save {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+}
+
+.btn-save:hover:not(:disabled) {
+  background-color: hsl(142, 76%, 32%) !important;
+}
+
+.btn-spinner {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .modal-container {
+    width: 95% !important;
+    margin: 1rem !important;
+  }
+  
+  .modal-header {
+    padding: 1rem 1rem 0 1rem !important;
+  }
+  
+  .modal-form {
+    padding: 0 1rem 1rem 1rem !important;
+  }
+  
+  .modal-actions {
+    flex-direction: column !important;
+  }
+  
+  .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+</style>

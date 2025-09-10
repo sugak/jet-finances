@@ -150,15 +150,28 @@ app.use(
   })
 );
 
-// CSRF (cookie-based)
+// CSRF (cookie-based) - исключаем API эндпоинты
 const csrfProtection = csrf({ cookie: true });
-app.use(csrfProtection);
+app.use((req: Request, res: Response, next: NextFunction) => {
+  // Пропускаем CSRF для API эндпоинтов
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  return csrfProtection(req, res, next);
+});
 
 // пробрасываем CSRF-токен в шаблоны и для HTMX-запросов
 app.use((req: Request, res: Response, next: NextFunction) => {
+  // Пропускаем установку CSRF токена для API эндпоинтов
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+
   const token = (req as any).csrfToken?.() || res.locals.csrfToken;
   res.locals.csrfToken = token;
-  res.setHeader('X-CSRF-Token', token);
+  if (token) {
+    res.setHeader('X-CSRF-Token', token);
+  }
   next();
 });
 
@@ -465,6 +478,63 @@ app.get('/api/flights', async (_req, res) => {
   } catch (error) {
     console.log('Error fetching flights:', error);
     res.json(mockData.flights);
+  }
+});
+
+// POST endpoint to add new flight
+app.post('/api/flights', async (req, res) => {
+  try {
+    const { flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block } =
+      req.body;
+
+    // Validate required fields
+    if (
+      !flt_date ||
+      !flt_number ||
+      !flt_dep ||
+      !flt_arr ||
+      !flt_time ||
+      !flt_block
+    ) {
+      return res.status(400).json({
+        error:
+          'All fields are required: flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block',
+      });
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('flights')
+        .insert([
+          {
+            flt_date,
+            flt_number,
+            flt_dep,
+            flt_arr,
+            flt_time,
+            flt_block,
+          },
+        ])
+        .select();
+
+      if (error) {
+        console.log('Supabase error adding flight:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to add flight to database' });
+      }
+
+      return res.status(201).json({
+        message: 'Flight added successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error adding flight:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
