@@ -1,0 +1,334 @@
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Expenses</h1>
+    <p class="page-description">Track and manage all operational expenses and costs.</p>
+  </div>
+</div>
+
+<!-- Expenses Table -->
+<div class="table-container">
+  <div class="table-card">
+    <div class="table-header">
+      <div class="table-title">
+        <h3>Expense Management</h3>
+        <span class="table-subtitle">All operational expenses and cost records</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn btn-primary">
+          <i class="bi bi-plus-lg"></i>
+          Add Expense
+        </button>
+      </div>
+    </div>
+    
+    <div class="table-wrapper">
+      <table class="expenses-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">
+              <input type="checkbox" class="form-check-input" id="selectAll">
+            </th>
+            <th class="sortable">
+              TYPE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              PLACE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              AMOUNT
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FUEL QTY
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FUEL PROV.
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              INV. TYPE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              INV. #
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FLT. #
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              COMMENTS
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="expenses-table-body">
+          <!-- Data will be loaded via JavaScript -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// Load expenses data from API
+async function loadExpenses() {
+  try {
+    const response = await fetch('/api/expenses');
+    const expenses = await response.json();
+    
+    const tbody = document.getElementById('expenses-table-body');
+    tbody.innerHTML = '';
+    
+    expenses.forEach(expense => {
+      const row = document.createElement('tr');
+      
+      // Format amount with currency (assuming USD for now)
+      const formattedAmount = `$${parseFloat(expense.exp_amount).toLocaleString('en-US', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      })}`;
+      
+      // Truncate comments if too long
+      const truncatedComments = expense.exp_comments && expense.exp_comments.length > 50 
+        ? expense.exp_comments.substring(0, 50) + '...' 
+        : expense.exp_comments || 'No comments';
+      
+      // Format fuel quantity
+      const fuelQuantity = expense.exp_fuel_quan ? `${expense.exp_fuel_quan} L` : 'N/A';
+      
+      // Format fuel provider
+      const fuelProvider = expense.exp_fuel_provider || 'N/A';
+      
+      row.innerHTML = `
+        <td class="checkbox-col">
+          <input type="checkbox" class="form-check-input">
+        </td>
+        <td>
+          <div class="expense-type-compact">${expense.exp_type}</div>
+        </td>
+        <td>
+          <div class="expense-place-compact">${expense.exp_place}</div>
+        </td>
+        <td>
+          <div class="amount-compact">${formattedAmount}</div>
+        </td>
+        <td>
+          <div class="fuel-quantity-compact">${fuelQuantity}</div>
+        </td>
+        <td>
+          <div class="fuel-provider-compact">${fuelProvider}</div>
+        </td>
+        <td>
+          <div class="invoice-type-compact" title="${expense.exp_invoice_type}">${expense.exp_invoice_type.length > 15 ? expense.exp_invoice_type.substring(0, 15) + '...' : expense.exp_invoice_type}</div>
+        </td>
+        <td>
+          <div class="invoice-number-compact">${expense.invoices?.inv_number || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="flight-number-compact">${expense.flights?.flt_number || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="comments-compact" title="${expense.exp_comments || 'No comments'}">${truncatedComments}</div>
+        </td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-action" title="View Details" onclick="viewExpense('${expense.id}')">
+              <i class="bi bi-eye"></i>
+            </button>
+            <button class="btn-action" title="Edit" onclick="editExpense('${expense.id}')">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn-action" title="Delete" onclick="deleteExpense('${expense.id}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      `;
+      
+      tbody.appendChild(row);
+    });
+  } catch (error) {
+    console.error('Error loading expenses:', error);
+    // Show error message
+    const tbody = document.getElementById('expenses-table-body');
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">
+          <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+          Failed to load expenses. Please try again.
+        </td>
+      </tr>
+    `;
+  }
+}
+
+// Action functions
+function viewExpense(id) {
+  console.log('View expense:', id);
+  // TODO: Implement view functionality
+}
+
+function editExpense(id) {
+  console.log('Edit expense:', id);
+  // TODO: Implement edit functionality
+}
+
+function deleteExpense(id) {
+  console.log('Delete expense:', id);
+  // TODO: Implement delete functionality
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', loadExpenses);
+</script>
+
+<style>
+/* Expense-specific styles */
+.expenses-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.8rem !important;
+  table-layout: fixed !important;
+}
+
+.expenses-table thead {
+  background-color: hsl(210, 11%, 96%) !important;
+}
+
+.expenses-table th {
+  padding: 0.5rem 0.5rem !important;
+  text-align: left !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  white-space: nowrap !important;
+  font-size: 0.75rem !important;
+}
+
+.expenses-table td {
+  padding: 0.5rem 0.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  vertical-align: middle !important;
+}
+
+.expenses-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%) !important;
+}
+
+.expense-type {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  text-transform: capitalize !important;
+}
+
+.expense-place {
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.amount-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.amount-main {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+}
+
+.amount-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.invoice-type-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.invoice-type-main {
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+  font-size: 0.8rem !important;
+}
+
+.invoice-type-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.invoice-number-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.invoice-number-main {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+}
+
+.invoice-number-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.flight-number-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.flight-number-main {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+}
+
+.flight-number-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+/* Compact styles for all elements */
+.expense-type-compact, .expense-place-compact, .amount-compact,
+.fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
+.invoice-number-compact, .flight-number-compact, .comments-compact {
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.comments-info {
+  display: flex !important;
+  flex-direction: column !important;
+  max-width: 200px !important;
+}
+
+.comments-main {
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+  font-size: 0.8rem !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.comments-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+</style>

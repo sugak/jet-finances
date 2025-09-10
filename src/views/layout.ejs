@@ -28,6 +28,30 @@
         overflow-x: hidden !important;
       }
       
+      /* Prevent horizontal scroll on all elements */
+      * {
+        box-sizing: border-box !important;
+      }
+      
+      html {
+        overflow-x: hidden !important;
+      }
+      
+      .main-content {
+        overflow-x: hidden !important;
+        max-width: 100% !important;
+      }
+      
+      .table-container {
+        overflow-x: hidden !important;
+        max-width: 100% !important;
+      }
+      
+      .table-wrapper {
+        overflow-x: hidden !important;
+        max-width: 100% !important;
+      }
+      
       .app-layout {
         display: flex !important;
         min-height: 100vh !important;
@@ -409,13 +433,14 @@
          }
          
          .table-wrapper {
-           overflow-x: auto !important;
+           overflow-x: hidden !important;
          }
          
          .flights-table {
            width: 100% !important;
            border-collapse: collapse !important;
            font-size: 0.875rem !important;
+           table-layout: fixed !important;
          }
          
          .flights-table thead {
@@ -423,22 +448,43 @@
          }
          
          .flights-table th {
-           padding: 1rem 1.5rem !important;
+           padding: 0.5rem 0.5rem !important;
            text-align: left !important;
            font-weight: 600 !important;
            color: hsl(210, 6%, 21%) !important;
            border-bottom: 1px solid hsl(210, 11%, 90%) !important;
            white-space: nowrap !important;
+           font-size: 0.75rem !important;
          }
          
          .flights-table td {
-           padding: 1rem 1.5rem !important;
+           padding: 0.5rem 0.5rem !important;
            border-bottom: 1px solid hsl(210, 11%, 90%) !important;
            vertical-align: middle !important;
          }
          
          .flights-table tbody tr:hover {
            background-color: hsl(210, 11%, 98%) !important;
+         }
+         
+         /* General table styles to prevent horizontal scroll */
+         table {
+           table-layout: fixed !important;
+           width: 100% !important;
+         }
+         
+         .invoices-table, .expenses-table {
+           table-layout: fixed !important;
+           width: 100% !important;
+         }
+         
+         .invoices-table th, .expenses-table th {
+           padding: 0.5rem 0.5rem !important;
+           font-size: 0.75rem !important;
+         }
+         
+         .invoices-table td, .expenses-table td {
+           padding: 0.5rem 0.5rem !important;
          }
          
          .checkbox-col {
@@ -594,15 +640,21 @@
             <h3 class="nav-section-title">MANAGEMENT</h3>
             <ul class="nav-list">
               <li class="nav-item">
+                <a href="/flights" class="nav-link <%= title === 'Flights' ? 'active' : '' %>">
+                  <i class="bi bi-airplane"></i>
+                  <span>Flights</span>
+                </a>
+              </li>
+              <li class="nav-item">
                 <a href="/invoices" class="nav-link <%= title === 'Invoices' ? 'active' : '' %>">
                   <i class="bi bi-file-text"></i>
                   <span>Invoices</span>
                 </a>
               </li>
               <li class="nav-item">
-                <a href="/flights" class="nav-link <%= title === 'Flights' ? 'active' : '' %>">
-                  <i class="bi bi-airplane"></i>
-                  <span>Flights</span>
+                <a href="/expenses" class="nav-link <%= title === 'Expenses' ? 'active' : '' %>">
+                  <i class="bi bi-credit-card"></i>
+                  <span>Expenses</span>
                 </a>
               </li>
               <li class="nav-item">

@@ -284,6 +284,10 @@ app.get('/reports', (_req, res) => {
   res.render('reports/index', { title: 'Reports' });
 });
 
+app.get('/expenses', (_req, res) => {
+  res.render('expenses/index', { title: 'Expenses' });
+});
+
 app.get('/disputes', (_req, res) => {
   res.render('disputes/index', { title: 'Disputes' });
 });
@@ -492,7 +496,17 @@ app.get('/api/expenses', async (_req, res) => {
     if (supabase) {
       const { data, error } = await supabase
         .from('expenses')
-        .select('*')
+        .select(
+          `
+          *,
+          invoices!exp_invoice (
+            inv_number
+          ),
+          flights!exp_flight (
+            flt_number
+          )
+        `
+        )
         .order('id', { ascending: false });
 
       if (error) {

@@ -162,7 +162,8 @@ document.addEventListener('DOMContentLoaded', loadInvoices);
 .invoices-table {
   width: 100% !important;
   border-collapse: collapse !important;
-  font-size: 0.875rem !important;
+  font-size: 0.8rem !important;
+  table-layout: fixed !important;
 }
 
 .invoices-table thead {
@@ -170,16 +171,17 @@ document.addEventListener('DOMContentLoaded', loadInvoices);
 }
 
 .invoices-table th {
-  padding: 1rem 1.5rem !important;
+  padding: 0.5rem 0.5rem !important;
   text-align: left !important;
   font-weight: 600 !important;
   color: hsl(210, 6%, 21%) !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
+  font-size: 0.75rem !important;
 }
 
 .invoices-table td {
-  padding: 1rem 1.5rem !important;
+  padding: 0.5rem 0.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   vertical-align: middle !important;
 }
