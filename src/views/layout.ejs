@@ -350,12 +350,206 @@
         color: white !important;
       }
       
-      .user-name-small {
-        font-size: 0.875rem !important;
-        font-weight: 500 !important;
-        color: hsl(210, 6%, 21%) !important;
-      }
-    </style>
+         .user-name-small {
+           font-size: 0.875rem !important;
+           font-weight: 500 !important;
+           color: hsl(210, 6%, 21%) !important;
+         }
+         
+         /* Table Styles */
+         .table-container {
+           margin-top: 1.5rem !important;
+         }
+         
+         .table-card {
+           background-color: hsl(0, 0%, 100%) !important;
+           border: 1px solid hsl(210, 11%, 90%) !important;
+           border-radius: 0.375rem !important;
+           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+           overflow: hidden !important;
+         }
+         
+         .table-header {
+           padding: 1.5rem !important;
+           border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+           display: flex !important;
+           justify-content: space-between !important;
+           align-items: center !important;
+         }
+         
+         .table-title h3 {
+           font-size: 1.125rem !important;
+           font-weight: 600 !important;
+           color: hsl(210, 6%, 21%) !important;
+           margin: 0 0 0.25rem 0 !important;
+         }
+         
+         .table-subtitle {
+           font-size: 0.875rem !important;
+           color: hsl(210, 6%, 46%) !important;
+         }
+         
+         .table-actions .btn {
+           padding: 0.5rem 1rem !important;
+           font-size: 0.875rem !important;
+           font-weight: 500 !important;
+           border-radius: 0.375rem !important;
+           border: none !important;
+           cursor: pointer !important;
+           transition: all 0.2s ease !important;
+         }
+         
+         .btn-primary {
+           background-color: hsl(142, 76%, 36%) !important;
+           color: white !important;
+         }
+         
+         .btn-primary:hover {
+           background-color: hsl(142, 76%, 32%) !important;
+         }
+         
+         .table-wrapper {
+           overflow-x: auto !important;
+         }
+         
+         .flights-table {
+           width: 100% !important;
+           border-collapse: collapse !important;
+           font-size: 0.875rem !important;
+         }
+         
+         .flights-table thead {
+           background-color: hsl(210, 11%, 96%) !important;
+         }
+         
+         .flights-table th {
+           padding: 1rem 1.5rem !important;
+           text-align: left !important;
+           font-weight: 600 !important;
+           color: hsl(210, 6%, 21%) !important;
+           border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+           white-space: nowrap !important;
+         }
+         
+         .flights-table td {
+           padding: 1rem 1.5rem !important;
+           border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+           vertical-align: middle !important;
+         }
+         
+         .flights-table tbody tr:hover {
+           background-color: hsl(210, 11%, 98%) !important;
+         }
+         
+         .checkbox-col {
+           width: 3rem !important;
+           text-align: center !important;
+         }
+         
+         .form-check-input {
+           width: 1rem !important;
+           height: 1rem !important;
+           border: 1px solid hsl(210, 11%, 90%) !important;
+           border-radius: 0.25rem !important;
+           cursor: pointer !important;
+         }
+         
+         .form-check-input:checked {
+           background-color: hsl(142, 76%, 36%) !important;
+           border-color: hsl(142, 76%, 36%) !important;
+         }
+         
+         .sortable {
+           cursor: pointer !important;
+           user-select: none !important;
+           position: relative !important;
+         }
+         
+         .sortable:hover {
+           background-color: hsl(210, 11%, 94%) !important;
+         }
+         
+         .sort-icon {
+           margin-left: 0.5rem !important;
+           font-size: 0.75rem !important;
+           color: hsl(210, 6%, 46%) !important;
+         }
+         
+         .date-badge {
+           background-color: hsl(142, 76%, 96%) !important;
+           color: hsl(142, 76%, 36%) !important;
+           padding: 0.25rem 0.5rem !important;
+           border-radius: 0.25rem !important;
+           font-size: 0.75rem !important;
+           font-weight: 500 !important;
+           display: inline-block !important;
+         }
+         
+         .flight-number {
+           font-weight: 600 !important;
+           color: hsl(210, 6%, 21%) !important;
+         }
+         
+         .route-info {
+           display: flex !important;
+           flex-direction: column !important;
+         }
+         
+         .route-main {
+           font-weight: 600 !important;
+           color: hsl(210, 6%, 21%) !important;
+           margin-bottom: 0.125rem !important;
+         }
+         
+         .route-details {
+           font-size: 0.75rem !important;
+           color: hsl(210, 6%, 46%) !important;
+         }
+         
+         .time-info {
+           display: flex !important;
+           flex-direction: column !important;
+         }
+         
+         .time-main {
+           font-weight: 600 !important;
+           color: hsl(210, 6%, 21%) !important;
+           margin-bottom: 0.125rem !important;
+         }
+         
+         .time-details {
+           font-size: 0.75rem !important;
+           color: hsl(210, 6%, 46%) !important;
+         }
+         
+         .action-buttons {
+           display: flex !important;
+           gap: 0.5rem !important;
+         }
+         
+         .btn-action {
+           width: 2rem !important;
+           height: 2rem !important;
+           border: none !important;
+           background: none !important;
+           border-radius: 0.25rem !important;
+           display: flex !important;
+           align-items: center !important;
+           justify-content: center !important;
+           color: hsl(210, 6%, 46%) !important;
+           cursor: pointer !important;
+           transition: all 0.2s ease !important;
+         }
+         
+         .btn-action:hover {
+           background-color: hsl(210, 11%, 96%) !important;
+           color: hsl(210, 6%, 21%) !important;
+         }
+         
+         .btn-action i {
+           font-size: 0.875rem !important;
+         }
+       </style>
     
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>

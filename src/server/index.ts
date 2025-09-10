@@ -162,6 +162,107 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Тест REST API Supabase
+app.get('/api/test/rest', async (_req, res) => {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res
+        .status(500)
+        .json({ error: 'Supabase credentials not configured' });
+    }
+
+    const results = {};
+
+    // Тест внешних соединений
+    try {
+      const googleResponse = await fetch('https://google.com');
+      results.external_connection = {
+        status: 'success',
+        message: `Google: ${googleResponse.status}`,
+      };
+    } catch (err) {
+      results.external_connection = {
+        status: 'failed',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+
+    // Тест Supabase URL
+    try {
+      const supabaseResponse = await fetch(supabaseUrl);
+      results.supabase_url = {
+        status: 'success',
+        message: `Supabase: ${supabaseResponse.status}`,
+      };
+    } catch (err) {
+      results.supabase_url = {
+        status: 'failed',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+
+    // Тест таблиц через REST API
+    const tables = ['flights', 'invoices', 'expenses'];
+
+    for (const table of tables) {
+      try {
+        const url = `${supabaseUrl}/rest/v1/${table}?select=*&limit=1`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          results[table] = {
+            status: 'success',
+            count: data.length,
+            sample: data[0] || null,
+          };
+        } else {
+          const errorText = await response.text();
+          results[table] = {
+            status: 'error',
+            code: response.status,
+            message: errorText,
+          };
+        }
+      } catch (err) {
+        results[table] = {
+          status: 'exception',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        };
+      }
+    }
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      tests: results,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// ---------- HTTPS to HTTP redirect ----------
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.header('x-forwarded-proto') === 'https' || req.secure) {
+    const httpUrl = `http://${req.get('host')}${req.url}`;
+    return res.redirect(301, httpUrl);
+  }
+  next();
+});
+
 // ---------- Routes ----------
 app.get('/', (_req, res) => {
   res.render('dashboard/index', { title: 'Dashboard' });
@@ -211,6 +312,31 @@ app.get('/api/health/supabase', async (_req, res) => {
         additionalTests.storage = storageError
           ? `❌ ${storageError.message}`
           : '✅ Storage service working';
+
+        // Тест таблиц
+        const { data: flightsData, error: flightsError } = await supabase
+          .from('flights')
+          .select('*')
+          .limit(1);
+        additionalTests.flights = flightsError
+          ? `❌ ${flightsError.message}`
+          : `✅ Flights table accessible (${flightsData?.length || 0} records)`;
+
+        const { data: invoicesData, error: invoicesError } = await supabase
+          .from('invoices')
+          .select('*')
+          .limit(1);
+        additionalTests.invoices = invoicesError
+          ? `❌ ${invoicesError.message}`
+          : `✅ Invoices table accessible (${invoicesData?.length || 0} records)`;
+
+        const { data: expensesData, error: expensesError } = await supabase
+          .from('expenses')
+          .select('*')
+          .limit(1);
+        additionalTests.expenses = expensesError
+          ? `❌ ${expensesError.message}`
+          : `✅ Expenses table accessible (${expensesData?.length || 0} records)`;
       } catch (testError) {
         additionalTests.error =
           testError instanceof Error ? testError.message : 'Unknown test error';
@@ -246,6 +372,213 @@ app.get('/api/health/supabase', async (_req, res) => {
             : '❌ Missing',
       },
       timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Mock data для fallback
+const mockData = {
+  flights: [
+    {
+      id: 1,
+      flight_number: 'JF001',
+      departure: 'JFK',
+      arrival: 'LAX',
+      departure_time: '2024-01-15T08:00:00Z',
+      arrival_time: '2024-01-15T11:30:00Z',
+      status: 'completed',
+      revenue: 2500.0,
+    },
+    {
+      id: 2,
+      flight_number: 'JF002',
+      departure: 'LAX',
+      arrival: 'JFK',
+      departure_time: '2024-01-15T14:00:00Z',
+      arrival_time: '2024-01-15T22:30:00Z',
+      status: 'completed',
+      revenue: 2800.0,
+    },
+  ],
+  invoices: [
+    {
+      id: 1,
+      invoice_number: 'INV-2024-001',
+      client: 'Business Travel Corp',
+      amount: 15000.0,
+      status: 'paid',
+      due_date: '2024-01-20',
+      created_at: '2024-01-10T10:00:00Z',
+    },
+    {
+      id: 2,
+      invoice_number: 'INV-2024-002',
+      client: 'Corporate Airlines',
+      amount: 22000.0,
+      status: 'pending',
+      due_date: '2024-01-25',
+      created_at: '2024-01-12T14:30:00Z',
+    },
+  ],
+  expenses: [
+    {
+      id: 1,
+      category: 'Fuel',
+      description: 'Jet fuel for JFK-LAX route',
+      amount: 8500.0,
+      date: '2024-01-15',
+      status: 'approved',
+    },
+    {
+      id: 2,
+      category: 'Maintenance',
+      description: 'Engine inspection and repair',
+      amount: 12000.0,
+      date: '2024-01-12',
+      status: 'pending',
+    },
+  ],
+};
+
+// API маршруты
+app.get('/api/flights', async (_req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('flights')
+        .select('*')
+        .order('departure_time', { ascending: false });
+
+      if (error) {
+        console.log('Supabase error, using mock data:', error.message);
+        return res.json(mockData.flights);
+      }
+
+      return res.json(data || []);
+    }
+
+    res.json(mockData.flights);
+  } catch (error) {
+    console.log('Error fetching flights:', error);
+    res.json(mockData.flights);
+  }
+});
+
+app.get('/api/invoices', async (_req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Supabase error, using mock data:', error.message);
+        return res.json(mockData.invoices);
+      }
+
+      return res.json(data || []);
+    }
+
+    res.json(mockData.invoices);
+  } catch (error) {
+    console.log('Error fetching invoices:', error);
+    res.json(mockData.invoices);
+  }
+});
+
+app.get('/api/expenses', async (_req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.log('Supabase error, using mock data:', error.message);
+        return res.json(mockData.expenses);
+      }
+
+      return res.json(data || []);
+    }
+
+    res.json(mockData.expenses);
+  } catch (error) {
+    console.log('Error fetching expenses:', error);
+    res.json(mockData.expenses);
+  }
+});
+
+app.get('/api/dashboard/stats', async (_req, res) => {
+  try {
+    let stats = {
+      total_revenue: 0,
+      total_expenses: 0,
+      flights_count: 0,
+      invoices_pending: 0,
+    };
+
+    if (supabase) {
+      try {
+        // Получаем статистику из базы данных
+        const [flightsResult, invoicesResult, expensesResult] =
+          await Promise.all([
+            supabase.from('flights').select('revenue'),
+            supabase.from('invoices').select('amount, status'),
+            supabase.from('expenses').select('amount'),
+          ]);
+
+        if (!flightsResult.error) {
+          stats.flights_count = flightsResult.data?.length || 0;
+          stats.total_revenue =
+            flightsResult.data?.reduce(
+              (sum, flight) => sum + (flight.revenue || 0),
+              0
+            ) || 0;
+        }
+
+        if (!invoicesResult.error) {
+          stats.invoices_pending =
+            invoicesResult.data?.filter(inv => inv.status === 'pending')
+              .length || 0;
+        }
+
+        if (!expensesResult.error) {
+          stats.total_expenses =
+            expensesResult.data?.reduce(
+              (sum, expense) => sum + (expense.amount || 0),
+              0
+            ) || 0;
+        }
+      } catch (dbError) {
+        console.log('Database error, using mock stats:', dbError);
+        // Используем mock данные
+        stats = {
+          total_revenue: 5300,
+          total_expenses: 20500,
+          flights_count: 2,
+          invoices_pending: 1,
+        };
+      }
+    } else {
+      // Mock статистика
+      stats = {
+        total_revenue: 5300,
+        total_expenses: 20500,
+        flights_count: 2,
+        invoices_pending: 1,
+      };
+    }
+
+    res.json(stats);
+  } catch (error) {
+    console.log('Error fetching dashboard stats:', error);
+    res.json({
+      total_revenue: 5300,
+      total_expenses: 20500,
+      flights_count: 2,
+      invoices_pending: 1,
     });
   }
 });

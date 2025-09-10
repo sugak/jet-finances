@@ -1,1 +1,270 @@
-<!-- Flights page - ready for new design -->
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Flights</h1>
+    <p class="page-description">Manage and track all flight operations and schedules.</p>
+  </div>
+</div>
+
+<!-- Flights Table -->
+<div class="table-container">
+  <div class="table-card">
+    <div class="table-header">
+      <div class="table-title">
+        <h3>Flight Operations</h3>
+        <span class="table-subtitle">All scheduled and completed flights</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn btn-primary">
+          <i class="bi bi-plus-lg"></i>
+          Add Flight
+        </button>
+      </div>
+    </div>
+    
+    <div class="table-wrapper">
+      <table class="flights-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">
+              <input type="checkbox" class="form-check-input" id="selectAll">
+            </th>
+            <th class="sortable">
+              DATE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FLIGHT NO
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              ROUTE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FLIGHT TIME
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              BLOCK TIME
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="checkbox-col">
+              <input type="checkbox" class="form-check-input">
+            </td>
+            <td>
+              <div class="date-badge">Mar 20, 2024</div>
+            </td>
+            <td>
+              <div class="flight-number">JF-1256</div>
+            </td>
+            <td>
+              <div class="route-info">
+                <div class="route-main">LAX → JFK</div>
+                <div class="route-details">Los Angeles to New York</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">5h 30m</div>
+                <div class="time-details">Scheduled</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">6h 15m</div>
+                <div class="time-details">Actual</div>
+              </div>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn-action" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn-action" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn-action" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="checkbox-col">
+              <input type="checkbox" class="form-check-input">
+            </td>
+            <td>
+              <div class="date-badge">Mar 20, 2024</div>
+            </td>
+            <td>
+              <div class="flight-number">JF-1258</div>
+            </td>
+            <td>
+              <div class="route-info">
+                <div class="route-main">SFO → LHR</div>
+                <div class="route-details">San Francisco to London</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">11h 45m</div>
+                <div class="time-details">Scheduled</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">12h 20m</div>
+                <div class="time-details">Actual</div>
+              </div>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn-action" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn-action" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn-action" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="checkbox-col">
+              <input type="checkbox" class="form-check-input">
+            </td>
+            <td>
+              <div class="date-badge">Mar 21, 2024</div>
+            </td>
+            <td>
+              <div class="flight-number">JF-1260</div>
+            </td>
+            <td>
+              <div class="route-info">
+                <div class="route-main">ORD → CDG</div>
+                <div class="route-details">Chicago to Paris</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">8h 15m</div>
+                <div class="time-details">Scheduled</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">8h 05m</div>
+                <div class="time-details">Actual</div>
+              </div>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn-action" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn-action" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn-action" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="checkbox-col">
+              <input type="checkbox" class="form-check-input">
+            </td>
+            <td>
+              <div class="date-badge">Mar 21, 2024</div>
+            </td>
+            <td>
+              <div class="flight-number">JF-1262</div>
+            </td>
+            <td>
+              <div class="route-info">
+                <div class="route-main">MIA → FCO</div>
+                <div class="route-details">Miami to Rome</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">9h 30m</div>
+                <div class="time-details">Scheduled</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">9h 45m</div>
+                <div class="time-details">Actual</div>
+              </div>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn-action" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn-action" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn-action" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="checkbox-col">
+              <input type="checkbox" class="form-check-input">
+            </td>
+            <td>
+              <div class="date-badge">Mar 22, 2024</div>
+            </td>
+            <td>
+              <div class="flight-number">JF-1264</div>
+            </td>
+            <td>
+              <div class="route-info">
+                <div class="route-main">DFW → NRT</div>
+                <div class="route-details">Dallas to Tokyo</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">13h 20m</div>
+                <div class="time-details">Scheduled</div>
+              </div>
+            </td>
+            <td>
+              <div class="time-info">
+                <div class="time-main">13h 35m</div>
+                <div class="time-details">Actual</div>
+              </div>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn-action" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn-action" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn-action" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
