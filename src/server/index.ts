@@ -470,7 +470,7 @@ app.get('/api/invoices', async (_req, res) => {
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('inv_date', { ascending: false });
 
       if (error) {
         console.log('Supabase error, using mock data:', error.message);

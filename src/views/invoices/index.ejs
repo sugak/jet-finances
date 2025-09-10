@@ -1,1 +1,228 @@
-<!-- Invoices page - ready for new design -->
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Invoices</h1>
+    <p class="page-description">Manage and track all invoices and billing information.</p>
+  </div>
+</div>
+
+<!-- Invoices Table -->
+<div class="table-container">
+  <div class="table-card">
+    <div class="table-header">
+      <div class="table-title">
+        <h3>Invoice Management</h3>
+        <span class="table-subtitle">All invoices and billing records</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn btn-primary">
+          <i class="bi bi-plus-lg"></i>
+          Add Invoice
+        </button>
+      </div>
+    </div>
+    
+    <div class="table-wrapper">
+      <table class="invoices-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">
+              <input type="checkbox" class="form-check-input" id="selectAll">
+            </th>
+            <th class="sortable">
+              DATE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              NUMBER
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              AMOUNT
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              SECTIONS
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="invoices-table-body">
+          <!-- Data will be loaded via JavaScript -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// Load invoices data from API
+async function loadInvoices() {
+  try {
+    const response = await fetch('/api/invoices');
+    const invoices = await response.json();
+    
+    const tbody = document.getElementById('invoices-table-body');
+    tbody.innerHTML = '';
+    
+    invoices.forEach(invoice => {
+      const row = document.createElement('tr');
+      
+      // Format date
+      const date = new Date(invoice.inv_date);
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
+      // Format amount with currency
+      const formattedAmount = `${invoice.inv_currency} ${parseFloat(invoice.inv_amount).toLocaleString('en-US', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      })}`;
+      
+      row.innerHTML = `
+        <td class="checkbox-col">
+          <input type="checkbox" class="form-check-input">
+        </td>
+        <td>
+          <div class="date-badge">${formattedDate}</div>
+        </td>
+        <td>
+          <div class="invoice-number">${invoice.inv_number}</div>
+        </td>
+        <td>
+          <div class="amount-info">
+            <div class="amount-main">${formattedAmount}</div>
+            <div class="amount-details">Invoice Amount</div>
+          </div>
+        </td>
+        <td>
+          <div class="sections-info">
+            <div class="sections-main">${invoice.inv_tags}</div>
+            <div class="sections-details">Category</div>
+          </div>
+        </td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-action" title="View Details" onclick="viewInvoice(${invoice.id})">
+              <i class="bi bi-eye"></i>
+            </button>
+            <button class="btn-action" title="Edit" onclick="editInvoice(${invoice.id})">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn-action" title="Delete" onclick="deleteInvoice(${invoice.id})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      `;
+      
+      tbody.appendChild(row);
+    });
+  } catch (error) {
+    console.error('Error loading invoices:', error);
+    // Show error message
+    const tbody = document.getElementById('invoices-table-body');
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">
+          <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+          Failed to load invoices. Please try again.
+        </td>
+      </tr>
+    `;
+  }
+}
+
+// Action functions
+function viewInvoice(id) {
+  console.log('View invoice:', id);
+  // TODO: Implement view functionality
+}
+
+function editInvoice(id) {
+  console.log('Edit invoice:', id);
+  // TODO: Implement edit functionality
+}
+
+function deleteInvoice(id) {
+  console.log('Delete invoice:', id);
+  // TODO: Implement delete functionality
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', loadInvoices);
+</script>
+
+<style>
+/* Invoice-specific styles */
+.invoices-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.875rem !important;
+}
+
+.invoices-table thead {
+  background-color: hsl(210, 11%, 96%) !important;
+}
+
+.invoices-table th {
+  padding: 1rem 1.5rem !important;
+  text-align: left !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  white-space: nowrap !important;
+}
+
+.invoices-table td {
+  padding: 1rem 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  vertical-align: middle !important;
+}
+
+.invoices-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%) !important;
+}
+
+.invoice-number {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.amount-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.amount-main {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+}
+
+.amount-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.sections-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.sections-main {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+  text-transform: capitalize !important;
+}
+
+.sections-details {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+</style>
