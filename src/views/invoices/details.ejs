@@ -1,0 +1,473 @@
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><%= invoice.inv_number %> details</h1>
+    <p class="page-description">
+      <%= new Date(invoice.inv_date).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      }) %>
+    </p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary" id="backBtn">
+      <i class="bi bi-arrow-left"></i>
+      Back to Invoices
+    </button>
+  </div>
+</div>
+
+<!-- Content Area -->
+<div class="content-area">
+  <div class="content-card">
+    <div class="content-header">
+      <h3>Expenses</h3>
+      <p class="content-subtitle">All expenses associated with this invoice</p>
+    </div>
+    <div class="content-body">
+      <div id="expenses-container">
+        <!-- Expenses will be loaded here -->
+        <div class="loading-state">
+          <div class="loading-spinner">
+            <i class="bi bi-arrow-clockwise"></i>
+          </div>
+          <p>Loading expenses...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Toggle section visibility
+function toggleSection(sectionId) {
+  const content = document.getElementById(`content-${sectionId}`);
+  const toggle = document.getElementById(`toggle-${sectionId}`);
+  
+  if (content && toggle) {
+    const isCollapsed = content.style.display === 'none';
+    
+    if (isCollapsed) {
+      // Expand section
+      content.style.display = 'block';
+      toggle.classList.remove('bi-chevron-right');
+      toggle.classList.add('bi-chevron-down');
+    } else {
+      // Collapse section
+      content.style.display = 'none';
+      toggle.classList.remove('bi-chevron-down');
+      toggle.classList.add('bi-chevron-right');
+    }
+  }
+}
+
+// Load expenses for this invoice
+async function loadExpenses() {
+  try {
+    const invoiceId = window.location.pathname.split('/').pop();
+    const response = await fetch(`/api/invoices/${invoiceId}/expenses`);
+    const expenses = await response.json();
+    
+    const container = document.getElementById('expenses-container');
+    
+    if (!expenses || expenses.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">
+            <i class="bi bi-receipt"></i>
+          </div>
+          <h3>No Expenses</h3>
+          <p>No expenses found for this invoice.</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // Group expenses by exp_invoice_type
+    const groupedExpenses = {};
+    expenses.forEach(expense => {
+      const type = expense.exp_invoice_type || 'Other';
+      if (!groupedExpenses[type]) {
+        groupedExpenses[type] = [];
+      }
+      groupedExpenses[type].push(expense);
+    });
+    
+    // Create HTML for grouped expenses
+    let html = '';
+    Object.keys(groupedExpenses).sort().forEach(type => {
+      const typeExpenses = groupedExpenses[type];
+      
+      const sectionId = type.replace(/[^a-zA-Z0-9]/g, '_');
+      html += `
+        <div class="expense-section">
+          <div class="section-header" data-section-id="${sectionId}">
+            <h4>${type}</h4>
+            <div class="section-controls">
+              <span class="section-count">${typeExpenses.length} items</span>
+              <i class="bi bi-chevron-right section-toggle" id="toggle-${sectionId}"></i>
+            </div>
+          </div>
+          <div class="table-container" id="content-${sectionId}" style="display: none;">
+            <table class="expenses-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Invoice ID</th>
+                  <th>Flight ID</th>
+                  <th>Place</th>
+                  <th>Amount</th>
+                  <th>Fuel Qty</th>
+                  <th>Fuel Provider</th>
+                  <th>Flight</th>
+                  <th>Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+      
+      typeExpenses.forEach(expense => {
+        const flightNumber = expense.flights?.flt_number || '-';
+        const fuelQty = expense.exp_fuel_quan ? `${expense.exp_fuel_quan}L` : '-';
+        const fuelProvider = expense.exp_fuel_provider || '-';
+        const comments = expense.exp_comments || '-';
+        const invoiceId = expense.exp_invoice || '-';
+        const flightId = expense.exp_flight || '-';
+        
+        html += `
+          <tr>
+            <td>
+              <div class="expense-type">${expense.exp_type}</div>
+            </td>
+            <td>
+              <div class="expense-invoice-id">${invoiceId}</div>
+            </td>
+            <td>
+              <div class="expense-flight-id">${flightId}</div>
+            </td>
+            <td>
+              <div class="expense-place">${expense.exp_place}</div>
+            </td>
+            <td>
+              <div class="expense-amount">${expense.exp_amount}</div>
+            </td>
+            <td>
+              <div class="expense-fuel-qty">${fuelQty}</div>
+            </td>
+            <td>
+              <div class="expense-fuel-provider">${fuelProvider}</div>
+            </td>
+            <td>
+              <div class="expense-flight">${flightNumber}</div>
+            </td>
+            <td>
+              <div class="expense-comments">${comments}</div>
+            </td>
+          </tr>
+        `;
+      });
+      
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for section headers
+    const sectionHeaders = container.querySelectorAll('.section-header');
+    sectionHeaders.forEach(header => {
+      header.addEventListener('click', function() {
+        const sectionId = this.getAttribute('data-section-id');
+        toggleSection(sectionId);
+      });
+    });
+  } catch (error) {
+    console.error('Error loading expenses:', error);
+    const container = document.getElementById('expenses-container');
+    container.innerHTML = `
+      <div class="error-state">
+        <div class="error-icon">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <h3>Error Loading Expenses</h3>
+        <p>Failed to load expenses. Please try again.</p>
+      </div>
+    `;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', function() {
+      window.location.href = '/invoices';
+    });
+  }
+  
+  // Load expenses when page loads
+  loadExpenses();
+});
+</script>
+
+<style>
+/* Page header styles */
+.page-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  margin-bottom: 2rem !important;
+  padding-bottom: 1rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+}
+
+.page-actions {
+  display: flex !important;
+  gap: 0.75rem !important;
+  align-items: center !important;
+}
+
+.btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  text-decoration: none !important;
+}
+
+.btn-secondary {
+  background-color: hsl(210, 6%, 93%) !important;
+  color: hsl(210, 6%, 21%) !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+}
+
+.btn-secondary:hover {
+  background-color: hsl(210, 6%, 88%) !important;
+  border-color: hsl(210, 11%, 80%) !important;
+}
+
+/* Content area styles */
+.content-area {
+  margin-top: 2rem !important;
+}
+
+.content-card {
+  background: white !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid hsl(210, 11%, 90%) !important;
+}
+
+.content-header {
+  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.content-header h3 {
+  margin: 0 0 0.5rem 0 !important;
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.content-subtitle {
+  margin: 0 !important;
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.content-body {
+  padding: 0 1.5rem 1.5rem 1.5rem !important;
+}
+
+/* Loading and empty states */
+.loading-state, .empty-state, .error-state {
+  text-align: center !important;
+  padding: 3rem 2rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.loading-spinner, .empty-icon, .error-icon {
+  font-size: 3rem !important;
+  color: hsl(210, 6%, 70%) !important;
+  margin-bottom: 1rem !important;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite !important;
+}
+
+.loading-state h3, .empty-state h3, .error-state h3 {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.loading-state p, .empty-state p, .error-state p {
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  margin: 0 !important;
+}
+
+/* Expense sections */
+.expense-section {
+  margin-bottom: 2rem !important;
+}
+
+.expense-section:last-child {
+  margin-bottom: 0 !important;
+}
+
+.section-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1rem !important;
+  padding: 0.75rem 1rem !important;
+  padding-bottom: 0.5rem !important;
+  border-bottom: 2px solid hsl(142, 76%, 36%) !important;
+  cursor: pointer !important;
+  border-radius: 0.5rem 0.5rem 0 0 !important;
+  transition: all 0.2s ease !important;
+  background-color: hsl(210, 11%, 98%) !important;
+}
+
+.section-header:hover {
+  background-color: hsl(210, 11%, 95%) !important;
+}
+
+.section-header h4 {
+  margin: 0 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.section-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+.section-count {
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  background-color: hsl(210, 11%, 95%) !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+}
+
+.section-toggle {
+  font-size: 1rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  transition: transform 0.2s ease !important;
+}
+
+.section-toggle.rotated {
+  transform: rotate(180deg) !important;
+}
+
+/* Expenses table */
+.expenses-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.875rem !important;
+  background: white !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+.expenses-table thead {
+  background-color: hsl(210, 11%, 95%) !important;
+}
+
+.expenses-table th {
+  padding: 0.75rem 1rem !important;
+  text-align: left !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.expenses-table td {
+  padding: 0.75rem 1rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 95%) !important;
+  vertical-align: top !important;
+}
+
+.expenses-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%) !important;
+}
+
+.expenses-table tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* Table cell content */
+.expense-type, .expense-invoice-id, .expense-flight-id, 
+.expense-place, .expense-amount, .expense-fuel-qty, 
+.expense-fuel-provider, .expense-flight, .expense-comments {
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  word-break: break-word !important;
+}
+
+.expense-amount {
+  font-weight: 500 !important;
+  color: hsl(142, 76%, 36%) !important;
+}
+
+.expense-invoice-id, .expense-flight-id {
+  font-family: monospace !important;
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  max-width: 120px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.expense-comments {
+  max-width: 200px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column !important;
+    gap: 1rem !important;
+    align-items: stretch !important;
+  }
+  
+  .page-actions {
+    justify-content: flex-start !important;
+  }
+  
+  .content-body {
+    padding: 1.5rem !important;
+  }
+  
+  .placeholder-content {
+    padding: 2rem 1rem !important;
+  }
+}
+</style>

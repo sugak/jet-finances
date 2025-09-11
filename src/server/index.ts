@@ -289,6 +289,37 @@ app.get('/invoices', (_req, res) => {
   res.render('invoices/index', { title: 'Invoices' });
 });
 
+app.get('/invoices/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+
+    // Fetch invoice details from Supabase
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', invoiceId)
+      .single();
+
+    if (error || !invoice) {
+      return res.status(404).render('error', {
+        title: 'Invoice Not Found',
+        message: 'The requested invoice could not be found.',
+      });
+    }
+
+    res.render('invoices/details', {
+      title: `${invoice.inv_number} details`,
+      invoice: invoice,
+    });
+  } catch (error) {
+    console.error('Error fetching invoice details:', error);
+    res.status(500).render('error', {
+      title: 'Error',
+      message: 'An error occurred while loading the invoice details.',
+    });
+  }
+});
+
 app.get('/flights', (_req, res) => {
   res.render('flights/index', { title: 'Flights' });
 });
@@ -591,6 +622,192 @@ app.get('/api/expenses', async (_req, res) => {
   } catch (error) {
     console.log('Error fetching expenses:', error);
     res.json(mockData.expenses);
+  }
+});
+
+app.get('/api/invoices/:id/expenses', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select(
+          `
+          *,
+          invoices!exp_invoice (
+            inv_number
+          ),
+          flights!exp_flight (
+            flt_number
+          )
+        `
+        )
+        .eq('exp_invoice', invoiceId)
+        .order('exp_invoice_type', { ascending: true });
+
+      if (error) {
+        console.log('Supabase error fetching invoice expenses:', error.message);
+        return res.status(500).json({ error: 'Failed to fetch expenses' });
+      }
+
+      return res.json(data || []);
+    }
+
+    res.status(500).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error fetching invoice expenses:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST endpoint to add new invoice
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { inv_date, inv_number, inv_amount, inv_currency } = req.body;
+
+    // Validate required fields
+    if (!inv_date || !inv_number || !inv_amount || !inv_currency) {
+      return res.status(400).json({
+        error:
+          'All fields are required: inv_date, inv_number, inv_amount, inv_currency',
+      });
+    }
+
+    // Validate currency
+    const validCurrencies = ['AED', 'USD', 'EUR'];
+    if (!validCurrencies.includes(inv_currency)) {
+      return res.status(400).json({
+        error: 'Invalid currency. Must be one of: AED, USD, EUR',
+      });
+    }
+
+    // Validate amount
+    const amount = parseFloat(inv_amount);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        error: 'Amount must be a positive number',
+      });
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('invoices')
+        .insert([
+          {
+            inv_date,
+            inv_number,
+            inv_amount: amount,
+            inv_currency,
+            inv_tags: '', // Empty for now as requested
+          },
+        ])
+        .select();
+
+      if (error) {
+        console.log('Supabase error adding invoice:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to add invoice to database' });
+      }
+
+      return res.status(201).json({
+        message: 'Invoice added successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error adding invoice:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
+// DELETE endpoint to remove invoice
+app.delete('/api/invoices/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+
+    if (!invoiceId) {
+      return res.status(400).json({
+        error: 'Invoice ID is required',
+      });
+    }
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoiceId);
+
+      if (error) {
+        console.log('Supabase error deleting invoice:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to delete invoice from database' });
+      }
+
+      return res.status(200).json({
+        message: 'Invoice deleted successfully',
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error deleting invoice:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
+// DELETE endpoint to remove flight
+app.delete('/api/flights/:id', async (req, res) => {
+  try {
+    const flightId = req.params.id;
+
+    if (!flightId) {
+      return res.status(400).json({
+        error: 'Flight ID is required',
+      });
+    }
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('flights')
+        .delete()
+        .eq('id', flightId);
+
+      if (error) {
+        console.log('Supabase error deleting flight:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to delete flight from database' });
+      }
+
+      return res.status(200).json({
+        message: 'Flight deleted successfully',
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error deleting flight:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
   }
 });
 

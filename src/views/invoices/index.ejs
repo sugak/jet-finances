@@ -15,7 +15,7 @@
         <span class="table-subtitle">All invoices and billing records</span>
       </div>
       <div class="table-actions">
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" id="addInvoiceBtn">
           <i class="bi bi-plus-lg"></i>
           Add Invoice
         </button>
@@ -56,6 +56,57 @@
   </div>
 </div>
 
+<!-- Add Invoice Modal -->
+<div id="addInvoiceModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h3>Add New Invoice</h3>
+      <button class="modal-close" id="closeInvoiceModalBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <form id="addInvoiceForm" class="modal-form">
+      <div class="form-group">
+        <label for="invoiceDate">Date</label>
+        <input type="date" id="invoiceDate" name="inv_date" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="invoiceNumber">Number</label>
+        <input type="text" id="invoiceNumber" name="inv_number" placeholder="e.g., INV-2025-001" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="invoiceAmount">Amount</label>
+        <input type="number" id="invoiceAmount" name="inv_amount" step="0.01" placeholder="e.g., 1500.00" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="invoiceCurrency">Currency</label>
+        <select id="invoiceCurrency" name="inv_currency" required>
+          <option value="">Select Currency</option>
+          <option value="AED">AED - UAE Dirham</option>
+          <option value="USD">USD - US Dollar</option>
+          <option value="EUR">EUR - Euro</option>
+        </select>
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="cancelInvoiceBtn">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-save" id="saveInvoiceBtn">
+          <span class="btn-text">Save</span>
+          <span class="btn-spinner" style="display: none;">
+            <i class="bi bi-arrow-clockwise"></i>
+          </span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // Load invoices data from API
 async function loadInvoices() {
@@ -66,7 +117,57 @@ async function loadInvoices() {
     const tbody = document.getElementById('invoices-table-body');
     tbody.innerHTML = '';
     
+    // Sort invoices by date (newest first)
+    invoices.sort((a, b) => new Date(b.inv_date) - new Date(a.inv_date));
+    
+    // Group invoices by month
+    const groupedInvoices = {};
     invoices.forEach(invoice => {
+      const date = new Date(invoice.inv_date);
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      
+      if (!groupedInvoices[monthKey]) {
+        groupedInvoices[monthKey] = {
+          month: date.getMonth(),
+          year: date.getFullYear(),
+          invoices: []
+        };
+      }
+      groupedInvoices[monthKey].invoices.push(invoice);
+    });
+    
+    // Sort months (newest first) - proper numeric sorting
+    const sortedMonths = Object.keys(groupedInvoices).sort((a, b) => {
+      const [yearA, monthA] = a.split('-').map(Number);
+      const [yearB, monthB] = b.split('-').map(Number);
+      
+      // First compare years, then months
+      if (yearA !== yearB) {
+        return yearB - yearA; // Newest year first
+      }
+      return monthB - monthA; // Newest month first within same year
+    });
+    
+    sortedMonths.forEach(monthKey => {
+      const monthData = groupedInvoices[monthKey];
+      
+      // Add month separator
+      const monthRow = document.createElement('tr');
+      const monthName = new Date(monthData.year, monthData.month).toLocaleDateString('en-US', { 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      monthRow.innerHTML = `
+        <td colspan="6" class="month-separator">
+          <div class="month-divider">
+            <span class="month-label">${monthName}</span>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(monthRow);
+      
+      // Add invoices for this month
+      monthData.invoices.forEach(invoice => {
       const row = document.createElement('tr');
       
       // Format date
@@ -96,31 +197,62 @@ async function loadInvoices() {
         <td>
           <div class="amount-info">
             <div class="amount-main">${formattedAmount}</div>
-            <div class="amount-details">Invoice Amount</div>
           </div>
         </td>
         <td>
           <div class="sections-info">
             <div class="sections-main">${invoice.inv_tags}</div>
-            <div class="sections-details">Category</div>
           </div>
         </td>
         <td>
           <div class="action-buttons">
-            <button class="btn-action" title="View Details" onclick="viewInvoice('${invoice.id}')">
+            <button class="btn-action" title="View Details" data-action="view" data-id="${invoice.id}">
               <i class="bi bi-eye"></i>
             </button>
-            <button class="btn-action" title="Edit" onclick="editInvoice('${invoice.id}')">
+            <button class="btn-action" title="Edit" data-action="edit" data-id="${invoice.id}">
               <i class="bi bi-pencil"></i>
             </button>
-            <button class="btn-action" title="Delete" onclick="deleteInvoice('${invoice.id}')">
+            <button class="btn-action" title="Delete" data-action="delete" data-id="${invoice.id}">
               <i class="bi bi-trash"></i>
             </button>
           </div>
         </td>
       `;
       
+      // Make row clickable (except for action buttons)
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function(e) {
+        // Don't trigger if clicking on action buttons or checkbox
+        if (e.target.closest('.action-buttons') || e.target.closest('.checkbox-col')) {
+          return;
+        }
+        viewInvoice(invoice.id);
+      });
+      
+      // Add event listeners for action buttons
+      const actionButtons = row.querySelectorAll('.btn-action');
+      actionButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+          e.stopPropagation(); // Prevent row click
+          const action = this.getAttribute('data-action');
+          const id = this.getAttribute('data-id');
+          
+          switch(action) {
+            case 'view':
+              viewInvoice(id);
+              break;
+            case 'edit':
+              editInvoice(id);
+              break;
+            case 'delete':
+              deleteInvoice(id);
+              break;
+          }
+        });
+      });
+      
       tbody.appendChild(row);
+      });
     });
   } catch (error) {
     console.error('Error loading invoices:', error);
@@ -139,8 +271,7 @@ async function loadInvoices() {
 
 // Action functions
 function viewInvoice(id) {
-  console.log('View invoice:', id);
-  // TODO: Implement view functionality
+  window.location.href = `/invoices/${id}`;
 }
 
 function editInvoice(id) {
@@ -148,13 +279,138 @@ function editInvoice(id) {
   // TODO: Implement edit functionality
 }
 
-function deleteInvoice(id) {
-  console.log('Delete invoice:', id);
-  // TODO: Implement delete functionality
+async function deleteInvoice(id) {
+  // Show confirmation dialog
+  const confirmed = confirm('Are you sure you want to delete this invoice? This action cannot be undone.');
+  
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/invoices/${id}`, {
+      method: 'DELETE',
+    });
+    
+    if (response.ok) {
+      // Reload invoices after successful deletion
+      await loadInvoices();
+      console.log('Invoice deleted successfully');
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to delete invoice');
+    }
+  } catch (error) {
+    console.error('Error deleting invoice:', error);
+    alert('Failed to delete invoice: ' + error.message);
+  }
+}
+
+// Modal functions
+function openAddInvoiceModal() {
+  const modal = document.getElementById('addInvoiceModal');
+  if (modal) {
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('invoiceDate');
+    if (dateInput) {
+      dateInput.value = today;
+    }
+  }
+}
+
+function closeAddInvoiceModal() {
+  const modal = document.getElementById('addInvoiceModal');
+  modal.classList.remove('show');
+  document.body.style.overflow = 'auto';
+  
+  // Reset form
+  document.getElementById('addInvoiceForm').reset();
 }
 
 // Load data when page loads
-document.addEventListener('DOMContentLoaded', loadInvoices);
+document.addEventListener('DOMContentLoaded', function() {
+  loadInvoices();
+  
+  // Add event listeners for modal buttons
+  const addInvoiceBtn = document.getElementById('addInvoiceBtn');
+  if (addInvoiceBtn) {
+    addInvoiceBtn.addEventListener('click', openAddInvoiceModal);
+  }
+  
+  const closeModalBtn = document.getElementById('closeInvoiceModalBtn');
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeAddInvoiceModal);
+  }
+  
+  const cancelBtn = document.getElementById('cancelInvoiceBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', closeAddInvoiceModal);
+  }
+  
+  // Handle form submission
+  const addInvoiceForm = document.getElementById('addInvoiceForm');
+  if (addInvoiceForm) {
+    addInvoiceForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const saveBtn = document.getElementById('saveInvoiceBtn');
+      const btnText = saveBtn.querySelector('.btn-text');
+      const btnSpinner = saveBtn.querySelector('.btn-spinner');
+      
+      // Show spinner
+      btnText.style.display = 'none';
+      btnSpinner.style.display = 'inline-block';
+      saveBtn.disabled = true;
+      
+      try {
+        const formData = new FormData(this);
+        const invoiceData = Object.fromEntries(formData.entries());
+        
+        const response = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(invoiceData)
+        });
+        
+        if (response.ok) {
+          // Close modal and reload invoices
+          closeAddInvoiceModal();
+          await loadInvoices();
+          
+          // Show success message (optional)
+          console.log('Invoice added successfully');
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to add invoice');
+        }
+      } catch (error) {
+        console.error('Error adding invoice:', error);
+        alert('Failed to add invoice: ' + error.message);
+      } finally {
+        // Hide spinner
+        btnText.style.display = 'inline-block';
+        btnSpinner.style.display = 'none';
+        saveBtn.disabled = false;
+      }
+    });
+  }
+  
+  // Close modal when clicking outside
+  const addInvoiceModal = document.getElementById('addInvoiceModal');
+  if (addInvoiceModal) {
+    addInvoiceModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeAddInvoiceModal();
+      }
+    });
+  }
+});
 </script>
 
 <style>
@@ -226,5 +482,212 @@ document.addEventListener('DOMContentLoaded', loadInvoices);
 .sections-details {
   font-size: 0.75rem !important;
   color: hsl(210, 6%, 46%) !important;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  display: none !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 10000 !important;
+}
+
+.modal-overlay.show {
+  display: flex !important;
+}
+
+.modal-container {
+  background: white !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  width: 90% !important;
+  max-width: 500px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.modal-header h3 {
+  margin: 0 !important;
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-close {
+  background: none !important;
+  border: none !important;
+  font-size: 1.25rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  cursor: pointer !important;
+  padding: 0.25rem !important;
+  border-radius: 0.25rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.modal-close:hover {
+  background-color: hsl(210, 11%, 95%) !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-form {
+  padding: 0 1.5rem 1.5rem 1.5rem !important;
+}
+
+.form-group {
+  margin-bottom: 1.25rem !important;
+}
+
+.form-group label {
+  display: block !important;
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.875rem !important;
+}
+
+.form-group input,
+.form-group select {
+  width: 100% !important;
+  padding: 0.75rem !important;
+  border: 1px solid hsl(210, 11%, 90%) !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  transition: all 0.2s ease !important;
+  background-color: white !important;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none !important;
+  border-color: hsl(142, 76%, 36%) !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1) !important;
+}
+
+.form-group input::placeholder {
+  color: hsl(210, 6%, 60%) !important;
+}
+
+.modal-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.75rem !important;
+  margin-top: 2rem !important;
+  padding-top: 1.5rem !important;
+  border-top: 1px solid hsl(210, 11%, 90%) !important;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+.btn-cancel {
+  background-color: hsl(0, 84%, 60%) !important;
+  color: white !important;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background-color: hsl(0, 84%, 55%) !important;
+}
+
+.btn-save {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+}
+
+.btn-save:hover:not(:disabled) {
+  background-color: hsl(142, 76%, 32%) !important;
+}
+
+.btn-spinner {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Month separator styles */
+.month-separator {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  height: 1px !important;
+}
+
+.month-divider {
+  position: relative !important;
+  height: 1px !important;
+  background-color: hsl(210, 11%, 85%) !important;
+  margin: 1rem 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.month-label {
+  background-color: white !important;
+  color: hsl(210, 6%, 46%) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  padding: 0.25rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .modal-container {
+    width: 95% !important;
+    margin: 1rem !important;
+  }
+  
+  .modal-header {
+    padding: 1rem 1rem 0 1rem !important;
+  }
+  
+  .modal-form {
+    padding: 0 1rem 1rem 1rem !important;
+  }
+  
+  .modal-actions {
+    flex-direction: column !important;
+  }
+  
+  .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }
 </style>
