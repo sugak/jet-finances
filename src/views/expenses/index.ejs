@@ -15,7 +15,7 @@
         <span class="table-subtitle">All operational expenses and cost records</span>
       </div>
       <div class="table-actions">
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" id="addExpenseBtn">
           <i class="bi bi-plus-lg"></i>
           Add Expense
         </button>
@@ -42,6 +42,14 @@
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
             <th class="sortable">
+              CURRENCY
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              PERIOD
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
               FUEL QTY
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
@@ -62,6 +70,14 @@
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
             <th class="sortable">
+              INV. ID
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
+              FLT. ID
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
               COMMENTS
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
@@ -76,24 +92,135 @@
   </div>
 </div>
 
+<!-- Add Expense Modal -->
+<div class="modal-overlay" id="addExpenseModal" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h2>Add New Expense</h2>
+      <button class="modal-close" id="closeExpenseModalBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <form id="addExpenseForm">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expType">Type</label>
+            <input type="text" id="expType" name="exp_type" placeholder="Enter expense type">
+          </div>
+          <div class="form-group">
+            <label for="expPlace">Place</label>
+            <input type="text" id="expPlace" name="exp_place" placeholder="Enter place">
+          </div>
+        </div>
+        
+                       <div class="form-row">
+                         <div class="form-group">
+                           <label for="expAmount">Amount</label>
+                           <input type="number" id="expAmount" name="exp_amount" step="0.01" placeholder="0.00">
+                         </div>
+                         <div class="form-group">
+                           <label for="expCurrency">Currency</label>
+                           <input type="text" id="expCurrency" name="exp_currency" readonly placeholder="Auto-filled from invoice">
+                         </div>
+                       </div>
+                       <div class="form-row">
+                         <div class="form-group">
+                           <label for="expFuelQuan">Fuel Quantity (L)</label>
+                           <input type="number" id="expFuelQuan" name="exp_fuel_quan" step="0.01" placeholder="0.00">
+                         </div>
+                         <div class="form-group">
+                           <label for="expFuelProvider">Fuel Provider</label>
+                           <input type="text" id="expFuelProvider" name="exp_fuel_provider" placeholder="Enter fuel provider">
+                         </div>
+                       </div>
+                       <div class="form-row">
+                         <div class="form-group">
+                           <label for="expInvoiceType">Invoice Type</label>
+                           <input type="text" id="expInvoiceType" name="exp_invoice_type" placeholder="Enter invoice type">
+                         </div>
+                         <div class="form-group">
+                           <label for="expPeriodStart">Period Start</label>
+                           <input type="date" id="expPeriodStart" name="exp_period_start">
+                         </div>
+                       </div>
+                       <div class="form-row">
+                         <div class="form-group">
+                           <label for="expPeriodEnd">Period End</label>
+                           <input type="date" id="expPeriodEnd" name="exp_period_end">
+                         </div>
+                         <div class="form-group">
+                           <!-- Empty div for spacing -->
+                         </div>
+                       </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expInvoice">Invoice</label>
+            <select id="expInvoice" name="exp_invoice">
+              <option value="">Select Invoice (Optional)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="expFlight">Flight</label>
+            <select id="expFlight" name="exp_flight">
+              <option value="">Select Flight (Optional)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="expComments">Comments</label>
+          <textarea id="expComments" name="exp_comments" rows="3" placeholder="Enter comments (optional)"></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="cancelExpenseBtn">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-save" id="saveExpenseBtn">
+          <span class="btn-text">Save</span>
+          <span class="btn-spinner" style="display: none;">
+            <i class="bi bi-arrow-clockwise"></i>
+          </span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // Load expenses data from API
 async function loadExpenses() {
   try {
+    console.log('Loading expenses...');
     const response = await fetch('/api/expenses');
+    console.log('Response status:', response.status);
     const expenses = await response.json();
+    console.log('Expenses loaded:', expenses.length);
+    console.log('Expenses data:', expenses);
+    
+    if (!Array.isArray(expenses)) {
+      throw new Error('Expenses data is not an array');
+    }
     
     const tbody = document.getElementById('expenses-table-body');
+    console.log('Table body element:', tbody);
+    if (!tbody) {
+      throw new Error('Table body element not found');
+    }
     tbody.innerHTML = '';
     
     expenses.forEach(expense => {
       const row = document.createElement('tr');
       
       // Format amount with currency (assuming USD for now)
-      const formattedAmount = `$${parseFloat(expense.exp_amount).toLocaleString('en-US', { 
+      const formattedAmount = expense.exp_amount ? `$${parseFloat(expense.exp_amount).toLocaleString('en-US', { 
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2 
-      })}`;
+      })}` : 'N/A';
       
       // Truncate comments if too long
       const truncatedComments = expense.exp_comments && expense.exp_comments.length > 50 
@@ -111,13 +238,19 @@ async function loadExpenses() {
           <input type="checkbox" class="form-check-input">
         </td>
         <td>
-          <div class="expense-type-compact">${expense.exp_type}</div>
+          <div class="expense-type-compact">${expense.exp_type || 'N/A'}</div>
         </td>
         <td>
-          <div class="expense-place-compact">${expense.exp_place}</div>
+          <div class="expense-place-compact">${expense.exp_place || 'N/A'}</div>
         </td>
         <td>
           <div class="amount-compact">${formattedAmount}</div>
+        </td>
+        <td>
+          <div class="currency-compact">${expense.invoices?.inv_currency || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="period-compact">${formatPeriod(expense.exp_period_start, expense.exp_period_end)}</div>
         </td>
         <td>
           <div class="fuel-quantity-compact">${fuelQuantity}</div>
@@ -126,13 +259,19 @@ async function loadExpenses() {
           <div class="fuel-provider-compact">${fuelProvider}</div>
         </td>
         <td>
-          <div class="invoice-type-compact" title="${expense.exp_invoice_type}">${expense.exp_invoice_type.length > 15 ? expense.exp_invoice_type.substring(0, 15) + '...' : expense.exp_invoice_type}</div>
+          <div class="invoice-type-compact" title="${expense.exp_invoice_type || 'N/A'}">${expense.exp_invoice_type && expense.exp_invoice_type.length > 15 ? expense.exp_invoice_type.substring(0, 15) + '...' : (expense.exp_invoice_type || 'N/A')}</div>
         </td>
         <td>
           <div class="invoice-number-compact">${expense.invoices?.inv_number || 'N/A'}</div>
         </td>
         <td>
           <div class="flight-number-compact">${expense.flights?.flt_number || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="invoice-id-compact" title="${expense.exp_invoice || 'No invoice'}">${expense.exp_invoice ? expense.exp_invoice.substring(0, 8) + '...' : 'N/A'}</div>
+        </td>
+        <td>
+          <div class="flight-id-compact" title="${expense.exp_flight || 'No flight'}">${expense.exp_flight ? expense.exp_flight.substring(0, 8) + '...' : 'N/A'}</div>
         </td>
         <td>
           <div class="comments-compact" title="${expense.exp_comments || 'No comments'}">${truncatedComments}</div>
@@ -156,16 +295,134 @@ async function loadExpenses() {
     });
   } catch (error) {
     console.error('Error loading expenses:', error);
+    console.error('Error details:', error.message, error.stack);
     // Show error message
     const tbody = document.getElementById('expenses-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="13" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load expenses. Please try again.
+          <br><small>Error: ${error.message}</small>
         </td>
       </tr>
     `;
+  }
+}
+
+// Format period display
+function formatPeriod(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return 'N/A';
+  }
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Format start date
+  const startFormatted = start.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short' 
+  });
+  
+  // Format end date
+  const endFormatted = end.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short' 
+  });
+  
+  // Check if it's a single month
+  const startMonth = start.getMonth();
+  const endMonth = end.getMonth();
+  const startYear = start.getFullYear();
+  const endYear = end.getFullYear();
+  
+  // If end is the next month after start, it's a single month
+  if (endYear === startYear && endMonth === (startMonth + 1) % 12) {
+    return startFormatted;
+  }
+  
+  // If end is January of next year and start is December, it's a single month
+  if (endYear === startYear + 1 && endMonth === 0 && startMonth === 11) {
+    return startFormatted;
+  }
+  
+  // Otherwise, show range
+  return `${startFormatted} - ${endFormatted}`;
+}
+
+// Load invoices for dropdown
+async function loadInvoicesForDropdown() {
+  try {
+    const response = await fetch('/api/invoices');
+    const invoices = await response.json();
+    
+    const select = document.getElementById('expInvoice');
+    select.innerHTML = '<option value="">Select Invoice (Optional)</option>';
+    
+    invoices.forEach(invoice => {
+      const option = document.createElement('option');
+      option.value = invoice.id;
+      option.textContent = `${invoice.inv_number} - ${new Date(invoice.inv_date).toLocaleDateString()}`;
+      option.dataset.currency = invoice.inv_currency; // Store currency in data attribute
+      select.appendChild(option);
+    });
+    
+    // Add event listener for invoice selection
+    select.addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const currencyInput = document.getElementById('expCurrency');
+      
+      if (selectedOption.value && selectedOption.dataset.currency) {
+        // Show currency from selected invoice (read-only)
+        currencyInput.value = selectedOption.dataset.currency;
+      } else {
+        // Reset currency if no invoice selected
+        currencyInput.value = '';
+      }
+    });
+  } catch (error) {
+    console.error('Error loading invoices for dropdown:', error);
+  }
+}
+
+// Load flights for dropdown
+async function loadFlightsForDropdown() {
+  try {
+    const response = await fetch('/api/flights');
+    const flights = await response.json();
+    
+    const select = document.getElementById('expFlight');
+    select.innerHTML = '<option value="">Select Flight (Optional)</option>';
+    
+    flights.forEach(flight => {
+      const option = document.createElement('option');
+      option.value = flight.id;
+      option.textContent = `${flight.flt_number} - ${flight.flt_dep} to ${flight.flt_arr} (${new Date(flight.flt_date).toLocaleDateString()})`;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading flights for dropdown:', error);
+  }
+}
+
+// Modal functions
+function openAddExpenseModal() {
+  const modal = document.getElementById('addExpenseModal');
+  if (modal) {
+    modal.classList.add('show');
+    // Load dropdowns when modal opens
+    loadInvoicesForDropdown();
+    loadFlightsForDropdown();
+  }
+}
+
+function closeAddExpenseModal() {
+  const modal = document.getElementById('addExpenseModal');
+  if (modal) {
+    modal.classList.remove('show');
+    // Reset form
+    document.getElementById('addExpenseForm').reset();
   }
 }
 
@@ -186,7 +443,93 @@ function deleteExpense(id) {
 }
 
 // Load data when page loads
-document.addEventListener('DOMContentLoaded', loadExpenses);
+document.addEventListener('DOMContentLoaded', function() {
+  loadExpenses();
+  
+  // Add event listeners for modal buttons
+  const addExpenseBtn = document.getElementById('addExpenseBtn');
+  if (addExpenseBtn) {
+    addExpenseBtn.addEventListener('click', openAddExpenseModal);
+  }
+  
+  const closeModalBtn = document.getElementById('closeExpenseModalBtn');
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeAddExpenseModal);
+  }
+  
+  const cancelBtn = document.getElementById('cancelExpenseBtn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', closeAddExpenseModal);
+  }
+  
+  // Handle form submission
+  const addExpenseForm = document.getElementById('addExpenseForm');
+  if (addExpenseForm) {
+    addExpenseForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const saveBtn = document.getElementById('saveExpenseBtn');
+      const btnText = saveBtn.querySelector('.btn-text');
+      const btnSpinner = saveBtn.querySelector('.btn-spinner');
+      
+      // Show spinner
+      btnText.style.display = 'none';
+      btnSpinner.style.display = 'inline-block';
+      saveBtn.disabled = true;
+      
+      try {
+        const formData = new FormData(addExpenseForm);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Remove currency field as it's not stored in database
+        delete data.exp_currency;
+        
+        // Convert empty strings to null for optional fields
+        Object.keys(data).forEach(key => {
+          if (data[key] === '') {
+            data[key] = null;
+          }
+        });
+        
+        const response = await fetch('/api/expenses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        });
+        
+        if (response.ok) {
+          // Close modal and reload expenses
+          closeAddExpenseModal();
+          await loadExpenses();
+          console.log('Expense added successfully');
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to add expense');
+        }
+      } catch (error) {
+        console.error('Error adding expense:', error);
+        alert('Failed to add expense: ' + error.message);
+      } finally {
+        // Hide spinner
+        btnText.style.display = 'inline';
+        btnSpinner.style.display = 'none';
+        saveBtn.disabled = false;
+      }
+    });
+  }
+  
+  // Close modal when clicking outside
+  const addExpenseModal = document.getElementById('addExpenseModal');
+  if (addExpenseModal) {
+    addExpenseModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeAddExpenseModal();
+      }
+    });
+  }
+});
 </script>
 
 <style>
@@ -299,9 +642,10 @@ document.addEventListener('DOMContentLoaded', loadExpenses);
 }
 
 /* Compact styles for all elements */
-.expense-type-compact, .expense-place-compact, .amount-compact,
+.expense-type-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
 .fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
-.invoice-number-compact, .flight-number-compact, .comments-compact {
+.invoice-number-compact, .flight-number-compact, .invoice-id-compact, 
+.flight-id-compact, .comments-compact {
   font-size: 0.8rem !important;
   font-weight: 500 !important;
   color: hsl(210, 6%, 21%) !important;
@@ -330,5 +674,197 @@ document.addEventListener('DOMContentLoaded', loadExpenses);
 .comments-details {
   font-size: 0.75rem !important;
   color: hsl(210, 6%, 46%) !important;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  display: none !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 10000 !important;
+}
+
+.modal-overlay.show {
+  display: flex !important;
+}
+
+.modal-container {
+  background: white !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  width: 90% !important;
+  max-width: 600px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.modal-header h2 {
+  margin: 0 !important;
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-close {
+  background: none !important;
+  border: none !important;
+  font-size: 1.25rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  cursor: pointer !important;
+  padding: 0.25rem !important;
+  border-radius: 0.25rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.modal-close:hover {
+  background-color: hsl(210, 11%, 95%) !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-body {
+  padding: 0 1.5rem !important;
+}
+
+.form-row {
+  display: flex !important;
+  gap: 1rem !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.form-group {
+  flex: 1 !important;
+  margin-bottom: 0 !important;
+}
+
+.form-group label {
+  display: block !important;
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.875rem !important;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100% !important;
+  padding: 0.75rem !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  background-color: white !important;
+  transition: border-color 0.2s ease !important;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none !important;
+  border-color: hsl(210, 76%, 36%) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.form-group input:valid {
+  border-color: hsl(142, 76%, 36%) !important;
+}
+
+.modal-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.75rem !important;
+  margin-top: 2rem !important;
+  padding: 1.5rem !important;
+  border-top: 1px solid hsl(210, 11%, 90%) !important;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+.btn-cancel {
+  background-color: hsl(0, 84%, 60%) !important;
+  color: white !important;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background-color: hsl(0, 84%, 55%) !important;
+}
+
+.btn-save {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+}
+
+.btn-save:hover:not(:disabled) {
+  background-color: hsl(142, 76%, 32%) !important;
+}
+
+.btn-spinner {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .modal-container {
+    width: 95% !important;
+    margin: 1rem !important;
+  }
+  
+  .modal-header {
+    padding: 1rem 1rem 0 1rem !important;
+  }
+  
+  .modal-body {
+    padding: 0 1rem !important;
+  }
+  
+  .form-row {
+    flex-direction: column !important;
+    gap: 0 !important;
+  }
+  
+  .modal-actions {
+    flex-direction: column !important;
+  }
+  
+  .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }
 </style>

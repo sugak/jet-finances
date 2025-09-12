@@ -811,6 +811,83 @@ app.delete('/api/flights/:id', async (req, res) => {
   }
 });
 
+// POST endpoint to add new expense
+app.post('/api/expenses', async (req, res) => {
+  try {
+    const {
+      exp_type,
+      exp_place,
+      exp_amount,
+      exp_period_start,
+      exp_period_end,
+      exp_fuel_quan,
+      exp_fuel_provider,
+      exp_invoice_type,
+      exp_invoice,
+      exp_flight,
+      exp_comments,
+    } = req.body;
+
+    // Validate required fields (all are optional according to requirements)
+    // But we'll validate data types if provided
+
+    if (exp_amount && isNaN(parseFloat(exp_amount))) {
+      return res.status(400).json({
+        error: 'Amount must be a valid number',
+      });
+    }
+
+    if (exp_fuel_quan && isNaN(parseFloat(exp_fuel_quan))) {
+      return res.status(400).json({
+        error: 'Fuel quantity must be a valid number',
+      });
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([
+          {
+            exp_type: exp_type || null,
+            exp_place: exp_place || null,
+            exp_amount: exp_amount ? parseFloat(exp_amount) : null,
+            exp_period_start: exp_period_start || null,
+            exp_period_end: exp_period_end || null,
+            exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
+            exp_fuel_provider: exp_fuel_provider || null,
+            exp_invoice_type: exp_invoice_type || null,
+            exp_invoice: exp_invoice || null,
+            exp_flight: exp_flight || null,
+            exp_comments: exp_comments || null,
+          },
+        ])
+        .select();
+
+      if (error) {
+        console.log('Supabase error adding expense:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to add expense to database' });
+      }
+
+      return res.status(201).json({
+        message: 'Expense added successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error adding expense:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
 app.get('/api/dashboard/stats', async (_req, res) => {
   try {
     let stats = {
