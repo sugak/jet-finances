@@ -197,10 +197,16 @@ async function loadExpenses() {
           <p>No expenses found for this invoice.</p>
         </div>
       `;
+      // Get invoice data from the page
+      const invoiceData = {
+        inv_currency: '<%= invoice.inv_currency %>',
+        inv_amount: '<%= invoice.inv_amount %>'
+      };
+      
       summaryContainer.innerHTML = `
         <div class="summary-item">Total: $0.00 USD / 0.00 AED</div>
         <div class="summary-item invoice-amount">
-          Invoice: ${invoice.inv_currency} ${parseFloat(invoice.inv_amount).toLocaleString('en-US', { 
+          Invoice: ${invoiceData.inv_currency} ${parseFloat(invoiceData.inv_amount).toLocaleString('en-US', { 
             minimumFractionDigits: 2, 
             maximumFractionDigits: 2 
           })}
@@ -227,13 +233,19 @@ async function loadExpenses() {
     // Convert AED to USD for total
     const totalUSDConverted = totalUSD + (totalAED / exchangeRate);
     
+    // Get invoice data from the page
+    const invoiceData = {
+      inv_currency: '<%= invoice.inv_currency %>',
+      inv_amount: '<%= invoice.inv_amount %>'
+    };
+    
     // Update summary
     summaryContainer.innerHTML = `
       <div class="summary-item">
         <strong>Total: $${totalUSDConverted.toFixed(2)} USD / ${totalAED.toFixed(2)} AED</strong>
       </div>
       <div class="summary-item invoice-amount">
-        Invoice: ${invoice.inv_currency} ${parseFloat(invoice.inv_amount).toLocaleString('en-US', { 
+        Invoice: ${invoiceData.inv_currency} ${parseFloat(invoiceData.inv_amount).toLocaleString('en-US', { 
           minimumFractionDigits: 2, 
           maximumFractionDigits: 2 
         })}
