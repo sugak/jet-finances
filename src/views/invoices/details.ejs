@@ -197,7 +197,15 @@ async function loadExpenses() {
           <p>No expenses found for this invoice.</p>
         </div>
       `;
-      summaryContainer.innerHTML = '<div class="summary-item">Total: $0.00 USD / 0.00 AED</div>';
+      summaryContainer.innerHTML = `
+        <div class="summary-item">Total: $0.00 USD / 0.00 AED</div>
+        <div class="summary-item invoice-amount">
+          Invoice: ${invoice.inv_currency} ${parseFloat(invoice.inv_amount).toLocaleString('en-US', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+          })}
+        </div>
+      `;
       return;
     }
 
@@ -223,6 +231,12 @@ async function loadExpenses() {
     summaryContainer.innerHTML = `
       <div class="summary-item">
         <strong>Total: $${totalUSDConverted.toFixed(2)} USD / ${totalAED.toFixed(2)} AED</strong>
+      </div>
+      <div class="summary-item invoice-amount">
+        Invoice: ${invoice.inv_currency} ${parseFloat(invoice.inv_amount).toLocaleString('en-US', { 
+          minimumFractionDigits: 2, 
+          maximumFractionDigits: 2 
+        })}
       </div>
     `;
     
@@ -1134,6 +1148,17 @@ document.addEventListener('DOMContentLoaded', function() {
   padding: 0.5rem 0.75rem !important;
   border-radius: 0.375rem !important;
   display: inline-block !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.summary-item:last-child {
+  margin-bottom: 0 !important;
+}
+
+.invoice-amount {
+  background-color: hsl(142, 76%, 95%) !important;
+  color: hsl(142, 76%, 36%) !important;
+  font-weight: 500 !important;
 }
 
 /* Status button styles */
