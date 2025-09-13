@@ -1886,9 +1886,15 @@ app.post('/api/expenses', async (req, res) => {
             exp_place: exp_place || null,
             exp_amount: exp_amount ? parseFloat(exp_amount) : null,
             exp_period_start: exp_period_start
-              ? `${exp_period_start}-01`
+              ? exp_period_start.includes('-') && exp_period_start.length === 7
+                ? `${exp_period_start}-01`
+                : exp_period_start
               : null,
-            exp_period_end: exp_period_end ? `${exp_period_end}-01` : null,
+            exp_period_end: exp_period_end
+              ? exp_period_end.includes('-') && exp_period_end.length === 7
+                ? `${exp_period_end}-01`
+                : exp_period_end
+              : null,
             exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
             exp_fuel_provider: exp_fuel_provider || null,
             exp_invoice_type: expInvoiceTypeName || null,
