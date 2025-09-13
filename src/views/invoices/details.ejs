@@ -9,15 +9,21 @@
         day: 'numeric' 
       }) %>
     </p>
+    <div id="expenses-summary" class="expenses-summary">
+      <!-- Expenses summary will be loaded here -->
+    </div>
   </div>
   <div class="page-actions">
-    <button class="btn btn-primary" id="addExpenseBtn">
-      <i class="bi bi-plus-lg"></i>
-      Add Expense
-    </button>
     <button class="btn btn-secondary" id="backBtn">
       <i class="bi bi-arrow-left"></i>
       Back to Invoices
+    </button>
+    <button class="btn btn-status" id="statusBtn" data-status="<%= invoice.inv_filled %>">
+      <span class="status-text"><%= invoice.inv_filled ? 'Completed' : 'In Progress' %></span>
+    </button>
+    <button class="btn btn-primary" id="addExpenseBtn">
+      <i class="bi bi-plus-lg"></i>
+      Add Expense
     </button>
   </div>
 </div>
@@ -27,7 +33,6 @@
   <div class="content-card">
     <div class="content-header">
       <h3>Expenses</h3>
-      <p class="content-subtitle">All expenses associated with this invoice</p>
     </div>
     <div class="content-body">
       <div id="expenses-container">
@@ -180,6 +185,7 @@ async function loadExpenses() {
     const expenses = await response.json();
     
     const container = document.getElementById('expenses-container');
+    const summaryContainer = document.getElementById('expenses-summary');
     
     if (!expenses || expenses.length === 0) {
       container.innerHTML = `
@@ -191,8 +197,34 @@ async function loadExpenses() {
           <p>No expenses found for this invoice.</p>
         </div>
       `;
+      summaryContainer.innerHTML = '<div class="summary-item">Total: $0.00 USD / 0.00 AED</div>';
       return;
     }
+
+    // Calculate totals
+    const exchangeRate = 3.6735;
+    let totalUSD = 0;
+    let totalAED = 0;
+    
+    expenses.forEach(expense => {
+      if (expense.exp_amount) {
+        if (expense.exp_currency === 'USD') {
+          totalUSD += parseFloat(expense.exp_amount);
+        } else if (expense.exp_currency === 'AED') {
+          totalAED += parseFloat(expense.exp_amount);
+        }
+      }
+    });
+    
+    // Convert AED to USD for total
+    const totalUSDConverted = totalUSD + (totalAED / exchangeRate);
+    
+    // Update summary
+    summaryContainer.innerHTML = `
+      <div class="summary-item">
+        <strong>Total: $${totalUSDConverted.toFixed(2)} USD / ${totalAED.toFixed(2)} AED</strong>
+      </div>
+    `;
     
     // Group expenses by exp_invoice_type
     const groupedExpenses = {};
@@ -209,12 +241,29 @@ async function loadExpenses() {
     Object.keys(groupedExpenses).sort().forEach(type => {
       const typeExpenses = groupedExpenses[type];
       
+      // Calculate total for this type
+      let typeTotalUSD = 0;
+      let typeTotalAED = 0;
+      
+      typeExpenses.forEach(expense => {
+        if (expense.exp_amount) {
+          if (expense.exp_currency === 'USD') {
+            typeTotalUSD += parseFloat(expense.exp_amount);
+          } else if (expense.exp_currency === 'AED') {
+            typeTotalAED += parseFloat(expense.exp_amount);
+          }
+        }
+      });
+      
+      const typeTotalUSDConverted = typeTotalUSD + (typeTotalAED / exchangeRate);
+      
       const sectionId = type.replace(/[^a-zA-Z0-9]/g, '_');
       html += `
         <div class="expense-section">
           <div class="section-header" data-section-id="${sectionId}">
             <h4>${type}</h4>
             <div class="section-controls">
+              <span class="section-total">$${typeTotalUSDConverted.toFixed(2)} USD / ${typeTotalAED.toFixed(2)} AED</span>
               <span class="section-count">${typeExpenses.length} items</span>
               <i class="bi bi-chevron-right section-toggle" id="toggle-${sectionId}"></i>
             </div>
@@ -454,12 +503,66 @@ function closeAddExpenseModal() {
   }
 }
 
+// Toggle invoice status
+async function toggleInvoiceStatus() {
+  const statusBtn = document.getElementById('statusBtn');
+  const currentStatus = statusBtn.getAttribute('data-status') === 'true';
+  const newStatus = !currentStatus;
+  const invoiceId = window.location.pathname.split('/').pop();
+  
+  try {
+    const response = await fetch(`/api/invoices/${invoiceId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inv_filled: newStatus
+      }),
+    });
+    
+    if (response.ok) {
+      // Update button appearance and data
+      statusBtn.setAttribute('data-status', newStatus);
+      const statusText = statusBtn.querySelector('.status-text');
+      
+      if (newStatus) {
+        statusBtn.className = 'btn btn-status completed';
+        statusText.textContent = 'Completed';
+      } else {
+        statusBtn.className = 'btn btn-status in-progress';
+        statusText.textContent = 'In Progress';
+      }
+    } else {
+      console.error('Failed to update invoice status');
+      alert('Failed to update invoice status. Please try again.');
+    }
+  } catch (error) {
+    console.error('Error updating invoice status:', error);
+    alert('Error updating invoice status. Please try again.');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const backBtn = document.getElementById('backBtn');
   if (backBtn) {
     backBtn.addEventListener('click', function() {
       window.location.href = '/invoices';
     });
+  }
+  
+  // Status button handler
+  const statusBtn = document.getElementById('statusBtn');
+  if (statusBtn) {
+    // Set initial button class based on status
+    const isCompleted = statusBtn.getAttribute('data-status') === 'true';
+    if (isCompleted) {
+      statusBtn.className = 'btn btn-status completed';
+    } else {
+      statusBtn.className = 'btn btn-status in-progress';
+    }
+    
+    statusBtn.addEventListener('click', toggleInvoiceStatus);
   }
   
   // Add expense button
@@ -1017,5 +1120,62 @@ document.addEventListener('DOMContentLoaded', function() {
   .placeholder-content {
     padding: 2rem 1rem !important;
   }
+}
+
+/* Expenses summary styles */
+.expenses-summary {
+  margin-top: 0.5rem !important;
+}
+
+.summary-item {
+  font-size: 0.9rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  background-color: hsl(210, 11%, 95%) !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  display: inline-block !important;
+}
+
+/* Status button styles */
+.btn-status {
+  padding: 0.5rem 1rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.025em !important;
+  min-width: 120px !important;
+}
+
+.btn-status.in-progress {
+  background-color: hsl(0, 84%, 60%) !important;
+  color: white !important;
+}
+
+.btn-status.in-progress:hover {
+  background-color: hsl(0, 84%, 55%) !important;
+}
+
+.btn-status.completed {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+}
+
+.btn-status.completed:hover {
+  background-color: hsl(142, 76%, 32%) !important;
+}
+
+/* Section total styles */
+.section-total {
+  font-size: 0.75rem !important;
+  color: hsl(142, 76%, 36%) !important;
+  background-color: hsl(142, 76%, 95%) !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+  font-weight: 600 !important;
+  margin-right: 0.5rem !important;
 }
 </style>
