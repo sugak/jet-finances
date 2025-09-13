@@ -242,7 +242,13 @@ async function loadExpenses() {
     // Update summary
     summaryContainer.innerHTML = `
       <div class="summary-item">
-        <strong>Total: $${totalUSDConverted.toFixed(2)} USD / ${totalAED.toFixed(2)} AED</strong>
+        <strong>Total: $${totalUSDConverted.toLocaleString('en-US', { 
+          minimumFractionDigits: 2, 
+          maximumFractionDigits: 2 
+        })} USD / ${totalAED.toLocaleString('en-US', { 
+          minimumFractionDigits: 2, 
+          maximumFractionDigits: 2 
+        })} AED</strong>
       </div>
       <div class="summary-item invoice-amount">
         Invoice: ${invoiceData.inv_currency} ${parseFloat(invoiceData.inv_amount).toLocaleString('en-US', { 
