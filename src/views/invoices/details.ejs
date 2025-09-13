@@ -32,7 +32,6 @@
 <div class="content-area">
   <div class="content-card">
     <div class="content-header">
-      <h3>Expenses</h3>
     </div>
     <div class="content-body">
       <div id="expenses-container">
@@ -300,21 +299,7 @@ async function loadExpenses() {
               <i class="bi bi-chevron-right section-toggle" id="toggle-${sectionId}"></i>
             </div>
           </div>
-          <div class="table-container" id="content-${sectionId}" style="display: none;">
-            <table class="expenses-table">
-              <thead>
-                <tr>
-                  <th class="group-header">Type</th>
-                  <th class="group-header">Subtype</th>
-                  <th class="group-header">Description</th>
-                  <th>Amount</th>
-                  <th>Place</th>
-                  <th>Period</th>
-                  <th>Fuel Quantity</th>
-                  <th>Fuel Provider</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div class="expenses-list" id="content-${sectionId}" style="display: none;">
       `;
       
       typeExpenses.forEach(expense => {
@@ -341,38 +326,26 @@ async function loadExpenses() {
         }
         
         html += `
-          <tr>
-            <td class="group-cell">
+          <div class="expense-item">
+            <div class="expense-main">
               <div class="expense-type">${expense.exp_type || '-'}</div>
-            </td>
-            <td class="group-cell">
               <div class="expense-subtype">${expense.exp_subtype || '-'}</div>
-            </td>
-            <td class="group-cell">
-              <div class="expense-description">${comments}</div>
-            </td>
-            <td>
               <div class="expense-amount">${amount}</div>
-            </td>
-            <td>
-              <div class="expense-place">${place}</div>
-            </td>
-            <td>
-              <div class="expense-period">${period}</div>
-            </td>
-            <td>
-              <div class="expense-fuel-qty">${fuelQty}</div>
-            </td>
-            <td>
-              <div class="expense-fuel-provider">${fuelProvider}</div>
-            </td>
-          </tr>
+            </div>
+            <div class="expense-details">
+              <div class="expense-description">${comments}</div>
+              <div class="expense-meta">
+                <span class="expense-place">${place}</span>
+                <span class="expense-period">${period}</span>
+                <span class="expense-fuel-qty">${fuelQty}</span>
+                <span class="expense-fuel-provider">${fuelProvider}</span>
+              </div>
+            </div>
+          </div>
         `;
       });
       
       html += `
-              </tbody>
-            </table>
           </div>
         </div>
       `;
@@ -1221,6 +1194,61 @@ document.addEventListener('DOMContentLoaded', function() {
   border-radius: 0.375rem !important;
   font-weight: 600 !important;
   margin-right: 0.5rem !important;
+}
+
+/* Expenses list styles */
+.expenses-list {
+  padding: 1rem 0 !important;
+}
+
+.expense-item {
+  padding: 0.75rem 0 !important;
+  border-bottom: 1px solid hsl(210, 11%, 95%) !important;
+}
+
+.expense-item:last-child {
+  border-bottom: none !important;
+}
+
+.expense-main {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.expense-type, .expense-subtype {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.expense-amount {
+  font-weight: 600 !important;
+  color: hsl(142, 76%, 36%) !important;
+  margin-left: auto !important;
+}
+
+.expense-details {
+  margin-left: 0 !important;
+}
+
+.expense-description {
+  color: hsl(210, 6%, 46%) !important;
+  margin-bottom: 0.25rem !important;
+  font-size: 0.9rem !important;
+}
+
+.expense-meta {
+  display: flex !important;
+  gap: 1rem !important;
+  font-size: 0.8rem !important;
+  color: hsl(210, 6%, 60%) !important;
+}
+
+.expense-meta span {
+  background-color: hsl(210, 11%, 95%) !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: 0.25rem !important;
 }
 
 /* Page actions button styles - make all buttons same size */
