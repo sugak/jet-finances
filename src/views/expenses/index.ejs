@@ -34,6 +34,10 @@
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
             <th class="sortable">
+              SUBTYPE
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
+            <th class="sortable">
               PLACE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
@@ -107,7 +111,15 @@
         <div class="form-row">
           <div class="form-group">
             <label for="expType">Type</label>
-            <input type="text" id="expType" name="exp_type" placeholder="Enter expense type">
+            <select id="expType" name="exp_type" required>
+              <option value="">Select Type</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="expSubtype">Subtype</label>
+            <select id="expSubtype" name="exp_subtype">
+              <option value="">Select Subtype</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="expPlace">Place</label>
@@ -122,7 +134,11 @@
                          </div>
                          <div class="form-group">
                            <label for="expCurrency">Currency</label>
-                           <input type="text" id="expCurrency" name="exp_currency" readonly placeholder="Auto-filled from invoice">
+                           <select id="expCurrency" name="exp_currency">
+                             <option value="AED" selected>AED</option>
+                             <option value="USD">USD</option>
+                             <option value="EUR">EUR</option>
+                           </select>
                          </div>
                        </div>
                        <div class="form-row">
@@ -138,17 +154,19 @@
                        <div class="form-row">
                          <div class="form-group">
                            <label for="expInvoiceType">Invoice Type</label>
-                           <input type="text" id="expInvoiceType" name="exp_invoice_type" placeholder="Enter invoice type">
+                           <select id="expInvoiceType" name="exp_invoice_type">
+                             <option value="">Select Invoice Type</option>
+                           </select>
                          </div>
                          <div class="form-group">
                            <label for="expPeriodStart">Period Start</label>
-                           <input type="date" id="expPeriodStart" name="exp_period_start">
+                           <input type="month" id="expPeriodStart" name="exp_period_start">
                          </div>
                        </div>
                        <div class="form-row">
                          <div class="form-group">
                            <label for="expPeriodEnd">Period End</label>
-                           <input type="date" id="expPeriodEnd" name="exp_period_end">
+                           <input type="month" id="expPeriodEnd" name="exp_period_end">
                          </div>
                          <div class="form-group">
                            <!-- Empty div for spacing -->
@@ -241,13 +259,16 @@ async function loadExpenses() {
           <div class="expense-type-compact">${expense.exp_type || 'N/A'}</div>
         </td>
         <td>
+          <div class="expense-subtype-compact">${expense.exp_subtype || 'N/A'}</div>
+        </td>
+        <td>
           <div class="expense-place-compact">${expense.exp_place || 'N/A'}</div>
         </td>
         <td>
           <div class="amount-compact">${formattedAmount}</div>
         </td>
         <td>
-          <div class="currency-compact">${expense.invoices?.inv_currency || 'N/A'}</div>
+          <div class="currency-compact">${expense.exp_currency || 'N/A'}</div>
         </td>
         <td>
           <div class="period-compact">${formatPeriod(expense.exp_period_start, expense.exp_period_end)}</div>
@@ -300,7 +321,7 @@ async function loadExpenses() {
     const tbody = document.getElementById('expenses-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="13" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="15" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load expenses. Please try again.
           <br><small>Error: ${error.message}</small>
@@ -351,6 +372,70 @@ function formatPeriod(startDate, endDate) {
   return `${startFormatted} - ${endFormatted}`;
 }
 
+// Load expense types for dropdown
+async function loadExpenseTypes() {
+  try {
+    const response = await fetch('/api/expense-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('expType');
+    select.innerHTML = '<option value="">Select Type</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.id;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading expense types:', error);
+  }
+}
+
+// Load expense subtypes based on selected type
+async function loadExpenseSubtypes(typeId) {
+  try {
+    const select = document.getElementById('expSubtype');
+    select.innerHTML = '<option value="">Select Subtype</option>';
+    
+    if (!typeId) {
+      return;
+    }
+    
+    const response = await fetch(`/api/expense-subtypes/${typeId}`);
+    const subtypes = await response.json();
+    
+    subtypes.forEach(subtype => {
+      const option = document.createElement('option');
+      option.value = subtype.id;
+      option.textContent = subtype.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading expense subtypes:', error);
+  }
+}
+
+// Load invoice types for dropdown
+async function loadInvoiceTypes() {
+  try {
+    const response = await fetch('/api/invoice-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('expInvoiceType');
+    select.innerHTML = '<option value="">Select Invoice Type</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.id;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading invoice types:', error);
+  }
+}
+
 // Load invoices for dropdown
 async function loadInvoicesForDropdown() {
   try {
@@ -364,22 +449,7 @@ async function loadInvoicesForDropdown() {
       const option = document.createElement('option');
       option.value = invoice.id;
       option.textContent = `${invoice.inv_number} - ${new Date(invoice.inv_date).toLocaleDateString()}`;
-      option.dataset.currency = invoice.inv_currency; // Store currency in data attribute
       select.appendChild(option);
-    });
-    
-    // Add event listener for invoice selection
-    select.addEventListener('change', function() {
-      const selectedOption = this.options[this.selectedIndex];
-      const currencyInput = document.getElementById('expCurrency');
-      
-      if (selectedOption.value && selectedOption.dataset.currency) {
-        // Show currency from selected invoice (read-only)
-        currencyInput.value = selectedOption.dataset.currency;
-      } else {
-        // Reset currency if no invoice selected
-        currencyInput.value = '';
-      }
     });
   } catch (error) {
     console.error('Error loading invoices for dropdown:', error);
@@ -412,6 +482,8 @@ function openAddExpenseModal() {
   if (modal) {
     modal.classList.add('show');
     // Load dropdowns when modal opens
+    loadExpenseTypes();
+    loadInvoiceTypes();
     loadInvoicesForDropdown();
     loadFlightsForDropdown();
   }
@@ -452,6 +524,14 @@ document.addEventListener('DOMContentLoaded', function() {
     addExpenseBtn.addEventListener('click', openAddExpenseModal);
   }
   
+  // Expense type change handler
+  const expTypeSelect = document.getElementById('expType');
+  if (expTypeSelect) {
+    expTypeSelect.addEventListener('change', function() {
+      loadExpenseSubtypes(this.value);
+    });
+  }
+  
   const closeModalBtn = document.getElementById('closeExpenseModalBtn');
   if (closeModalBtn) {
     closeModalBtn.addEventListener('click', closeAddExpenseModal);
@@ -481,8 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(addExpenseForm);
         const data = Object.fromEntries(formData.entries());
         
-        // Remove currency field as it's not stored in database
-        delete data.exp_currency;
+        // Currency field is now stored in database, so keep it
         
         // Convert empty strings to null for optional fields
         Object.keys(data).forEach(key => {
@@ -642,7 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* Compact styles for all elements */
-.expense-type-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
+.expense-type-compact, .expense-subtype-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
 .fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
 .invoice-number-compact, .flight-number-compact, .invoice-id-compact, 
 .flight-id-compact, .comments-compact {

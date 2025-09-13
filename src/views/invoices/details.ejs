@@ -11,6 +11,10 @@
     </p>
   </div>
   <div class="page-actions">
+    <button class="btn btn-primary" id="addExpenseBtn">
+      <i class="bi bi-plus-lg"></i>
+      Add Expense
+    </button>
     <button class="btn btn-secondary" id="backBtn">
       <i class="bi bi-arrow-left"></i>
       Back to Invoices
@@ -36,6 +40,112 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal-overlay" id="addExpenseModal" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h2>Add New Expense</h2>
+      <button class="modal-close" id="closeExpenseModalBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <form id="addExpenseForm">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expType">Type</label>
+            <select id="expType" name="exp_type" required>
+              <option value="">Select Type</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="expSubtype">Subtype</label>
+            <select id="expSubtype" name="exp_subtype">
+              <option value="">Select Subtype</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="expPlace">Place</label>
+            <input type="text" id="expPlace" name="exp_place" placeholder="Enter place">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expAmount">Amount</label>
+            <input type="number" id="expAmount" name="exp_amount" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="expCurrency">Currency</label>
+            <select id="expCurrency" name="exp_currency">
+              <option value="AED" selected>AED</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expFuelQuan">Fuel Quantity (L)</label>
+            <input type="number" id="expFuelQuan" name="exp_fuel_quan" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="expFuelProvider">Fuel Provider</label>
+            <input type="text" id="expFuelProvider" name="exp_fuel_provider" placeholder="Enter fuel provider">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expPeriodStart">Period Start</label>
+            <input type="month" id="expPeriodStart" name="exp_period_start">
+          </div>
+          <div class="form-group">
+            <label for="expPeriodEnd">Period End</label>
+            <input type="month" id="expPeriodEnd" name="exp_period_end">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expInvoiceType">Invoice Type</label>
+            <select id="expInvoiceType" name="exp_invoice_type">
+              <option value="">Select Invoice Type</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="expFlight">Flight</label>
+            <select id="expFlight" name="exp_flight">
+              <option value="">Select Flight (Optional)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label for="expComments">Comments</label>
+            <textarea id="expComments" name="exp_comments" rows="3" placeholder="Enter comments"></textarea>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="cancelExpenseBtn">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-save" id="saveExpenseBtn">
+          <span class="btn-text">Save</span>
+          <div class="spinner" style="display: none;">
+            <i class="bi bi-arrow-clockwise"></i>
+          </div>
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -201,11 +311,201 @@ async function loadExpenses() {
   }
 }
 
+// Load expense types for dropdown
+async function loadExpenseTypes() {
+  try {
+    const response = await fetch('/api/expense-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('expType');
+    select.innerHTML = '<option value="">Select Type</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.id;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading expense types:', error);
+  }
+}
+
+// Load expense subtypes based on selected type
+async function loadExpenseSubtypes(typeId) {
+  try {
+    const select = document.getElementById('expSubtype');
+    select.innerHTML = '<option value="">Select Subtype</option>';
+    
+    if (!typeId) {
+      return;
+    }
+    
+    const response = await fetch(`/api/expense-subtypes/${typeId}`);
+    const subtypes = await response.json();
+    
+    subtypes.forEach(subtype => {
+      const option = document.createElement('option');
+      option.value = subtype.id;
+      option.textContent = subtype.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading expense subtypes:', error);
+  }
+}
+
+// Load invoice types for dropdown
+async function loadInvoiceTypes() {
+  try {
+    const response = await fetch('/api/invoice-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('expInvoiceType');
+    select.innerHTML = '<option value="">Select Invoice Type</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.id;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading invoice types:', error);
+  }
+}
+
+// Load flights for dropdown
+async function loadFlightsForDropdown() {
+  try {
+    const response = await fetch('/api/flights');
+    const flights = await response.json();
+    
+    const select = document.getElementById('expFlight');
+    select.innerHTML = '<option value="">Select Flight (Optional)</option>';
+    
+    flights.forEach(flight => {
+      const option = document.createElement('option');
+      option.value = flight.id;
+      option.textContent = `${flight.flt_number} - ${flight.flt_dep} to ${flight.flt_arr}`;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading flights for dropdown:', error);
+  }
+}
+
+// Modal functions
+function openAddExpenseModal() {
+  const modal = document.getElementById('addExpenseModal');
+  if (modal) {
+    modal.classList.add('show');
+    // Load dropdowns when modal opens
+    loadExpenseTypes();
+    loadInvoiceTypes();
+    loadFlightsForDropdown();
+  }
+}
+
+function closeAddExpenseModal() {
+  const modal = document.getElementById('addExpenseModal');
+  if (modal) {
+    modal.classList.remove('show');
+    // Reset form
+    document.getElementById('addExpenseForm').reset();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const backBtn = document.getElementById('backBtn');
   if (backBtn) {
     backBtn.addEventListener('click', function() {
       window.location.href = '/invoices';
+    });
+  }
+  
+  // Add expense button
+  const addExpenseBtn = document.getElementById('addExpenseBtn');
+  if (addExpenseBtn) {
+    addExpenseBtn.addEventListener('click', openAddExpenseModal);
+  }
+  
+  // Expense type change handler
+  const expTypeSelect = document.getElementById('expType');
+  if (expTypeSelect) {
+    expTypeSelect.addEventListener('change', function() {
+      loadExpenseSubtypes(this.value);
+    });
+  }
+  
+  // Modal close buttons
+  const closeExpenseModalBtn = document.getElementById('closeExpenseModalBtn');
+  if (closeExpenseModalBtn) {
+    closeExpenseModalBtn.addEventListener('click', closeAddExpenseModal);
+  }
+  
+  const cancelExpenseBtn = document.getElementById('cancelExpenseBtn');
+  if (cancelExpenseBtn) {
+    cancelExpenseBtn.addEventListener('click', closeAddExpenseModal);
+  }
+  
+  // Form submission
+  const addExpenseForm = document.getElementById('addExpenseForm');
+  if (addExpenseForm) {
+    addExpenseForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const saveBtn = document.getElementById('saveExpenseBtn');
+      const btnText = saveBtn.querySelector('.btn-text');
+      const spinner = saveBtn.querySelector('.spinner');
+      
+      // Show loading state
+      saveBtn.disabled = true;
+      btnText.style.display = 'none';
+      spinner.style.display = 'inline-block';
+      
+      try {
+        const formData = new FormData(addExpenseForm);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Get current invoice ID from URL
+        const invoiceId = window.location.pathname.split('/').pop();
+        data.exp_invoice = invoiceId; // Automatically set the invoice ID
+        
+        // Convert empty strings to null for optional fields
+        Object.keys(data).forEach(key => {
+          if (data[key] === '') {
+            data[key] = null;
+          }
+        });
+        
+        const response = await fetch('/api/expenses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+          // Success - close modal and reload expenses
+          closeAddExpenseModal();
+          loadExpenses(); // Reload the expenses list
+        } else {
+          // Error - show message
+          alert('Error adding expense: ' + (result.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error submitting expense:', error);
+        alert('Error adding expense. Please try again.');
+      } finally {
+        // Reset button state
+        saveBtn.disabled = false;
+        btnText.style.display = 'inline';
+        spinner.style.display = 'none';
+      }
     });
   }
   
@@ -243,6 +543,17 @@ document.addEventListener('DOMContentLoaded', function() {
   cursor: pointer !important;
   transition: all 0.2s ease !important;
   text-decoration: none !important;
+}
+
+.btn-primary {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+  border: 1px solid hsl(142, 76%, 36%) !important;
+}
+
+.btn-primary:hover {
+  background-color: hsl(142, 76%, 32%) !important;
+  border-color: hsl(142, 76%, 32%) !important;
 }
 
 .btn-secondary {
@@ -284,6 +595,184 @@ document.addEventListener('DOMContentLoaded', function() {
 .content-subtitle {
   margin: 0 !important;
   font-size: 0.875rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  display: none !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 10000 !important;
+}
+
+.modal-overlay.show {
+  display: flex !important;
+}
+
+.modal-container {
+  background: white !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  width: 90% !important;
+  max-width: 600px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.modal-header h2 {
+  margin: 0 !important;
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-close {
+  background: none !important;
+  border: none !important;
+  font-size: 1.25rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  cursor: pointer !important;
+  padding: 0.25rem !important;
+  border-radius: 0.25rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.modal-close:hover {
+  background-color: hsl(210, 11%, 95%) !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.modal-body {
+  padding: 0 1.5rem !important;
+}
+
+.form-row {
+  display: flex !important;
+  gap: 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.form-group {
+  flex: 1 !important;
+}
+
+.form-group.full-width {
+  flex: 100% !important;
+}
+
+.form-group label {
+  display: block !important;
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.875rem !important;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100% !important;
+  padding: 0.75rem !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  transition: border-color 0.2s ease !important;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none !important;
+  border-color: hsl(142, 76%, 36%) !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1) !important;
+}
+
+.modal-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.75rem !important;
+  padding: 1.5rem !important;
+  border-top: 1px solid hsl(210, 11%, 90%) !important;
+  margin-top: 1.5rem !important;
+}
+
+.btn-cancel {
+  background-color: hsl(210, 6%, 93%) !important;
+  color: hsl(210, 6%, 21%) !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+}
+
+.btn-cancel:hover {
+  background-color: hsl(210, 6%, 88%) !important;
+  border-color: hsl(210, 11%, 80%) !important;
+}
+
+.btn-save {
+  background-color: hsl(142, 76%, 36%) !important;
+  color: white !important;
+  border: 1px solid hsl(142, 76%, 36%) !important;
+  position: relative !important;
+}
+
+.btn-save:hover {
+  background-color: hsl(142, 76%, 32%) !important;
+  border-color: hsl(142, 76%, 32%) !important;
+}
+
+.btn-save:disabled {
+  background-color: hsl(210, 6%, 88%) !important;
+  border-color: hsl(210, 11%, 85%) !important;
+  color: hsl(210, 6%, 46%) !important;
+  cursor: not-allowed !important;
+}
+
+.spinner {
+  display: inline-block !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .modal-container {
+    width: 95% !important;
+    margin: 1rem !important;
+  }
+  
+  .form-row {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+  
+  .modal-actions {
+    flex-direction: column !important;
+  }
+  
+  .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
   color: hsl(210, 6%, 46%) !important;
 }
 
