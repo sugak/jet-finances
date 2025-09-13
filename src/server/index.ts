@@ -27,6 +27,23 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase =
   supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
+// Helper function to get last day of month
+function getLastDayOfMonth(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate(); // month is 0-indexed, so month gives us the last day of previous month
+  return `${yearMonth}-${lastDay.toString().padStart(2, '0')}`;
+}
+
+// Helper function to get next month for single month periods
+function getNextMonth(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-').map(Number);
+  if (month === 12) {
+    return `${year + 1}-01`;
+  } else {
+    return `${year}-${(month + 1).toString().padStart(2, '0')}`;
+  }
+}
+
 // ---------- Logging Function ----------
 async function logActivity(
   action: 'CREATE' | 'UPDATE' | 'DELETE',
@@ -1918,7 +1935,9 @@ app.post('/api/expenses', async (req, res) => {
         exp_period_end:
           exp_period_end && exp_period_end.trim() !== ''
             ? exp_period_end.includes('-') && exp_period_end.length === 7
-              ? `${exp_period_end}-01`
+              ? exp_period_start === exp_period_end
+                ? `${getNextMonth(exp_period_end)}-01` // For single month, use next month
+                : getLastDayOfMonth(exp_period_end) // For multi-month, use last day
               : exp_period_end
             : null,
         exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
