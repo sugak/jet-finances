@@ -1764,6 +1764,77 @@ app.delete('/api/invoices/:id', async (req, res) => {
   }
 });
 
+// PUT endpoint to update invoice status
+app.put('/api/invoices/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const { inv_filled, inv_disputed } = req.body;
+
+    if (!invoiceId) {
+      return res.status(400).json({
+        error: 'Invoice ID is required',
+      });
+    }
+
+    if (supabase) {
+      // First get the current invoice data for logging
+      const { data: currentInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('id', invoiceId)
+        .single();
+
+      if (fetchError) {
+        console.log('Supabase error fetching invoice:', fetchError.message);
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Prepare update data
+      const updateData: any = {};
+      if (inv_filled !== undefined) updateData.inv_filled = inv_filled;
+      if (inv_disputed !== undefined) updateData.inv_disputed = inv_disputed;
+
+      // Update the invoice
+      const { data, error } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('id', invoiceId)
+        .select();
+
+      if (error) {
+        console.log('Supabase error updating invoice:', error.message);
+        return res.status(500).json({ error: 'Failed to update invoice' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'UPDATE',
+        'invoices',
+        invoiceId,
+        currentInvoice,
+        data[0],
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Invoice updated successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error updating invoice:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
 // DELETE endpoint to remove flight
 app.delete('/api/flights/:id', async (req, res) => {
   try {
