@@ -413,6 +413,17 @@ function closeAddExpenseModal() {
     modal.classList.remove('show');
     // Reset form
     document.getElementById('addExpenseForm').reset();
+    
+    // Reset button state
+    const saveBtn = document.getElementById('saveExpenseBtn');
+    if (saveBtn) {
+      const btnText = saveBtn.querySelector('.btn-text');
+      const spinner = saveBtn.querySelector('.spinner');
+      
+      saveBtn.disabled = false;
+      if (btnText) btnText.style.display = 'inline';
+      if (spinner) spinner.style.display = 'none';
+    }
   }
 }
 
