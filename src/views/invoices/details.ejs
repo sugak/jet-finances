@@ -223,56 +223,67 @@ async function loadExpenses() {
             <table class="expenses-table">
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Invoice ID</th>
-                  <th>Flight ID</th>
-                  <th>Place</th>
+                  <th class="group-header">Type</th>
+                  <th class="group-header">Subtype</th>
+                  <th class="group-header">Description</th>
                   <th>Amount</th>
-                  <th>Fuel Qty</th>
+                  <th>Place</th>
+                  <th>Period</th>
+                  <th>Fuel Quantity</th>
                   <th>Fuel Provider</th>
-                  <th>Flight</th>
-                  <th>Comments</th>
                 </tr>
               </thead>
               <tbody>
       `;
       
       typeExpenses.forEach(expense => {
-        const flightNumber = expense.flights?.flt_number || '-';
         const fuelQty = expense.exp_fuel_quan ? `${expense.exp_fuel_quan}L` : '-';
         const fuelProvider = expense.exp_fuel_provider || '-';
         const comments = expense.exp_comments || '-';
-        const invoiceId = expense.exp_invoice || '-';
-        const flightId = expense.exp_flight || '-';
+        const amount = expense.exp_amount && expense.exp_currency 
+          ? `${expense.exp_amount} ${expense.exp_currency}` 
+          : (expense.exp_amount || '-');
+        const place = expense.exp_place || '-';
+        
+        // Format period
+        let period = '-';
+        if (expense.exp_period_start && expense.exp_period_end) {
+          const startDate = new Date(expense.exp_period_start).toLocaleDateString('en-GB', { 
+            month: 'short', 
+            year: 'numeric' 
+          });
+          const endDate = new Date(expense.exp_period_end).toLocaleDateString('en-GB', { 
+            month: 'short', 
+            year: 'numeric' 
+          });
+          period = startDate === endDate ? startDate : `${startDate} - ${endDate}`;
+        }
         
         html += `
           <tr>
-            <td>
-              <div class="expense-type">${expense.exp_type}</div>
+            <td class="group-cell">
+              <div class="expense-type">${expense.exp_type || '-'}</div>
+            </td>
+            <td class="group-cell">
+              <div class="expense-subtype">${expense.exp_subtype || '-'}</div>
+            </td>
+            <td class="group-cell">
+              <div class="expense-description">${comments}</div>
             </td>
             <td>
-              <div class="expense-invoice-id">${invoiceId}</div>
+              <div class="expense-amount">${amount}</div>
             </td>
             <td>
-              <div class="expense-flight-id">${flightId}</div>
+              <div class="expense-place">${place}</div>
             </td>
             <td>
-              <div class="expense-place">${expense.exp_place}</div>
-            </td>
-            <td>
-              <div class="expense-amount">${expense.exp_amount}</div>
+              <div class="expense-period">${period}</div>
             </td>
             <td>
               <div class="expense-fuel-qty">${fuelQty}</div>
             </td>
             <td>
               <div class="expense-fuel-provider">${fuelProvider}</div>
-            </td>
-            <td>
-              <div class="expense-flight">${flightNumber}</div>
-            </td>
-            <td>
-              <div class="expense-comments">${comments}</div>
             </td>
           </tr>
         `;
@@ -910,6 +921,17 @@ document.addEventListener('DOMContentLoaded', function() {
   letter-spacing: 0.05em !important;
 }
 
+/* Group header styling - pastel colors */
+.expenses-table th.group-header {
+  background-color: hsl(200, 50%, 90%) !important;
+  color: hsl(200, 50%, 30%) !important;
+  border-right: 1px solid hsl(200, 50%, 85%) !important;
+}
+
+.expenses-table th.group-header:last-of-type {
+  border-right: none !important;
+}
+
 .expenses-table td {
   padding: 0.75rem 1rem !important;
   border-bottom: 1px solid hsl(210, 11%, 95%) !important;
@@ -925,12 +947,22 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* Table cell content */
-.expense-type, .expense-invoice-id, .expense-flight-id, 
+.expense-type, .expense-subtype, .expense-description,
 .expense-place, .expense-amount, .expense-fuel-qty, 
-.expense-fuel-provider, .expense-flight, .expense-comments {
+.expense-fuel-provider, .expense-period {
   font-size: 0.875rem !important;
   color: hsl(210, 6%, 21%) !important;
   word-break: break-word !important;
+}
+
+/* Group cell styling - pastel background */
+.expenses-table td.group-cell {
+  background-color: hsl(200, 50%, 95%) !important;
+  border-right: 1px solid hsl(200, 50%, 90%) !important;
+}
+
+.expenses-table td.group-cell:last-of-type {
+  border-right: none !important;
 }
 
 .expense-amount {
@@ -938,17 +970,12 @@ document.addEventListener('DOMContentLoaded', function() {
   color: hsl(142, 76%, 36%) !important;
 }
 
-.expense-invoice-id, .expense-flight-id {
-  font-family: monospace !important;
+.expense-period {
   font-size: 0.75rem !important;
   color: hsl(210, 6%, 46%) !important;
-  max-width: 120px !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
 }
 
-.expense-comments {
+.expense-description {
   max-width: 200px !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
