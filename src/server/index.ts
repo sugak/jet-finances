@@ -27,13 +27,6 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase =
   supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Helper function to get last day of month
-function getLastDayOfMonth(yearMonth: string): string {
-  const [year, month] = yearMonth.split('-').map(Number);
-  const lastDay = new Date(year, month, 0).getDate(); // month is 0-indexed, so month gives us the last day of previous month
-  return `${yearMonth}-${lastDay.toString().padStart(2, '0')}`;
-}
-
 // Helper function to get next month for single month periods
 function getNextMonth(yearMonth: string): string {
   const [year, month] = yearMonth.split('-').map(Number);
@@ -1992,7 +1985,69 @@ app.post('/api/expenses', async (req, res) => {
       }
     }
 
+    // Check period length constraint (likely max 12 months)
+    if (
+      exp_period_start &&
+      exp_period_end &&
+      exp_period_start.trim() !== '' &&
+      exp_period_end.trim() !== ''
+    ) {
+      const startDate =
+        exp_period_start.includes('-') && exp_period_start.length === 7
+          ? `${exp_period_start}-01`
+          : exp_period_start;
+
+      const endDate =
+        exp_period_end.includes('-') && exp_period_end.length === 7
+          ? exp_period_start === exp_period_end
+            ? `${getNextMonth(exp_period_end)}-01`
+            : `${exp_period_end}-01`
+          : exp_period_end;
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // Calculate months difference
+      const monthsDiff =
+        (end.getFullYear() - start.getFullYear()) * 12 +
+        (end.getMonth() - start.getMonth());
+
+      console.log('🔍 PERIOD LENGTH CHECK:', {
+        startDate,
+        endDate,
+        monthsDiff,
+        constraint: 'expenses_period_months_chk',
+      });
+
+      // If period is too long, return error
+      if (monthsDiff > 12) {
+        return res.status(400).json({
+          error: `Period too long: ${monthsDiff} months. Maximum allowed period is 12 months.`,
+        });
+      }
+    }
+
     if (supabase) {
+      // Debug logging for period dates
+      console.log('🔍 PERIOD DEBUG:', {
+        exp_period_start,
+        exp_period_end,
+        start_processed:
+          exp_period_start && exp_period_start.trim() !== ''
+            ? exp_period_start.includes('-') && exp_period_start.length === 7
+              ? `${exp_period_start}-01`
+              : exp_period_start
+            : null,
+        end_processed:
+          exp_period_end && exp_period_end.trim() !== ''
+            ? exp_period_end.includes('-') && exp_period_end.length === 7
+              ? exp_period_start === exp_period_end
+                ? `${getNextMonth(exp_period_end)}-01` // For single month, use next month
+                : `${exp_period_end}-01` // For multi-month, use first day of the end month
+              : exp_period_end
+            : null,
+      });
+
       const expenseData = {
         exp_type: expTypeName || null,
         exp_place: exp_place || null,
@@ -2008,7 +2063,7 @@ app.post('/api/expenses', async (req, res) => {
             ? exp_period_end.includes('-') && exp_period_end.length === 7
               ? exp_period_start === exp_period_end
                 ? `${getNextMonth(exp_period_end)}-01` // For single month, use next month
-                : getLastDayOfMonth(exp_period_end) // For multi-month, use last day
+                : `${exp_period_end}-01` // For multi-month, use first day of the end month
               : exp_period_end
             : null,
         exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
@@ -2021,6 +2076,8 @@ app.post('/api/expenses', async (req, res) => {
         exp_subtype: expSubtypeName || null,
       };
 
+      console.log('🔍 EXPENSE DATA TO INSERT:', expenseData);
+
       const { data, error } = await supabase
         .from('expenses')
         .insert([expenseData])
@@ -2028,6 +2085,7 @@ app.post('/api/expenses', async (req, res) => {
 
       if (error) {
         console.log('Supabase error adding expense:', error.message);
+        console.log('🔍 FULL ERROR:', error);
         return res
           .status(500)
           .json({ error: 'Failed to add expense to database' });

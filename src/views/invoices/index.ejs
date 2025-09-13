@@ -29,9 +29,9 @@
             <th class="checkbox-col">
               <input type="checkbox" class="form-check-input" id="selectAll">
             </th>
-            <th class="sortable">
+            <th class="sortable" id="date-sort-header" data-sort="date">
               DATE
-              <i class="bi bi-chevron-down sort-icon"></i>
+              <i class="bi bi-chevron-down sort-icon" id="date-sort-icon"></i>
             </th>
             <th class="sortable">
               NUMBER
@@ -109,6 +109,9 @@
 </div>
 
 <script>
+// Global variable to track current sort order
+let currentSortOrder = 'newest'; // 'newest' or 'oldest'
+
 // Load invoices data from API
 async function loadInvoices() {
   try {
@@ -118,8 +121,12 @@ async function loadInvoices() {
     const tbody = document.getElementById('invoices-table-body');
     tbody.innerHTML = '';
     
-    // Sort invoices by date (newest first)
-    invoices.sort((a, b) => new Date(b.inv_date) - new Date(a.inv_date));
+    // Sort invoices by date based on current sort order
+    if (currentSortOrder === 'newest') {
+      invoices.sort((a, b) => new Date(b.inv_date) - new Date(a.inv_date));
+    } else {
+      invoices.sort((a, b) => new Date(a.inv_date) - new Date(b.inv_date));
+    }
     
     // Group invoices by month
     const groupedInvoices = {};
@@ -137,16 +144,24 @@ async function loadInvoices() {
       groupedInvoices[monthKey].invoices.push(invoice);
     });
     
-    // Sort months (newest first) - proper numeric sorting
+    // Sort months based on current sort order
     const sortedMonths = Object.keys(groupedInvoices).sort((a, b) => {
       const [yearA, monthA] = a.split('-').map(Number);
       const [yearB, monthB] = b.split('-').map(Number);
       
-      // First compare years, then months
-      if (yearA !== yearB) {
-        return yearB - yearA; // Newest year first
+      if (currentSortOrder === 'newest') {
+        // First compare years, then months (newest first)
+        if (yearA !== yearB) {
+          return yearB - yearA; // Newest year first
+        }
+        return monthB - monthA; // Newest month first within same year
+      } else {
+        // First compare years, then months (oldest first)
+        if (yearA !== yearB) {
+          return yearA - yearB; // Oldest year first
+        }
+        return monthA - monthB; // Oldest month first within same year
       }
-      return monthB - monthA; // Newest month first within same year
     });
     
     sortedMonths.forEach(monthKey => {
@@ -286,6 +301,23 @@ async function loadInvoices() {
       </tr>
     `;
   }
+}
+
+// Toggle date sorting
+function toggleDateSort() {
+  // Toggle sort order
+  currentSortOrder = currentSortOrder === 'newest' ? 'oldest' : 'newest';
+  
+  // Update sort icon
+  const sortIcon = document.getElementById('date-sort-icon');
+  if (currentSortOrder === 'newest') {
+    sortIcon.className = 'bi bi-chevron-down sort-icon';
+  } else {
+    sortIcon.className = 'bi bi-chevron-up sort-icon';
+  }
+  
+  // Reload invoices with new sort order
+  loadInvoices();
 }
 
 // Action functions
@@ -467,6 +499,12 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+  
+  // Add event listener for date sort header
+  const dateSortHeader = document.getElementById('date-sort-header');
+  if (dateSortHeader) {
+    dateSortHeader.addEventListener('click', toggleDateSort);
+  }
 });
 </script>
 
@@ -491,6 +529,16 @@ document.addEventListener('DOMContentLoaded', function() {
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
   font-size: 0.75rem !important;
+}
+
+.invoices-table th.sortable {
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.invoices-table th.sortable:hover {
+  background-color: hsl(210, 11%, 94%) !important;
 }
 
 .invoices-table td {
