@@ -31,7 +31,7 @@
             </th>
             <th class="sortable" id="date-sort-header" data-sort="date">
               DATE
-              <i class="bi bi-chevron-down sort-icon" id="date-sort-icon"></i>
+              <i class="bi bi-chevron-up sort-icon" id="date-sort-icon"></i>
             </th>
             <th class="sortable">
               NUMBER
@@ -61,13 +61,14 @@
 <div id="addInvoiceModal" class="modal-overlay" style="display: none;">
   <div class="modal-container">
     <div class="modal-header">
-      <h3>Add New Invoice</h3>
+      <h3 id="invoiceModalTitle">Add New Invoice</h3>
       <button class="modal-close" id="closeInvoiceModalBtn">
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
     
     <form id="addInvoiceForm" class="modal-form">
+      <input type="hidden" id="invoiceId" name="invoiceId" value="">
       <div class="form-group">
         <label for="invoiceDate">Date</label>
         <input type="date" id="invoiceDate" name="inv_date" required>
@@ -93,12 +94,18 @@
         </select>
       </div>
       
+      <div class="form-group">
+        <label for="invoiceCategories">Categories</label>
+        <input type="text" id="invoiceCategories" name="inv_tags" placeholder="e.g., Ground handling, Fuel, Maintenance" maxlength="255">
+        <small class="form-text">Optional: Enter categories or tags separated by commas</small>
+      </div>
+      
       <div class="modal-actions">
         <button type="button" class="btn btn-cancel" id="cancelInvoiceBtn">
           Cancel
         </button>
         <button type="submit" class="btn btn-save" id="saveInvoiceBtn">
-          <span class="btn-text">Save</span>
+          <span class="btn-text" id="saveInvoiceBtnText">Save</span>
           <span class="btn-spinner" style="display: none;">
             <i class="bi bi-arrow-clockwise"></i>
           </span>
@@ -110,7 +117,7 @@
 
 <script>
 // Global variable to track current sort order
-let currentSortOrder = 'newest'; // 'newest' or 'oldest'
+let currentSortOrder = 'oldest'; // 'newest' or 'oldest'
 
 // Load invoices data from API
 async function loadInvoices() {
@@ -231,9 +238,6 @@ async function loadInvoices() {
         </td>
         <td>
           <div class="action-buttons">
-            <button class="btn-action" title="View Details" data-action="view" data-id="${invoice.id}">
-              <i class="bi bi-eye"></i>
-            </button>
             <button class="btn-action" title="Edit" data-action="edit" data-id="${invoice.id}">
               <i class="bi bi-pencil"></i>
             </button>
@@ -263,9 +267,6 @@ async function loadInvoices() {
           const id = this.getAttribute('data-id');
           
           switch(action) {
-            case 'view':
-              viewInvoice(id);
-              break;
             case 'edit':
               editInvoice(id);
               break;
@@ -326,8 +327,7 @@ function viewInvoice(id) {
 }
 
 function editInvoice(id) {
-  console.log('Edit invoice:', id);
-  // TODO: Implement edit functionality
+  openEditInvoiceModal(id);
 }
 
 async function deleteInvoice(id) {
@@ -364,7 +364,7 @@ async function toggleInvoiceStatus(button) {
   const newStatus = !currentStatus;
   
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}`, {
+    const response = await fetch(`/api/invoices/${invoiceId}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -402,11 +402,51 @@ function openAddInvoiceModal() {
     modal.classList.add('show');
     document.body.style.overflow = 'hidden';
     
+    // Set modal for adding new invoice
+    document.getElementById('invoiceModalTitle').textContent = 'Add New Invoice';
+    document.getElementById('saveInvoiceBtnText').textContent = 'Save';
+    document.getElementById('invoiceId').value = '';
+    
     // Set today's date as default
     const today = new Date().toISOString().split('T')[0];
     const dateInput = document.getElementById('invoiceDate');
     if (dateInput) {
       dateInput.value = today;
+    }
+  }
+}
+
+async function openEditInvoiceModal(invoiceId) {
+  const modal = document.getElementById('addInvoiceModal');
+  if (modal) {
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    // Set modal for editing invoice
+    document.getElementById('invoiceModalTitle').textContent = 'Edit Invoice';
+    document.getElementById('saveInvoiceBtnText').textContent = 'Update';
+    document.getElementById('invoiceId').value = invoiceId;
+    
+    try {
+      // Fetch invoice data
+      const response = await fetch(`/api/invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        
+        // Fill form with existing data
+        document.getElementById('invoiceDate').value = invoice.inv_date;
+        document.getElementById('invoiceNumber').value = invoice.inv_number;
+        document.getElementById('invoiceAmount').value = invoice.inv_amount;
+        document.getElementById('invoiceCurrency').value = invoice.inv_currency;
+        document.getElementById('invoiceCategories').value = invoice.inv_tags || '';
+      } else {
+        alert('Error loading invoice data');
+        closeAddInvoiceModal();
+      }
+    } catch (error) {
+      console.error('Error fetching invoice:', error);
+      alert('Error loading invoice data');
+      closeAddInvoiceModal();
     }
   }
 }
@@ -459,8 +499,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(this);
         const invoiceData = Object.fromEntries(formData.entries());
         
-        const response = await fetch('/api/invoices', {
-          method: 'POST',
+        // Check if we're editing an existing invoice
+        const invoiceId = document.getElementById('invoiceId').value;
+        const isEdit = invoiceId && invoiceId.trim() !== '';
+        
+        // Remove invoiceId from data if it exists
+        delete invoiceData.invoiceId;
+        
+        // Determine API endpoint and method
+        const url = isEdit ? `/api/invoices/${invoiceId}` : '/api/invoices';
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method: method,
           headers: {
             'Content-Type': 'application/json',
           },
@@ -473,14 +524,17 @@ document.addEventListener('DOMContentLoaded', function() {
           await loadInvoices();
           
           // Show success message (optional)
-          console.log('Invoice added successfully');
+          const action = isEdit ? 'updated' : 'added';
+          console.log(`Invoice ${action} successfully`);
         } else {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to add invoice');
+          const action = isEdit ? 'update' : 'add';
+          throw new Error(errorData.error || `Failed to ${action} invoice`);
         }
       } catch (error) {
-        console.error('Error adding invoice:', error);
-        alert('Failed to add invoice: ' + error.message);
+        console.error('Error processing invoice:', error);
+        const action = document.getElementById('invoiceId').value ? 'update' : 'add';
+        alert(`Failed to ${action} invoice: ` + error.message);
       } finally {
         // Hide spinner
         btnText.style.display = 'inline-block';
@@ -578,7 +632,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sections-main {
-  font-weight: 600 !important;
+  font-weight: normal !important;
   color: hsl(210, 6%, 21%) !important;
   margin-bottom: 0.125rem !important;
   text-transform: capitalize !important;
@@ -685,6 +739,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .form-group input::placeholder {
   color: hsl(210, 6%, 60%) !important;
+}
+
+.form-text {
+  display: block !important;
+  margin-top: 0.25rem !important;
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 60%) !important;
+  line-height: 1.4 !important;
 }
 
 .modal-actions {

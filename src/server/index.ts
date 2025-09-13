@@ -597,7 +597,7 @@ app.get('/logs', async (req, res) => {
       .from('activity_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(30);
 
     if (error) {
       console.error('Error loading logs:', error);
@@ -854,6 +854,33 @@ app.post('/api/flights', async (req, res) => {
     return res.status(503).json({ error: 'Database not available' });
   } catch (error) {
     console.log('Error adding flight:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint to get single invoice data
+app.get('/api/invoices/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+
+    if (supabase) {
+      const { data: invoice, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('id', invoiceId)
+        .single();
+
+      if (error || !invoice) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      return res.json(invoice);
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.error('Error fetching invoice:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1617,7 +1644,8 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
 // POST endpoint to add new invoice
 app.post('/api/invoices', async (req, res) => {
   try {
-    const { inv_date, inv_number, inv_amount, inv_currency } = req.body;
+    const { inv_date, inv_number, inv_amount, inv_currency, inv_tags } =
+      req.body;
 
     // Validate required fields
     if (!inv_date || !inv_number || !inv_amount || !inv_currency) {
@@ -1652,7 +1680,7 @@ app.post('/api/invoices', async (req, res) => {
             inv_number,
             inv_amount: amount,
             inv_currency,
-            inv_tags: '', // Empty for now as requested
+            inv_tags: inv_tags || '', // Use provided tags or empty string
           },
         ])
         .select();
@@ -1687,6 +1715,98 @@ app.post('/api/invoices', async (req, res) => {
     });
   } catch (error) {
     console.log('Error adding invoice:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
+// PUT endpoint to update existing invoice
+app.put('/api/invoices/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const { inv_date, inv_number, inv_amount, inv_currency, inv_tags } =
+      req.body;
+
+    // Validate required fields
+    if (!inv_date || !inv_number || !inv_amount || !inv_currency) {
+      return res.status(400).json({
+        error:
+          'All fields are required: inv_date, inv_number, inv_amount, inv_currency',
+      });
+    }
+
+    // Validate currency
+    const validCurrencies = ['AED', 'USD', 'EUR'];
+    if (!validCurrencies.includes(inv_currency)) {
+      return res.status(400).json({
+        error: 'Invalid currency. Must be one of: AED, USD, EUR',
+      });
+    }
+
+    // Validate amount
+    const amount = parseFloat(inv_amount);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        error: 'Amount must be a positive number',
+      });
+    }
+
+    if (supabase) {
+      // Get current invoice data for logging
+      const { data: currentInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('id', invoiceId)
+        .single();
+
+      if (fetchError) {
+        console.log('Supabase error fetching invoice:', fetchError.message);
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      const { data, error } = await supabase
+        .from('invoices')
+        .update({
+          inv_date,
+          inv_number,
+          inv_amount: amount,
+          inv_currency,
+          inv_tags: inv_tags || '',
+        })
+        .eq('id', invoiceId)
+        .select();
+
+      if (error) {
+        console.log('Supabase error updating invoice:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to update invoice in database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'UPDATE',
+        'invoices',
+        invoiceId,
+        currentInvoice,
+        data[0],
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Invoice updated successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error updating invoice:', error);
     return res.status(500).json({
       error: 'Internal server error',
     });
@@ -1758,7 +1878,7 @@ app.delete('/api/invoices/:id', async (req, res) => {
 });
 
 // PUT endpoint to update invoice status
-app.put('/api/invoices/:id', async (req, res) => {
+app.put('/api/invoices/:id/status', async (req, res) => {
   try {
     const invoiceId = req.params.id;
     const { inv_filled, inv_disputed } = req.body;
@@ -2114,6 +2234,249 @@ app.post('/api/expenses', async (req, res) => {
     });
   } catch (error) {
     console.log('Error adding expense:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
+// PUT endpoint to update existing expense
+app.put('/api/expenses/:id', async (req, res) => {
+  try {
+    const expenseId = req.params.id;
+    const {
+      exp_type,
+      exp_place,
+      exp_amount,
+      exp_period_start,
+      exp_period_end,
+      exp_fuel_quan,
+      exp_fuel_provider,
+      exp_invoice_type,
+      exp_invoice,
+      exp_flight,
+      exp_comments,
+      exp_currency,
+      exp_subtype,
+    } = req.body;
+
+    // Get type and subtype names from IDs
+    let expTypeName = null;
+    let expSubtypeName = null;
+    let expInvoiceTypeName = null;
+
+    if (exp_type && supabase) {
+      const { data: typeData } = await supabase
+        .from('expense_types')
+        .select('name')
+        .eq('id', exp_type)
+        .single();
+      expTypeName = typeData?.name || null;
+    }
+
+    if (exp_subtype && supabase) {
+      const { data: subtypeData } = await supabase
+        .from('expense_subtypes')
+        .select('name')
+        .eq('id', exp_subtype)
+        .single();
+      expSubtypeName = subtypeData?.name || null;
+    }
+
+    if (exp_invoice_type && supabase) {
+      const { data: invoiceTypeData } = await supabase
+        .from('invoice_types')
+        .select('name')
+        .eq('id', exp_invoice_type)
+        .single();
+      expInvoiceTypeName = invoiceTypeData?.name || null;
+    }
+
+    // Validate required fields (all are optional according to requirements)
+    // But we'll validate data types if provided
+
+    if (exp_amount && isNaN(parseFloat(exp_amount))) {
+      return res.status(400).json({
+        error: 'Amount must be a valid number',
+      });
+    }
+
+    if (exp_fuel_quan && isNaN(parseFloat(exp_fuel_quan))) {
+      return res.status(400).json({
+        error: 'Fuel quantity must be a valid number',
+      });
+    }
+
+    // Validate period dates
+    if (exp_period_start && exp_period_start.trim() !== '') {
+      const periodStartDate =
+        exp_period_start.includes('-') && exp_period_start.length === 7
+          ? `${exp_period_start}-01`
+          : exp_period_start;
+
+      if (isNaN(Date.parse(periodStartDate))) {
+        return res.status(400).json({
+          error: 'Invalid period start date format',
+        });
+      }
+    }
+
+    if (exp_period_end && exp_period_end.trim() !== '') {
+      const periodEndDate =
+        exp_period_end.includes('-') && exp_period_end.length === 7
+          ? `${exp_period_end}-01`
+          : exp_period_end;
+
+      if (isNaN(Date.parse(periodEndDate))) {
+        return res.status(400).json({
+          error: 'Invalid period end date format',
+        });
+      }
+    }
+
+    // Check period length constraint (likely max 12 months)
+    if (
+      exp_period_start &&
+      exp_period_end &&
+      exp_period_start.trim() !== '' &&
+      exp_period_end.trim() !== ''
+    ) {
+      const startDate =
+        exp_period_start.includes('-') && exp_period_start.length === 7
+          ? `${exp_period_start}-01`
+          : exp_period_start;
+
+      const endDate =
+        exp_period_end.includes('-') && exp_period_end.length === 7
+          ? exp_period_start === exp_period_end
+            ? `${getNextMonth(exp_period_end)}-01`
+            : `${exp_period_end}-01`
+          : exp_period_end;
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // Calculate months difference
+      const monthsDiff =
+        (end.getFullYear() - start.getFullYear()) * 12 +
+        (end.getMonth() - start.getMonth());
+
+      console.log('🔍 PERIOD LENGTH CHECK (UPDATE):', {
+        startDate,
+        endDate,
+        monthsDiff,
+        constraint: 'expenses_period_months_chk',
+      });
+
+      // If period is too long, return error
+      if (monthsDiff > 12) {
+        return res.status(400).json({
+          error: `Period too long: ${monthsDiff} months. Maximum allowed period is 12 months.`,
+        });
+      }
+    }
+
+    if (supabase) {
+      // Get current expense data for logging
+      const { data: currentExpense } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', expenseId)
+        .single();
+
+      if (!currentExpense) {
+        return res.status(404).json({
+          error: 'Expense not found',
+        });
+      }
+
+      // Debug logging for period dates
+      console.log('🔍 PERIOD DEBUG (UPDATE):', {
+        exp_period_start,
+        exp_period_end,
+        start_processed:
+          exp_period_start && exp_period_start.trim() !== ''
+            ? exp_period_start.includes('-') && exp_period_start.length === 7
+              ? `${exp_period_start}-01`
+              : exp_period_start
+            : null,
+        end_processed:
+          exp_period_end && exp_period_end.trim() !== ''
+            ? exp_period_end.includes('-') && exp_period_end.length === 7
+              ? exp_period_start === exp_period_end
+                ? `${getNextMonth(exp_period_end)}-01` // For single month, use next month
+                : `${exp_period_end}-01` // For multi-month, use first day of the end month
+              : exp_period_end
+            : null,
+      });
+
+      const expenseData = {
+        exp_type: expTypeName || null,
+        exp_place: exp_place || null,
+        exp_amount: exp_amount ? parseFloat(exp_amount) : null,
+        exp_period_start:
+          exp_period_start && exp_period_start.trim() !== ''
+            ? exp_period_start.includes('-') && exp_period_start.length === 7
+              ? `${exp_period_start}-01`
+              : exp_period_start
+            : null,
+        exp_period_end:
+          exp_period_end && exp_period_end.trim() !== ''
+            ? exp_period_end.includes('-') && exp_period_end.length === 7
+              ? exp_period_start === exp_period_end
+                ? `${getNextMonth(exp_period_end)}-01` // For single month, use next month
+                : `${exp_period_end}-01` // For multi-month, use first day of the end month
+              : exp_period_end
+            : null,
+        exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
+        exp_fuel_provider: exp_fuel_provider || null,
+        exp_invoice_type: expInvoiceTypeName || null,
+        exp_invoice: exp_invoice || null,
+        exp_flight: exp_flight || null,
+        exp_comments: exp_comments || null,
+        exp_currency: exp_currency || null,
+        exp_subtype: expSubtypeName || null,
+      };
+
+      console.log('🔍 EXPENSE DATA TO UPDATE:', expenseData);
+
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(expenseData)
+        .eq('id', expenseId)
+        .select();
+
+      if (error) {
+        console.log('Supabase error updating expense:', error.message);
+        console.log('🔍 FULL ERROR:', error);
+        return res
+          .status(500)
+          .json({ error: 'Failed to update expense in database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'UPDATE',
+        'expenses',
+        expenseId,
+        currentExpense,
+        data[0],
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Expense updated successfully',
+        data: data[0],
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error updating expense:', error);
     return res.status(500).json({
       error: 'Internal server error',
     });
