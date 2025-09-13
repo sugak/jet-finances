@@ -475,6 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
       btnText.style.display = 'none';
       spinner.style.display = 'inline-block';
       
+      let response = null;
       try {
         const formData = new FormData(addExpenseForm);
         const data = Object.fromEntries(formData.entries());
@@ -490,7 +491,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         });
         
-        const response = await fetch('/api/expenses', {
+        response = await fetch('/api/expenses', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -501,8 +502,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const result = await response.json();
         
         if (response.ok) {
-          // Success - close modal and reload expenses
-          closeAddExpenseModal();
+          // Success - reload expenses (modal will be closed in finally block)
           loadExpenses(); // Reload the expenses list
         } else {
           // Error - show message
@@ -512,10 +512,15 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Error submitting expense:', error);
         alert('Error adding expense. Please try again.');
       } finally {
-        // Reset button state
+        // Reset button state and close modal
         saveBtn.disabled = false;
         btnText.style.display = 'inline';
         spinner.style.display = 'none';
+        
+        // Close modal after successful submission
+        if (response && response.ok) {
+          closeAddExpenseModal();
+        }
       }
     });
   }
