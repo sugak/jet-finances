@@ -395,10 +395,26 @@ async function loadFlightsForDropdown() {
     const select = document.getElementById('expFlight');
     select.innerHTML = '<option value="">Select Flight (Optional)</option>';
     
-    flights.forEach(flight => {
+    // Sort flights by date (newest first)
+    const sortedFlights = flights.sort((a, b) => {
+      const dateA = new Date(a.flt_date);
+      const dateB = new Date(b.flt_date);
+      return dateB - dateA; // Newest first
+    });
+    
+    sortedFlights.forEach(flight => {
       const option = document.createElement('option');
       option.value = flight.id;
-      option.textContent = `${flight.flt_number} - ${flight.flt_dep} to ${flight.flt_arr}`;
+      
+      // Format date for display
+      const flightDate = new Date(flight.flt_date);
+      const formattedDate = flightDate.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+      
+      option.textContent = `${flight.flt_number} - ${flight.flt_dep} to ${flight.flt_arr} (${formattedDate})`;
       select.appendChild(option);
     });
   } catch (error) {
