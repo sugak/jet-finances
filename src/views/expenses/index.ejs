@@ -74,14 +74,6 @@
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
             <th class="sortable">
-              INV. ID
-              <i class="bi bi-chevron-down sort-icon"></i>
-            </th>
-            <th class="sortable">
-              FLT. ID
-              <i class="bi bi-chevron-down sort-icon"></i>
-            </th>
-            <th class="sortable">
               COMMENTS
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
@@ -240,10 +232,8 @@ async function loadExpenses() {
         maximumFractionDigits: 2 
       })}` : 'N/A';
       
-      // Truncate comments if too long
-      const truncatedComments = expense.exp_comments && expense.exp_comments.length > 50 
-        ? expense.exp_comments.substring(0, 50) + '...' 
-        : expense.exp_comments || 'No comments';
+      // Display full comments
+      const fullComments = expense.exp_comments || 'No comments';
       
       // Format fuel quantity
       const fuelQuantity = expense.exp_fuel_quan ? `${expense.exp_fuel_quan} L` : 'N/A';
@@ -280,7 +270,7 @@ async function loadExpenses() {
           <div class="fuel-provider-compact">${fuelProvider}</div>
         </td>
         <td>
-          <div class="invoice-type-compact" title="${expense.exp_invoice_type || 'N/A'}">${expense.exp_invoice_type && expense.exp_invoice_type.length > 15 ? expense.exp_invoice_type.substring(0, 15) + '...' : (expense.exp_invoice_type || 'N/A')}</div>
+          <div class="invoice-type-compact">${expense.exp_invoice_type || 'N/A'}</div>
         </td>
         <td>
           <div class="invoice-number-compact">${expense.invoices?.inv_number || 'N/A'}</div>
@@ -289,13 +279,7 @@ async function loadExpenses() {
           <div class="flight-number-compact">${expense.flights?.flt_number || 'N/A'}</div>
         </td>
         <td>
-          <div class="invoice-id-compact" title="${expense.exp_invoice || 'No invoice'}">${expense.exp_invoice ? expense.exp_invoice.substring(0, 8) + '...' : 'N/A'}</div>
-        </td>
-        <td>
-          <div class="flight-id-compact" title="${expense.exp_flight || 'No flight'}">${expense.exp_flight ? expense.exp_flight.substring(0, 8) + '...' : 'N/A'}</div>
-        </td>
-        <td>
-          <div class="comments-compact" title="${expense.exp_comments || 'No comments'}">${truncatedComments}</div>
+          <div class="comments-compact">${fullComments}</div>
         </td>
         <td>
           <div class="action-buttons">
@@ -321,7 +305,7 @@ async function loadExpenses() {
     const tbody = document.getElementById('expenses-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="15" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="13" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load expenses. Please try again.
           <br><small>Error: ${error.message}</small>
@@ -628,7 +612,7 @@ document.addEventListener('DOMContentLoaded', function() {
   width: 100% !important;
   border-collapse: collapse !important;
   font-size: 0.8rem !important;
-  table-layout: fixed !important;
+  table-layout: auto !important;
 }
 
 .expenses-table thead {
@@ -734,15 +718,14 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Compact styles for all elements */
 .expense-type-compact, .expense-subtype-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
 .fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
-.invoice-number-compact, .flight-number-compact, .invoice-id-compact, 
-.flight-id-compact, .comments-compact {
+.invoice-number-compact, .flight-number-compact, .comments-compact {
   font-size: 0.8rem !important;
   font-weight: 500 !important;
   color: hsl(210, 6%, 21%) !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
   max-width: 100% !important;
+  line-height: 1.4 !important;
 }
 
 .comments-info {
