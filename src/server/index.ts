@@ -1877,34 +1877,63 @@ app.post('/api/expenses', async (req, res) => {
       });
     }
 
+    // Validate period dates
+    if (exp_period_start && exp_period_start.trim() !== '') {
+      const periodStartDate =
+        exp_period_start.includes('-') && exp_period_start.length === 7
+          ? `${exp_period_start}-01`
+          : exp_period_start;
+
+      if (isNaN(Date.parse(periodStartDate))) {
+        return res.status(400).json({
+          error: 'Invalid period start date format',
+        });
+      }
+    }
+
+    if (exp_period_end && exp_period_end.trim() !== '') {
+      const periodEndDate =
+        exp_period_end.includes('-') && exp_period_end.length === 7
+          ? `${exp_period_end}-01`
+          : exp_period_end;
+
+      if (isNaN(Date.parse(periodEndDate))) {
+        return res.status(400).json({
+          error: 'Invalid period end date format',
+        });
+      }
+    }
+
     if (supabase) {
+      const expenseData = {
+        exp_type: expTypeName || null,
+        exp_place: exp_place || null,
+        exp_amount: exp_amount ? parseFloat(exp_amount) : null,
+        exp_period_start:
+          exp_period_start && exp_period_start.trim() !== ''
+            ? exp_period_start.includes('-') && exp_period_start.length === 7
+              ? `${exp_period_start}-01`
+              : exp_period_start
+            : null,
+        exp_period_end:
+          exp_period_end && exp_period_end.trim() !== ''
+            ? exp_period_end.includes('-') && exp_period_end.length === 7
+              ? `${exp_period_end}-01`
+              : exp_period_end
+            : null,
+        exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
+        exp_fuel_provider: exp_fuel_provider || null,
+        exp_invoice_type: expInvoiceTypeName || null,
+        exp_invoice: exp_invoice || null,
+        exp_flight: exp_flight || null,
+        exp_comments: exp_comments || null,
+        exp_currency: exp_currency || null,
+        exp_subtype: expSubtypeName || null,
+      };
+
       const { data, error } = await supabase
         .from('expenses')
-        .insert([
-          {
-            exp_type: expTypeName || null,
-            exp_place: exp_place || null,
-            exp_amount: exp_amount ? parseFloat(exp_amount) : null,
-            exp_period_start: exp_period_start
-              ? exp_period_start.includes('-') && exp_period_start.length === 7
-                ? `${exp_period_start}-01`
-                : exp_period_start
-              : null,
-            exp_period_end: exp_period_end
-              ? exp_period_end.includes('-') && exp_period_end.length === 7
-                ? `${exp_period_end}-01`
-                : exp_period_end
-              : null,
-            exp_fuel_quan: exp_fuel_quan ? parseFloat(exp_fuel_quan) : null,
-            exp_fuel_provider: exp_fuel_provider || null,
-            exp_invoice_type: expInvoiceTypeName || null,
-            exp_invoice: exp_invoice || null,
-            exp_flight: exp_flight || null,
-            exp_comments: exp_comments || null,
-            exp_currency: exp_currency || null,
-            exp_subtype: expSubtypeName || null,
-          },
-        ])
+        .insert([expenseData])
         .select();
 
       if (error) {
