@@ -73,10 +73,6 @@
               FLT. #
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
-              COMMENTS
-              <i class="bi bi-chevron-down sort-icon"></i>
-            </th>
             <th>ACTIONS</th>
           </tr>
         </thead>
@@ -232,8 +228,6 @@ async function loadExpenses() {
         maximumFractionDigits: 2 
       })}` : 'N/A';
       
-      // Display full comments
-      const fullComments = expense.exp_comments || 'No comments';
       
       // Format fuel quantity
       const fuelQuantity = expense.exp_fuel_quan ? `${expense.exp_fuel_quan} L` : 'N/A';
@@ -279,9 +273,6 @@ async function loadExpenses() {
           <div class="flight-number-compact">${expense.flights?.flt_number || 'N/A'}</div>
         </td>
         <td>
-          <div class="comments-compact">${fullComments}</div>
-        </td>
-        <td>
           <div class="action-buttons">
             <button class="btn-action" title="View Details" onclick="viewExpense('${expense.id}')">
               <i class="bi bi-eye"></i>
@@ -305,7 +296,7 @@ async function loadExpenses() {
     const tbody = document.getElementById('expenses-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="13" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="12" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load expenses. Please try again.
           <br><small>Error: ${error.message}</small>
@@ -718,7 +709,7 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Compact styles for all elements */
 .expense-type-compact, .expense-subtype-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
 .fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
-.invoice-number-compact, .flight-number-compact, .comments-compact {
+.invoice-number-compact, .flight-number-compact {
   font-size: 0.8rem !important;
   font-weight: 500 !important;
   color: hsl(210, 6%, 21%) !important;
