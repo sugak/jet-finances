@@ -1,8 +1,6 @@
 <!-- Page Header -->
 <div class="page-header">
   <div>
-    <h1 class="page-title">Expenses</h1>
-    <p class="page-description">Track and manage all operational expenses and costs.</p>
   </div>
 </div>
 
@@ -22,6 +20,49 @@
       </div>
     </div>
     
+    <!-- Filters Section -->
+    <div class="filters-section">
+      <div class="filters-header">
+        <h4>Filters</h4>
+        <button class="btn btn-secondary btn-sm" id="clearFiltersBtn">
+          <i class="bi bi-x-circle"></i>
+          Clear All
+        </button>
+      </div>
+      <div class="filters-grid">
+        <div class="filter-group">
+          <label for="filterType">Type</label>
+          <select id="filterType" class="filter-select">
+            <option value="">All Types</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterSubtype">Subtype</label>
+          <select id="filterSubtype" class="filter-select">
+            <option value="">All Subtypes</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterPlace">Place</label>
+          <input type="text" id="filterPlace" class="filter-input" placeholder="Search place...">
+        </div>
+        <div class="filter-group">
+          <label for="filterInvType">Invoice Type</label>
+          <select id="filterInvType" class="filter-select">
+            <option value="">All Invoice Types</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterPeriodStart">Period Start</label>
+          <input type="month" id="filterPeriodStart" class="filter-input">
+        </div>
+        <div class="filter-group">
+          <label for="filterPeriodEnd">Period End</label>
+          <input type="month" id="filterPeriodEnd" class="filter-input">
+        </div>
+      </div>
+    </div>
+    
     <div class="table-wrapper">
       <table class="expenses-table">
         <thead>
@@ -29,47 +70,47 @@
             <th class="checkbox-col">
               <input type="checkbox" class="form-check-input" id="selectAll">
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_type" onclick="sortExpenses('exp_type')">
               TYPE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_subtype" onclick="sortExpenses('exp_subtype')">
               SUBTYPE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_place" onclick="sortExpenses('exp_place')">
               PLACE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_amount" onclick="sortExpenses('exp_amount')">
               AMOUNT
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_currency" onclick="sortExpenses('exp_currency')">
               CURRENCY
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_period_start" onclick="sortExpenses('exp_period_start')">
               PERIOD
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_fuel_quan" onclick="sortExpenses('exp_fuel_quan')">
               FUEL QTY
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_fuel_provider" onclick="sortExpenses('exp_fuel_provider')">
               FUEL PROV.
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="exp_invoice_type" onclick="sortExpenses('exp_invoice_type')">
               INV. TYPE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="created_at" onclick="sortExpenses('created_at')">
               INV. #
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
-            <th class="sortable">
+            <th class="sortable" data-sort-field="created_at" onclick="sortExpenses('created_at')">
               FLT. #
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
@@ -198,6 +239,13 @@
 </div>
 
 <script>
+// Global variable to store all expenses for filtering
+let allExpenses = [];
+
+// Global sorting state
+let currentSortField = 'created_at';
+let currentSortOrder = 'desc';
+
 // Load expenses data from API
 async function loadExpenses() {
   try {
@@ -212,6 +260,9 @@ async function loadExpenses() {
       throw new Error('Expenses data is not an array');
     }
     
+    // Store all expenses globally for filtering
+    allExpenses = expenses;
+    
     // Sort expenses by creation date (newest first)
     expenses.sort((a, b) => {
       const dateA = new Date(a.created_at);
@@ -219,14 +270,67 @@ async function loadExpenses() {
       return dateB - dateA; // Descending order (newest first)
     });
     
+    // Apply current filters
+    applyFilters();
+  } catch (error) {
+    console.error('Error loading expenses:', error);
+    console.error('Error details:', error.message, error.stack);
+    // Show error message
     const tbody = document.getElementById('expenses-table-body');
-    console.log('Table body element:', tbody);
-    if (!tbody) {
-      throw new Error('Table body element not found');
-    }
-    tbody.innerHTML = '';
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="12" style="text-align: center; padding: 2rem; color: #6b7280;">
+          <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+          Failed to load expenses. Please try again.
+          <br><small>Error: ${error.message}</small>
+        </td>
+      </tr>
+    `;
+  }
+}
+
+// Apply filters to expenses and render table
+function applyFilters() {
+  const tbody = document.getElementById('expenses-table-body');
+  if (!tbody) return;
+  
+  // Get filter values
+  const typeFilter = document.getElementById('filterType')?.value || '';
+  const subtypeFilter = document.getElementById('filterSubtype')?.value || '';
+  const placeFilter = document.getElementById('filterPlace')?.value.toLowerCase() || '';
+  const invTypeFilter = document.getElementById('filterInvType')?.value || '';
+  const periodStartFilter = document.getElementById('filterPeriodStart')?.value || '';
+  const periodEndFilter = document.getElementById('filterPeriodEnd')?.value || '';
+  
+  // Filter expenses
+  let filteredExpenses = allExpenses.filter(expense => {
+    // Type filter
+    if (typeFilter && expense.exp_type !== typeFilter) return false;
     
-    expenses.forEach(expense => {
+    // Subtype filter
+    if (subtypeFilter && expense.exp_subtype !== subtypeFilter) return false;
+    
+    // Place filter (case-insensitive search)
+    if (placeFilter && (!expense.exp_place || !expense.exp_place.toLowerCase().includes(placeFilter))) return false;
+    
+    // Invoice type filter
+    if (invTypeFilter && expense.exp_invoice_type !== invTypeFilter) return false;
+    
+    // Period filters
+    if (periodStartFilter && expense.exp_period_start && expense.exp_period_start < periodStartFilter + '-01') return false;
+    if (periodEndFilter && expense.exp_period_end && expense.exp_period_end > periodEndFilter + '-01') return false;
+    
+    return true;
+  });
+  
+  // Sort filtered expenses by current sort field and order
+  filteredExpenses = sortExpensesByField(filteredExpenses, currentSortField, currentSortOrder);
+  
+  // Clear table
+  tbody.innerHTML = '';
+  
+  // Render filtered expenses
+  filteredExpenses.forEach(expense => {
       const row = document.createElement('tr');
       
       // Format amount with currency (assuming USD for now)
@@ -296,21 +400,6 @@ async function loadExpenses() {
       
       tbody.appendChild(row);
     });
-  } catch (error) {
-    console.error('Error loading expenses:', error);
-    console.error('Error details:', error.message, error.stack);
-    // Show error message
-    const tbody = document.getElementById('expenses-table-body');
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="12" style="text-align: center; padding: 2rem; color: #6b7280;">
-          <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
-          Failed to load expenses. Please try again.
-          <br><small>Error: ${error.message}</small>
-        </td>
-      </tr>
-    `;
-  }
 }
 
 // Format period display
@@ -372,6 +461,164 @@ async function loadExpenseTypes() {
   } catch (error) {
     console.error('Error loading expense types:', error);
   }
+}
+
+// Load expense types for filter dropdown
+async function loadExpenseTypesForFilter() {
+  try {
+    const response = await fetch('/api/expense-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('filterType');
+    select.innerHTML = '<option value="">All Types</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.name;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading expense types for filter:', error);
+  }
+}
+
+// Load invoice types for filter dropdown
+async function loadInvoiceTypesForFilter() {
+  try {
+    const response = await fetch('/api/invoice-types');
+    const types = await response.json();
+    
+    const select = document.getElementById('filterInvType');
+    select.innerHTML = '<option value="">All Invoice Types</option>';
+    
+    types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.name;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error loading invoice types for filter:', error);
+  }
+}
+
+// Load subtypes for filter dropdown based on selected type
+function loadSubtypesForFilter() {
+  const typeFilter = document.getElementById('filterType')?.value;
+  const subtypeSelect = document.getElementById('filterSubtype');
+  
+  if (!subtypeSelect) return;
+  
+  subtypeSelect.innerHTML = '<option value="">All Subtypes</option>';
+  
+  if (!typeFilter) return;
+  
+  // Get unique subtypes for the selected type
+  const subtypes = [...new Set(
+    allExpenses
+      .filter(expense => expense.exp_type === typeFilter)
+      .map(expense => expense.exp_subtype)
+      .filter(subtype => subtype)
+  )];
+  
+  subtypes.forEach(subtype => {
+    const option = document.createElement('option');
+    option.value = subtype;
+    option.textContent = subtype;
+    subtypeSelect.appendChild(option);
+  });
+}
+
+// Clear all filters
+function clearAllFilters() {
+  document.getElementById('filterType').value = '';
+  document.getElementById('filterSubtype').value = '';
+  document.getElementById('filterPlace').value = '';
+  document.getElementById('filterInvType').value = '';
+  document.getElementById('filterPeriodStart').value = '';
+  document.getElementById('filterPeriodEnd').value = '';
+  
+  // Apply filters to show all expenses
+  applyFilters();
+}
+
+// Sort expenses by field
+function sortExpenses(field) {
+  // If clicking the same field, toggle sort order
+  if (currentSortField === field) {
+    currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+  } else {
+    // New field, default to ascending
+    currentSortField = field;
+    currentSortOrder = 'asc';
+  }
+  
+  // Update sort icons
+  updateSortIcons();
+  
+  // Apply filters (which includes sorting)
+  applyFilters();
+}
+
+// Update sort icons in table headers
+function updateSortIcons() {
+  // Remove all sort icons first
+  document.querySelectorAll('.sort-icon').forEach(icon => {
+    icon.className = 'bi bi-chevron-down sort-icon';
+  });
+  
+  // Add active sort icon to current field
+  const activeHeader = document.querySelector(`[data-sort-field="${currentSortField}"]`);
+  if (activeHeader) {
+    const icon = activeHeader.querySelector('.sort-icon');
+    if (icon) {
+      icon.className = `bi bi-chevron-${currentSortOrder === 'asc' ? 'up' : 'down'} sort-icon active`;
+    }
+  }
+}
+
+// Sort function for different data types
+function sortExpensesByField(expenses, field, order) {
+  return expenses.sort((a, b) => {
+    let valueA = a[field];
+    let valueB = b[field];
+    
+    // Handle null/undefined values
+    if (valueA === null || valueA === undefined) valueA = '';
+    if (valueB === null || valueB === undefined) valueB = '';
+    
+    // Special handling for different field types
+    switch (field) {
+      case 'created_at':
+      case 'exp_period_start':
+      case 'exp_period_end':
+        // Date fields
+        valueA = new Date(valueA);
+        valueB = new Date(valueB);
+        break;
+      case 'exp_amount':
+        // Numeric fields
+        valueA = parseFloat(valueA) || 0;
+        valueB = parseFloat(valueB) || 0;
+        break;
+      default:
+        // String fields
+        valueA = String(valueA).toLowerCase();
+        valueB = String(valueB).toLowerCase();
+    }
+    
+    // Compare values
+    let comparison = 0;
+    if (valueA > valueB) {
+      comparison = 1;
+    } else if (valueA < valueB) {
+      comparison = -1;
+    }
+    
+    // Apply sort order
+    return order === 'asc' ? comparison : -comparison;
+  });
 }
 
 // Load expense subtypes based on selected type
@@ -510,11 +757,55 @@ function deleteExpense(id) {
 // Load data when page loads
 document.addEventListener('DOMContentLoaded', function() {
   loadExpenses();
+  loadExpenseTypesForFilter();
+  loadInvoiceTypesForFilter();
+  
+  // Initialize sort icons
+  updateSortIcons();
   
   // Add event listeners for modal buttons
   const addExpenseBtn = document.getElementById('addExpenseBtn');
   if (addExpenseBtn) {
     addExpenseBtn.addEventListener('click', openAddExpenseModal);
+  }
+  
+  // Add event listeners for filters
+  const filterType = document.getElementById('filterType');
+  if (filterType) {
+    filterType.addEventListener('change', function() {
+      loadSubtypesForFilter();
+      applyFilters();
+    });
+  }
+  
+  const filterSubtype = document.getElementById('filterSubtype');
+  if (filterSubtype) {
+    filterSubtype.addEventListener('change', applyFilters);
+  }
+  
+  const filterPlace = document.getElementById('filterPlace');
+  if (filterPlace) {
+    filterPlace.addEventListener('input', applyFilters);
+  }
+  
+  const filterInvType = document.getElementById('filterInvType');
+  if (filterInvType) {
+    filterInvType.addEventListener('change', applyFilters);
+  }
+  
+  const filterPeriodStart = document.getElementById('filterPeriodStart');
+  if (filterPeriodStart) {
+    filterPeriodStart.addEventListener('change', applyFilters);
+  }
+  
+  const filterPeriodEnd = document.getElementById('filterPeriodEnd');
+  if (filterPeriodEnd) {
+    filterPeriodEnd.addEventListener('change', applyFilters);
+  }
+  
+  const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener('click', clearAllFilters);
   }
   
   // Expense type change handler
@@ -625,6 +916,28 @@ document.addEventListener('DOMContentLoaded', function() {
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
   font-size: 0.75rem !important;
+}
+
+.expenses-table th.sortable {
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: background-color 0.2s ease !important;
+  position: relative !important;
+}
+
+.expenses-table th.sortable:hover {
+  background-color: hsl(210, 11%, 94%) !important;
+}
+
+.sort-icon {
+  margin-left: 0.25rem !important;
+  font-size: 0.75rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  transition: color 0.2s ease !important;
+}
+
+.sort-icon.active {
+  color: hsl(210, 76%, 36%) !important;
 }
 
 .expenses-table td {
@@ -909,8 +1222,90 @@ document.addEventListener('DOMContentLoaded', function() {
   to { transform: rotate(360deg); }
 }
 
+/* Filters section styles */
+.filters-section {
+  background-color: hsl(210, 11%, 98%) !important;
+  border: 1px solid hsl(210, 11%, 90%) !important;
+  border-radius: 0.5rem !important;
+  padding: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.filters-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1rem !important;
+}
+
+.filters-header h4 {
+  margin: 0 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.filters-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+  gap: 1rem !important;
+}
+
+.filter-group {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.filter-group label {
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.filter-select,
+.filter-input {
+  padding: 0.5rem 0.75rem !important;
+  border: 1px solid hsl(210, 11%, 85%) !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  background-color: white !important;
+  transition: border-color 0.2s ease !important;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+  outline: none !important;
+  border-color: hsl(210, 76%, 36%) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.75rem !important;
+}
+
+.btn-secondary {
+  background-color: hsl(210, 11%, 85%) !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: hsl(210, 11%, 80%) !important;
+}
+
 /* Responsive design */
 @media (max-width: 640px) {
+  .filters-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .filters-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
   .modal-container {
     width: 95% !important;
     margin: 1rem !important;

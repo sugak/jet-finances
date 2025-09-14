@@ -48,6 +48,7 @@
               BLOCK TIME
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
+            <th>COMMENTS</th>
             <th>ACTIONS</th>
           </tr>
         </thead>
@@ -168,7 +169,7 @@ async function loadFlights() {
         year: 'numeric' 
       });
       monthRow.innerHTML = `
-        <td colspan="7" class="month-separator">
+        <td colspan="8" class="month-separator">
           <div class="month-divider">
             <span class="month-label">${monthName}</span>
               </div>
@@ -220,6 +221,11 @@ async function loadFlights() {
             <td>
               <div class="time-info">
               <div class="time-main">${formatTime(flight.flt_block)}</div>
+              </div>
+            </td>
+            <td>
+              <div class="comments-info">
+              <div class="comments-main ${!flight.flt_comments ? 'comments-empty' : ''}">${flight.flt_comments || 'n/a'}</div>
               </div>
             </td>
             <td>
@@ -766,5 +772,24 @@ document.addEventListener('DOMContentLoaded', function() {
     width: 100% !important;
     justify-content: center !important;
   }
+}
+
+/* Comments column styles */
+.comments-info {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.comments-main {
+  font-weight: 500 !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin-bottom: 0.125rem !important;
+  word-wrap: break-word !important;
+  max-width: 200px !important;
+}
+
+.comments-empty {
+  font-weight: normal !important;
+  color: hsl(210, 6%, 60%) !important;
 }
 </style>

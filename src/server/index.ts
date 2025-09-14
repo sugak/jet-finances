@@ -2556,6 +2556,321 @@ app.get('/api/dashboard/stats', async (_req, res) => {
   }
 });
 
+// ========== DATABASE BACKUP & RESTORE API ==========
+
+// Create database backup
+app.get('/api/backup/create', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    console.log('🔄 Creating database backup...');
+
+    // Get all data from all tables
+    const tables = [
+      'flights',
+      'invoices',
+      'expenses',
+      'expense_types',
+      'expense_subtypes',
+      'invoice_types',
+      'activity_logs',
+    ];
+
+    const backupData: any = {
+      metadata: {
+        created_at: new Date().toISOString(),
+        version: '1.0',
+        tables: tables,
+        total_records: 0,
+      },
+      data: {},
+    };
+
+    let totalRecords = 0;
+
+    // Fetch data from each table
+    for (const table of tables) {
+      try {
+        const { data, error } = await supabase.from(table).select('*');
+
+        if (error) {
+          console.warn(
+            `Warning: Could not backup table ${table}:`,
+            error.message
+          );
+          backupData.data[table] = [];
+        } else {
+          backupData.data[table] = data || [];
+          totalRecords += (data || []).length;
+          console.log(`✅ Backed up ${table}: ${(data || []).length} records`);
+        }
+      } catch (tableError) {
+        console.warn(`Error backing up table ${table}:`, tableError);
+        backupData.data[table] = [];
+      }
+    }
+
+    backupData.metadata.total_records = totalRecords;
+
+    // Log the backup activity
+    await logActivity(
+      'CREATE',
+      'backup',
+      null,
+      null,
+      { total_records: totalRecords, tables: tables },
+      'system',
+      req
+    );
+
+    console.log(
+      `✅ Backup created successfully: ${totalRecords} total records`
+    );
+
+    // Set headers for file download
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `jet-finances-backup-${timestamp}.json`;
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.json(backupData);
+  } catch (error) {
+    console.error('Error creating backup:', error);
+    res.status(500).json({
+      error: 'Failed to create backup',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Restore database from backup
+app.post('/api/backup/restore', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    const { backupData, options = {} } = req.body;
+    const { clearExisting = false, skipErrors = true } = options;
+
+    if (!backupData || !backupData.data) {
+      return res.status(400).json({ error: 'Invalid backup data' });
+    }
+
+    console.log('🔄 Starting database restore...');
+    console.log('Options:', { clearExisting, skipErrors });
+
+    const results: any = {
+      success: true,
+      tables: {},
+      errors: [],
+      total_restored: 0,
+    };
+
+    // If clearExisting is true, truncate all tables first
+    if (clearExisting) {
+      console.log('🗑️ Clearing existing data...');
+
+      // Delete in reverse order to respect foreign key constraints
+      const deleteOrder = [
+        'activity_logs',
+        'expenses',
+        'invoices',
+        'flights',
+        'expense_subtypes',
+        'expense_types',
+        'invoice_types',
+      ];
+
+      for (const table of deleteOrder) {
+        try {
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
+
+          if (error) {
+            console.warn(
+              `Warning: Could not clear table ${table}:`,
+              error.message
+            );
+            results.errors.push(`Failed to clear ${table}: ${error.message}`);
+          } else {
+            console.log(`✅ Cleared table ${table}`);
+          }
+        } catch (clearError) {
+          console.warn(`Error clearing table ${table}:`, clearError);
+          results.errors.push(`Error clearing ${table}: ${clearError}`);
+        }
+      }
+    }
+
+    // Restore data in correct order to respect foreign key constraints
+    const restoreOrder = [
+      'invoice_types',
+      'expense_types',
+      'expense_subtypes',
+      'flights',
+      'invoices',
+      'expenses',
+      'activity_logs',
+    ];
+
+    for (const table of restoreOrder) {
+      const tableData = backupData.data[table];
+
+      if (!tableData || !Array.isArray(tableData) || tableData.length === 0) {
+        console.log(`⏭️ Skipping empty table: ${table}`);
+        results.tables[table] = { restored: 0, skipped: 0, errors: [] };
+        continue;
+      }
+
+      console.log(`🔄 Restoring table ${table}: ${tableData.length} records`);
+
+      try {
+        // Remove id and timestamps to let database generate new ones
+        const cleanData = tableData.map(record => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id, created_at, updated_at, ...cleanRecord } = record;
+          return cleanRecord;
+        });
+
+        const { data, error } = await supabase
+          .from(table)
+          .insert(cleanData)
+          .select();
+
+        if (error) {
+          console.error(`Error restoring table ${table}:`, error);
+          results.tables[table] = {
+            restored: 0,
+            skipped: tableData.length,
+            errors: [error.message],
+          };
+          results.errors.push(`Failed to restore ${table}: ${error.message}`);
+
+          if (!skipErrors) {
+            results.success = false;
+            break;
+          }
+        } else {
+          const restoredCount = data?.length || 0;
+          results.tables[table] = {
+            restored: restoredCount,
+            skipped: tableData.length - restoredCount,
+            errors: [],
+          };
+          results.total_restored += restoredCount;
+          console.log(`✅ Restored table ${table}: ${restoredCount} records`);
+        }
+      } catch (restoreError) {
+        console.error(`Exception restoring table ${table}:`, restoreError);
+        results.tables[table] = {
+          restored: 0,
+          skipped: tableData.length,
+          errors: [
+            restoreError instanceof Error
+              ? restoreError.message
+              : 'Unknown error',
+          ],
+        };
+        results.errors.push(`Exception restoring ${table}: ${restoreError}`);
+
+        if (!skipErrors) {
+          results.success = false;
+          break;
+        }
+      }
+    }
+
+    // Log the restore activity
+    await logActivity(
+      'UPDATE',
+      'backup_restore',
+      null,
+      null,
+      {
+        total_restored: results.total_restored,
+        tables_restored: Object.keys(results.tables).length,
+        errors: results.errors.length,
+      },
+      'system',
+      req
+    );
+
+    console.log(
+      `✅ Restore completed: ${results.total_restored} records restored`
+    );
+
+    res.json({
+      success: results.success,
+      message: results.success
+        ? `Successfully restored ${results.total_restored} records`
+        : 'Restore completed with errors',
+      results: results,
+    });
+  } catch (error) {
+    console.error('Error restoring backup:', error);
+    res.status(500).json({
+      error: 'Failed to restore backup',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get backup info (table counts)
+app.get('/api/backup/info', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    const tables = [
+      'flights',
+      'invoices',
+      'expenses',
+      'expense_types',
+      'expense_subtypes',
+      'invoice_types',
+      'activity_logs',
+    ];
+
+    const tableInfo: any = {};
+    let totalRecords = 0;
+
+    for (const table of tables) {
+      try {
+        const { count, error } = await supabase
+          .from(table)
+          .select('*', { count: 'exact', head: true });
+
+        if (error) {
+          tableInfo[table] = { count: 0, error: error.message };
+        } else {
+          tableInfo[table] = { count: count || 0 };
+          totalRecords += count || 0;
+        }
+      } catch {
+        tableInfo[table] = { count: 0, error: 'Connection error' };
+      }
+    }
+
+    res.json({
+      total_records: totalRecords,
+      tables: tableInfo,
+      last_checked: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error getting backup info:', error);
+    res.status(500).json({
+      error: 'Failed to get backup info',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 // 404
 app.use((_req, res) => {
   res.status(404).render('dashboard/index', { title: 'Not Found' });

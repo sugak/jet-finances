@@ -312,6 +312,7 @@ async function loadExpenses() {
                   <th>Period</th>
                   <th>Fuel Quantity</th>
                   <th>Fuel Provider</th>
+                  <th>Flight</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -327,18 +328,42 @@ async function loadExpenses() {
           : (expense.exp_amount || '-');
         const place = expense.exp_place || '-';
         
-        // Format period
+        // Format period - show range only if multiple months
         let period = '-';
         if (expense.exp_period_start && expense.exp_period_end) {
-          const startDate = new Date(expense.exp_period_start).toLocaleDateString('en-GB', { 
+          const startDate = new Date(expense.exp_period_start);
+          const endDate = new Date(expense.exp_period_end);
+          
+          // Check if this is a single month period
+          // Single month periods have end date as first day of next month
+          const startMonth = startDate.getMonth();
+          const startYear = startDate.getFullYear();
+          const endMonth = endDate.getMonth();
+          const endYear = endDate.getFullYear();
+          
+          // If end date is first day of next month, it's a single month period
+          const isSingleMonth = (
+            endDate.getDate() === 1 && 
+            ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+             (endMonth === 0 && endYear === startYear + 1))
+          );
+          
+          const startDateFormatted = startDate.toLocaleDateString('en-GB', { 
             month: 'short', 
             year: 'numeric' 
           });
-          const endDate = new Date(expense.exp_period_end).toLocaleDateString('en-GB', { 
-            month: 'short', 
-            year: 'numeric' 
-          });
-          period = startDate === endDate ? startDate : `${startDate} - ${endDate}`;
+          
+          if (isSingleMonth) {
+            // Single month - show only start month
+            period = startDateFormatted;
+          } else {
+            // Multiple months - show range
+            const endDateFormatted = endDate.toLocaleDateString('en-GB', { 
+              month: 'short', 
+              year: 'numeric' 
+            });
+            period = `${startDateFormatted} - ${endDateFormatted}`;
+          }
         }
         
         html += `
@@ -366,6 +391,9 @@ async function loadExpenses() {
             </td>
             <td>
               <div class="expense-fuel-provider">${fuelProvider}</div>
+            </td>
+            <td>
+              <div class="expense-flight">${expense.flights ? expense.flights.flt_number || '-' : '-'}</div>
             </td>
             <td>
               <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
@@ -401,9 +429,9 @@ async function loadExpenses() {
     // Add event listeners for edit expense buttons
     const editButtons = container.querySelectorAll('.edit-expense-btn');
     editButtons.forEach(button => {
-      button.addEventListener('click', function() {
+      button.addEventListener('click', async function() {
         const expenseData = JSON.parse(this.getAttribute('data-expense-data'));
-        openEditExpenseModal(expenseData);
+        await openEditExpenseModal(expenseData);
       });
     });
   } catch (error) {
@@ -538,7 +566,7 @@ function openAddExpenseModal() {
   }
 }
 
-function openEditExpenseModal(expenseData) {
+async function openEditExpenseModal(expenseData) {
   const modal = document.getElementById('addExpenseModal');
   if (modal) {
     modal.classList.add('show');
@@ -547,28 +575,31 @@ function openEditExpenseModal(expenseData) {
     document.getElementById('saveExpenseBtnText').textContent = 'Update';
     document.getElementById('expenseId').value = expenseData.id;
     
-    // Load dropdowns when modal opens
-    loadExpenseTypes();
-    loadInvoiceTypes();
-    loadFlightsForDropdown();
+    // Load dropdowns when modal opens and wait for them to complete
+    await Promise.all([
+      loadExpenseTypes(),
+      loadInvoiceTypes(),
+      loadFlightsForDropdown()
+    ]);
     
-    // Fill form with existing data
-    setTimeout(() => {
-      fillExpenseForm(expenseData);
-    }, 100); // Small delay to ensure dropdowns are loaded
+    // Wait a bit more to ensure DOM is updated
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Fill form with existing data after dropdowns are loaded
+    await fillExpenseForm(expenseData);
   }
 }
 
-function fillExpenseForm(expenseData) {
+async function fillExpenseForm(expenseData) {
+  console.log('=== FILLING FORM ===');
+  console.log('Expense data:', expenseData);
+  
   // Fill form fields with expense data
-  document.getElementById('expType').value = expenseData.exp_type || '';
-  document.getElementById('expSubtype').value = expenseData.exp_subtype || '';
   document.getElementById('expAmount').value = expenseData.exp_amount || '';
   document.getElementById('expCurrency').value = expenseData.exp_currency || '';
   document.getElementById('expPlace').value = expenseData.exp_place || '';
   document.getElementById('expFuelQty').value = expenseData.exp_fuel_quan || '';
   document.getElementById('expFuelProvider').value = expenseData.exp_fuel_provider || '';
-  document.getElementById('expInvoiceType').value = expenseData.exp_invoice_type || '';
   document.getElementById('expComments').value = expenseData.exp_comments || '';
   
   // Handle period dates
@@ -584,9 +615,98 @@ function fillExpenseForm(expenseData) {
     document.getElementById('expPeriodEnd').value = endMonth;
   }
   
-  // Handle flight selection
-  if (expenseData.exp_flight) {
-    document.getElementById('expFlight').value = expenseData.exp_flight;
+  // Handle dropdown selections - need to find matching IDs by name
+  try {
+    console.log('=== FILLING DROPDOWNS ===');
+    
+    // Set expense type by finding matching name
+    const expTypeSelect = document.getElementById('expType');
+    console.log('Expense type select found:', !!expTypeSelect);
+    console.log('Looking for expense type:', expenseData.exp_type);
+    
+    if (expenseData.exp_type && expTypeSelect) {
+      console.log('Available expense type options:', Array.from(expTypeSelect.options).map(opt => ({ value: opt.value, text: opt.textContent })));
+      // Try exact match first
+      let found = false;
+      for (let option of expTypeSelect.options) {
+        if (option.textContent.trim() === expenseData.exp_type.trim()) {
+          expTypeSelect.value = option.value;
+          await loadExpenseSubtypes(option.value);
+          // Wait for subtypes to load
+          await new Promise(resolve => setTimeout(resolve, 200));
+          found = true;
+          break;
+        }
+      }
+      
+      // If not found, try case-insensitive match
+      if (!found) {
+        for (let option of expTypeSelect.options) {
+          if (option.textContent.trim().toLowerCase() === expenseData.exp_type.trim().toLowerCase()) {
+            expTypeSelect.value = option.value;
+            await loadExpenseSubtypes(option.value);
+            // Wait for subtypes to load
+            await new Promise(resolve => setTimeout(resolve, 200));
+            break;
+          }
+        }
+      }
+    }
+    
+    // Set expense subtype by finding matching name
+    const expSubtypeSelect = document.getElementById('expSubtype');
+    if (expenseData.exp_subtype && expSubtypeSelect) {
+      // Try exact match first
+      let found = false;
+      for (let option of expSubtypeSelect.options) {
+        if (option.textContent.trim() === expenseData.exp_subtype.trim()) {
+          expSubtypeSelect.value = option.value;
+          found = true;
+          break;
+        }
+      }
+      
+      // If not found, try case-insensitive match
+      if (!found) {
+        for (let option of expSubtypeSelect.options) {
+          if (option.textContent.trim().toLowerCase() === expenseData.exp_subtype.trim().toLowerCase()) {
+            expSubtypeSelect.value = option.value;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Set invoice type by finding matching name
+    const expInvoiceTypeSelect = document.getElementById('expInvoiceType');
+    if (expenseData.exp_invoice_type && expInvoiceTypeSelect) {
+      // Try exact match first
+      let found = false;
+      for (let option of expInvoiceTypeSelect.options) {
+        if (option.textContent.trim() === expenseData.exp_invoice_type.trim()) {
+          expInvoiceTypeSelect.value = option.value;
+          found = true;
+          break;
+        }
+      }
+      
+      // If not found, try case-insensitive match
+      if (!found) {
+        for (let option of expInvoiceTypeSelect.options) {
+          if (option.textContent.trim().toLowerCase() === expenseData.exp_invoice_type.trim().toLowerCase()) {
+            expInvoiceTypeSelect.value = option.value;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Handle flight selection
+    if (expenseData.exp_flight) {
+      document.getElementById('expFlight').value = expenseData.exp_flight;
+    }
+  } catch (error) {
+    console.error('Error filling dropdowns:', error);
   }
 }
 
@@ -1050,6 +1170,13 @@ document.addEventListener('DOMContentLoaded', function() {
   padding: 0 1.5rem 1.5rem 1.5rem !important;
 }
 
+/* Table container */
+.table-container {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  width: 100% !important;
+}
+
 /* Loading and empty states */
 .loading-state, .empty-state, .error-state {
   text-align: center !important;
@@ -1145,8 +1272,9 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size: 0.875rem !important;
   background: white !important;
   border-radius: 0.5rem !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+  table-layout: auto !important;
 }
 
 .expenses-table thead {
@@ -1192,10 +1320,13 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Table cell content */
 .expense-type, .expense-subtype, .expense-description,
 .expense-place, .expense-amount, .expense-fuel-qty, 
-.expense-fuel-provider, .expense-period {
+.expense-fuel-provider, .expense-flight, .expense-period {
   font-size: 0.875rem !important;
   color: hsl(210, 6%, 21%) !important;
-  word-break: break-word !important;
+  word-wrap: break-word !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  max-width: none !important;
 }
 
 /* Group cell styling - pastel background */
@@ -1219,10 +1350,10 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expense-description {
-  max-width: 200px !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  word-wrap: break-word !important;
+  white-space: normal !important;
+  max-width: none !important;
+  overflow: visible !important;
 }
 
 /* Responsive design */

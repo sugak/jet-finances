@@ -1,1 +1,460 @@
-<!-- Empty Settings page -->
+<!-- Custom CSS for Settings -->
+<link href="/public/css/settings.css" rel="stylesheet">
+
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-description">Manage your application settings and database backups.</p>
+  </div>
+</div>
+
+<!-- Content Area -->
+<div class="content-area">
+  <!-- Database Backup Section -->
+  <div class="content-card">
+    <div class="content-header">
+      <h3>Database Backup & Restore</h3>
+      <p class="content-subtitle">Create backups of your database and restore from backup files.</p>
+    </div>
+    <div class="content-body">
+      <!-- Backup Info -->
+      <div class="backup-info-section">
+        <h4>Current Database Status</h4>
+        <div id="backup-info" class="backup-info">
+          <div class="loading-state">
+            <div class="loading-spinner">
+              <i class="bi bi-arrow-clockwise"></i>
+            </div>
+            <p>Loading database information...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup Actions -->
+      <div class="backup-actions">
+        <div class="action-group">
+          <h4>Create Backup</h4>
+          <p>Download a complete backup of your database in JSON format.</p>
+          <button class="btn btn-primary" id="createBackupBtn">
+            <i class="bi bi-download"></i>
+            Create Backup
+          </button>
+        </div>
+
+        <div class="action-group">
+          <h4>Restore from Backup</h4>
+          <p>Upload and restore data from a backup file.</p>
+          <div class="restore-controls">
+            <input type="file" id="backupFileInput" accept=".json" style="display: none;">
+            <button class="btn btn-secondary" id="selectFileBtn">
+              <i class="bi bi-upload"></i>
+              Select Backup File
+            </button>
+            <span id="selectedFileName" class="selected-file"></span>
+          </div>
+          <div class="restore-options">
+            <label class="checkbox-label">
+              <input type="checkbox" id="clearExistingCheckbox">
+              <span class="checkmark"></span>
+              Clear existing data before restore
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="skipErrorsCheckbox" checked>
+              <span class="checkmark"></span>
+              Skip errors and continue restore
+            </label>
+          </div>
+          <button class="btn btn-warning" id="restoreBackupBtn" disabled>
+            <i class="bi bi-arrow-clockwise"></i>
+            Restore Backup
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Information Section -->
+  <div class="content-card">
+    <div class="content-header">
+      <h3>System Information</h3>
+      <p class="content-subtitle">Application and database connection details.</p>
+    </div>
+    <div class="content-body">
+      <div class="system-info">
+        <div class="info-item">
+          <span class="info-label">Application Version:</span>
+          <span class="info-value">1.0.0</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Database Status:</span>
+          <span class="info-value" id="dbStatus">Checking...</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Last Backup:</span>
+          <span class="info-value" id="lastBackup">Never</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Server Time:</span>
+          <span class="info-value" id="serverTime">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Restore Confirmation Modal -->
+<div class="modal-overlay" id="restoreConfirmModal" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">
+      <h2>Confirm Database Restore</h2>
+      <button class="modal-close" id="closeRestoreModalBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="warning-message">
+        <i class="bi bi-exclamation-triangle"></i>
+        <h3>Warning: This action cannot be undone!</h3>
+        <p>You are about to restore data from a backup file. This will:</p>
+        <ul id="restoreActions">
+          <!-- Actions will be populated by JavaScript -->
+        </ul>
+        <p><strong>Are you sure you want to continue?</strong></p>
+      </div>
+    </div>
+    
+    <div class="modal-actions">
+      <button type="button" class="btn btn-cancel" id="cancelRestoreBtn">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-danger" id="confirmRestoreBtn">
+        <i class="bi bi-exclamation-triangle"></i>
+        Yes, Restore Database
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedBackupFile = null;
+let backupInfo = null;
+
+// Load backup information
+async function loadBackupInfo() {
+  try {
+    const response = await fetch('/api/backup/info');
+    const info = await response.json();
+    
+    if (response.ok) {
+      backupInfo = info;
+      displayBackupInfo(info);
+    } else {
+      throw new Error(info.error || 'Failed to load backup info');
+    }
+  } catch (error) {
+    console.error('Error loading backup info:', error);
+    document.getElementById('backup-info').innerHTML = `
+      <div class="error-state">
+        <div class="error-icon">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <h3>Error Loading Database Info</h3>
+        <p>Failed to load database information: ${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+// Display backup information
+function displayBackupInfo(info) {
+  const container = document.getElementById('backup-info');
+  
+  let html = `
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="info-card-header">
+          <i class="bi bi-database"></i>
+          <h5>Total Records</h5>
+        </div>
+        <div class="info-card-value">${info.total_records.toLocaleString()}</div>
+      </div>
+  `;
+  
+  // Add table information
+  Object.entries(info.tables).forEach(([table, data]) => {
+    const count = data.count || 0;
+    const hasError = data.error;
+    
+    html += `
+      <div class="info-card ${hasError ? 'error' : ''}">
+        <div class="info-card-header">
+          <i class="bi bi-table"></i>
+          <h5>${table.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
+        </div>
+        <div class="info-card-value">
+          ${hasError ? `<span class="error-text">Error</span>` : count.toLocaleString()}
+        </div>
+        ${hasError ? `<div class="error-details">${data.error}</div>` : ''}
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  container.innerHTML = html;
+  
+  // Update system info
+  document.getElementById('dbStatus').textContent = 'Connected';
+  document.getElementById('serverTime').textContent = new Date().toLocaleString();
+}
+
+// Create backup
+async function createBackup() {
+  const btn = document.getElementById('createBackupBtn');
+  const originalText = btn.innerHTML;
+  
+  try {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Creating Backup...';
+    
+    const response = await fetch('/api/backup/create');
+    
+    if (response.ok) {
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition 
+        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+        : `jet-finances-backup-${new Date().toISOString().split('T')[0]}.json`;
+      
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      // Show success message
+      showNotification('Backup created successfully!', 'success');
+      
+      // Update last backup time
+      document.getElementById('lastBackup').textContent = new Date().toLocaleString();
+      
+    } else {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create backup');
+    }
+  } catch (error) {
+    console.error('Error creating backup:', error);
+    showNotification(`Failed to create backup: ${error.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+// Handle file selection
+function handleFileSelection(event) {
+  const file = event.target.files[0];
+  if (file) {
+    selectedBackupFile = file;
+    document.getElementById('selectedFileName').textContent = file.name;
+    document.getElementById('restoreBackupBtn').disabled = false;
+  }
+}
+
+// Validate backup file
+async function validateBackupFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        
+        // Validate backup structure
+        if (!data.metadata || !data.data) {
+          reject(new Error('Invalid backup file format'));
+          return;
+        }
+        
+        if (!data.metadata.version || !data.metadata.created_at) {
+          reject(new Error('Backup file is missing required metadata'));
+          return;
+        }
+        
+        resolve(data);
+      } catch (error) {
+        reject(new Error('Invalid JSON file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+}
+
+// Show restore confirmation modal
+async function showRestoreConfirmation() {
+  if (!selectedBackupFile) {
+    showNotification('Please select a backup file first', 'error');
+    return;
+  }
+  
+  try {
+    const backupData = await validateBackupFile(selectedBackupFile);
+    
+    // Populate restore actions
+    const actionsList = document.getElementById('restoreActions');
+    const clearExisting = document.getElementById('clearExistingCheckbox').checked;
+    const skipErrors = document.getElementById('skipErrorsCheckbox').checked;
+    
+    let actions = [];
+    if (clearExisting) {
+      actions.push('Clear all existing data from the database');
+    }
+    actions.push(`Restore ${backupData.metadata.total_records} records from ${backupData.metadata.tables.length} tables`);
+    actions.push(`Backup created: ${new Date(backupData.metadata.created_at).toLocaleString()}`);
+    if (skipErrors) {
+      actions.push('Skip any errors and continue with the restore process');
+    }
+    
+    actionsList.innerHTML = actions.map(action => `<li>${action}</li>`).join('');
+    
+    // Show modal
+    document.getElementById('restoreConfirmModal').style.display = 'flex';
+    
+  } catch (error) {
+    showNotification(`Invalid backup file: ${error.message}`, 'error');
+  }
+}
+
+// Restore backup
+async function restoreBackup() {
+  if (!selectedBackupFile) {
+    showNotification('Please select a backup file first', 'error');
+    return;
+  }
+  
+  const btn = document.getElementById('confirmRestoreBtn');
+  const originalText = btn.innerHTML;
+  
+  try {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Restoring...';
+    
+    const backupData = await validateBackupFile(selectedBackupFile);
+    
+    const options = {
+      clearExisting: document.getElementById('clearExistingCheckbox').checked,
+      skipErrors: document.getElementById('skipErrorsCheckbox').checked
+    };
+    
+    const response = await fetch('/api/backup/restore', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        backupData: backupData,
+        options: options
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.success) {
+      showNotification(result.message, 'success');
+      
+      // Close modal and reset form
+      closeRestoreModal();
+      resetRestoreForm();
+      
+      // Reload backup info
+      loadBackupInfo();
+      
+    } else {
+      throw new Error(result.error || 'Failed to restore backup');
+    }
+  } catch (error) {
+    console.error('Error restoring backup:', error);
+    showNotification(`Failed to restore backup: ${error.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+// Close restore modal
+function closeRestoreModal() {
+  document.getElementById('restoreConfirmModal').style.display = 'none';
+}
+
+// Reset restore form
+function resetRestoreForm() {
+  selectedBackupFile = null;
+  document.getElementById('backupFileInput').value = '';
+  document.getElementById('selectedFileName').textContent = '';
+  document.getElementById('restoreBackupBtn').disabled = true;
+  document.getElementById('clearExistingCheckbox').checked = false;
+  document.getElementById('skipErrorsCheckbox').checked = true;
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.innerHTML = `
+    <div class="notification-content">
+      <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+      <span>${message}</span>
+    </div>
+  `;
+  
+  // Add to page
+  document.body.appendChild(notification);
+  
+  // Show notification
+  setTimeout(() => notification.classList.add('show'), 100);
+  
+  // Remove after 5 seconds
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => document.body.removeChild(notification), 300);
+  }, 5000);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+  // Load backup info on page load
+  loadBackupInfo();
+  
+  // Create backup button
+  document.getElementById('createBackupBtn').addEventListener('click', createBackup);
+  
+  // File selection
+  document.getElementById('selectFileBtn').addEventListener('click', () => {
+    document.getElementById('backupFileInput').click();
+  });
+  
+  document.getElementById('backupFileInput').addEventListener('change', handleFileSelection);
+  
+  // Restore backup button
+  document.getElementById('restoreBackupBtn').addEventListener('click', showRestoreConfirmation);
+  
+  // Modal controls
+  document.getElementById('closeRestoreModalBtn').addEventListener('click', closeRestoreModal);
+  document.getElementById('cancelRestoreBtn').addEventListener('click', closeRestoreModal);
+  document.getElementById('confirmRestoreBtn').addEventListener('click', restoreBackup);
+  
+  // Close modal on overlay click
+  document.getElementById('restoreConfirmModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+      closeRestoreModal();
+    }
+  });
+});
+</script>
