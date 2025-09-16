@@ -128,8 +128,7 @@ async function loadFlights() {
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = '';
     
-    // Sort flights by date (newest first)
-    flights.sort((a, b) => new Date(b.flt_date) - new Date(a.flt_date));
+    // Flights are already sorted logically by the server
     
     // Group flights by month
     const groupedFlights = {};
@@ -147,16 +146,16 @@ async function loadFlights() {
       groupedFlights[monthKey].flights.push(flight);
     });
     
-    // Sort months (newest first) - proper numeric sorting
+    // Sort months (oldest first) - proper numeric sorting
     const sortedMonths = Object.keys(groupedFlights).sort((a, b) => {
       const [yearA, monthA] = a.split('-').map(Number);
       const [yearB, monthB] = b.split('-').map(Number);
       
       // First compare years, then months
       if (yearA !== yearB) {
-        return yearB - yearA; // Newest year first
+        return yearA - yearB; // Oldest year first
       }
-      return monthB - monthA; // Newest month first within same year
+      return monthA - monthB; // Oldest month first within same year
     });
     
     sortedMonths.forEach(monthKey => {

@@ -1,7 +1,130 @@
 <!-- Page Header -->
 <div class="page-header">
   <div>
-    <h1 class="page-title">Dashboard</h1>
-    <p class="page-description">Welcome back! Here's what's happening with your finances.</p>
+    <h1 class="page-title">Aircraft Financial Management</h1>
+    <p class="page-description">Monitor your financial metrics and performance indicators</p>
+  </div>
+</div>
+
+<!-- Finance Cards -->
+<div class="finance-cards">
+  <div class="finance-card animation-delay-0">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--orange">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Total Flights</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value">156</span>
+          <div class="finance-card-change finance-card-change--increase">
+            <span class="finance-card-change-arrow">↗</span>
+            +12.5%
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-card animation-delay-100">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--blue">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Active Invoices</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value">42</span>
+          <div class="finance-card-change finance-card-change--decrease">
+            <span class="finance-card-change-arrow">↘</span>
+            -3.2%
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-card animation-delay-200">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--red">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Total Expenses</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value">$2.4M</span>
+          <div class="finance-card-change finance-card-change--increase">
+            <span class="finance-card-change-arrow">↗</span>
+            +8.1%
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-card animation-delay-300">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--green">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Pending Payments</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value">$847K</span>
+          <div class="finance-card-change finance-card-change--decrease">
+            <span class="finance-card-change-arrow">↘</span>
+            -5.8%
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Action Button -->
+<div class="dashboard-actions">
+  <a href="/flights/expenses" class="btn btn-primary">
+    <i class="bi bi-airplane me-2"></i>
+    Check flights expenses
+  </a>
+</div>
+
+<!-- Financial Overview Section -->
+<div class="finance-overview">
+  <div class="finance-overview-card">
+    <h2 class="finance-overview-title">Financial Overview</h2>
+    <div class="finance-overview-grid">
+      <div class="finance-overview-item">
+        <span class="finance-overview-label">Revenue Growth:</span>
+        <span class="finance-overview-value finance-overview-value--success">+12.3%</span>
+      </div>
+      <div class="finance-overview-item">
+        <span class="finance-overview-label">Operating Margin:</span>
+        <span class="finance-overview-value">18.2%</span>
+      </div>
+      <div class="finance-overview-item">
+        <span class="finance-overview-label">Cash Flow:</span>
+        <span class="finance-overview-value finance-overview-value--success">+$2.1M</span>
+      </div>
+      <div class="finance-overview-item">
+        <span class="finance-overview-label">ROI:</span>
+        <span class="finance-overview-value finance-overview-value--success">+15.7%</span>
+      </div>
+    </div>
   </div>
 </div>

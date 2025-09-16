@@ -1,0 +1,544 @@
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Flight Expenses</h1>
+    <p class="page-description">Detailed breakdown of expenses by flight and category</p>
+  </div>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loading-spinner" class="loading-container">
+  <div class="spinner-border text-primary" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+  <p class="loading-text">Loading flight expenses data...</p>
+</div>
+
+<!-- Content Container -->
+<div id="content-container" class="content-container" style="display: none;">
+  <!-- Flight Expenses Table -->
+  <div class="table-container">
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h3>Flight Expenses Breakdown</h3>
+          <span class="table-subtitle">Detailed expense analysis by flight and category</span>
+        </div>
+      </div>
+      
+      <div class="table-wrapper">
+        <table class="flight-expenses-table">
+          <thead class="sticky-header">
+            <tr>
+              <th class="sortable">
+                DATE
+                <i class="bi bi-chevron-down sort-icon"></i>
+              </th>
+              <th class="sortable">
+                FLIGHT NO
+                <i class="bi bi-chevron-down sort-icon"></i>
+              </th>
+              <th class="sortable">
+                ROUTE
+                <i class="bi bi-chevron-down sort-icon"></i>
+              </th>
+              <th>GROUND HANDLING DEPARTURE</th>
+              <th>GROUND HANDLING ARRIVAL</th>
+              <th>FUEL COST</th>
+              <th>FUEL QUANTITY</th>
+              <th>FUEL PROVIDER</th>
+              <th>ENROUTE NAVIGATION</th>
+              <th>OVERFLIGHT PERMITS</th>
+              <th>LANDING PERMITS</th>
+              <th>CATERING CHARGES</th>
+            </tr>
+          </thead>
+          <tbody id="expenses-table-body">
+            <!-- Data will be populated by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- No Data Message -->
+<div id="no-data-message" class="no-data-container" style="display: none;">
+  <div class="text-center py-5">
+    <i class="bi bi-airplane-fill text-muted" style="font-size: 3rem;"></i>
+    <h3 class="text-muted mt-3">No Flight Data Available</h3>
+    <p class="text-muted">There are no flights with expense data to display.</p>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  loadFlightExpenses();
+});
+
+async function loadFlightExpenses() {
+  try {
+    const response = await fetch('/api/flights/expenses');
+    const flights = await response.json();
+    
+    // Hide loading spinner
+    document.getElementById('loading-spinner').style.display = 'none';
+    
+    if (!flights || flights.length === 0) {
+      document.getElementById('no-data-message').style.display = 'block';
+      return;
+    }
+    
+    // Show content
+    document.getElementById('content-container').style.display = 'block';
+    
+    // Flights are already sorted logically by the server
+    // Group flights by month/year
+    const groupedFlights = groupFlightsByMonth(flights);
+    
+    // Populate table
+    populateExpensesTable(groupedFlights);
+    
+  } catch (error) {
+    console.error('Error loading flight expenses:', error);
+    document.getElementById('loading-spinner').style.display = 'none';
+    document.getElementById('no-data-message').style.display = 'block';
+  }
+}
+
+function groupFlightsByMonth(flights) {
+  const groups = {};
+  
+  flights.forEach(flight => {
+    const date = new Date(flight.flt_date);
+    const monthYear = date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long' 
+    });
+    
+    if (!groups[monthYear]) {
+      groups[monthYear] = [];
+    }
+    groups[monthYear].push(flight);
+  });
+  
+  return groups;
+}
+
+function populateExpensesTable(groupedFlights) {
+  const tbody = document.getElementById('expenses-table-body');
+  tbody.innerHTML = '';
+  
+  // Sort months in ascending order (oldest first)
+  const sortedMonths = Object.keys(groupedFlights).sort((a, b) => {
+    return new Date(a) - new Date(b);
+  });
+  
+  sortedMonths.forEach(monthYear => {
+    const flights = groupedFlights[monthYear];
+    
+    // Add month header row
+    const monthRow = document.createElement('tr');
+    monthRow.className = 'month-header';
+    monthRow.innerHTML = `
+      <td colspan="12" class="month-header-cell">
+        <strong>${monthYear}</strong>
+      </td>
+    `;
+    tbody.appendChild(monthRow);
+    
+    // Add flight rows (already sorted logically by server)
+    flights.forEach(flight => {
+      const row = createFlightRow(flight);
+      tbody.appendChild(row);
+    });
+  });
+}
+
+function createFlightRow(flight) {
+  const row = document.createElement('tr');
+  
+  // Format date
+  const date = new Date(flight.flt_date);
+  const formattedDate = date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+  
+  // Get expenses by category
+  const expenses = flight.expenses || [];
+  const expensesByCategory = categorizeExpenses(expenses);
+  
+  row.innerHTML = `
+    <td>${formattedDate}</td>
+    <td><strong>${flight.flt_number}</strong></td>
+    <td>${flight.flt_dep} → ${flight.flt_arr}</td>
+    <td>${formatExpenseCell(expensesByCategory['Ground handling departure'], 'Ground handling departure')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Ground handling arrival'], 'Ground handling arrival')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Fuel cost'], 'Fuel cost')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Fuel quantity'], 'Fuel quantity')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Fuel provider'], 'Fuel provider')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Enroute navigation'], 'Enroute navigation')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Overflight permits'], 'Overflight permits')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Landing permits'], 'Landing permits')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Catering charges'], 'Catering charges')}</td>
+  `;
+  
+  return row;
+}
+
+function categorizeExpenses(expenses) {
+  const categories = {};
+  
+  expenses.forEach(expense => {
+    const type = expense.exp_type?.toLowerCase() || '';
+    const subtype = expense.exp_subtype?.toLowerCase() || '';
+    
+    // Debug logging for fuel expenses
+    if (type.includes('fuel')) {
+      console.log('Fuel expense found:', {
+        type: expense.exp_type,
+        subtype: expense.exp_subtype,
+        amount: expense.exp_amount,
+        fuel_quan: expense.exp_fuel_quan,
+        fuel_provider: expense.exp_fuel_provider
+      });
+    }
+    
+    // Debug logging for navigation expenses
+    if (type.includes('navigation') || type.includes('enroute') || type.includes('overflight') || type.includes('permit') || type.includes('landing') || type.includes('overfly')) {
+      console.log('Navigation expense found:', {
+        type: expense.exp_type,
+        subtype: expense.exp_subtype,
+        category: getExpenseCategory(expense)
+      });
+    }
+    
+    // Debug logging for all expenses to see what we're missing
+    console.log('All expense:', {
+      type: expense.exp_type,
+      subtype: expense.exp_subtype,
+      category: getExpenseCategory(expense)
+    });
+    
+    // Handle fuel expenses specially - they can appear in multiple columns
+    if (type.includes('fuel')) {
+      // Always add to fuel cost if it has an amount
+      if (expense.exp_amount && expense.exp_amount > 0) {
+        if (!categories['Fuel cost']) categories['Fuel cost'] = [];
+        categories['Fuel cost'].push(expense);
+        console.log('Added to Fuel cost');
+      }
+      
+      // Add to fuel quantity if it has quantity data
+      if (expense.exp_fuel_quan && expense.exp_fuel_quan > 0) {
+        if (!categories['Fuel quantity']) categories['Fuel quantity'] = [];
+        categories['Fuel quantity'].push(expense);
+        console.log('Added to Fuel quantity');
+      }
+      
+      // Add to fuel provider if it has provider data
+      if (expense.exp_fuel_provider && expense.exp_fuel_provider.trim() !== '') {
+        if (!categories['Fuel provider']) categories['Fuel provider'] = [];
+        categories['Fuel provider'].push(expense);
+        console.log('Added to Fuel provider');
+      }
+    } else {
+      // For non-fuel expenses, use the original logic
+      const category = getExpenseCategory(expense);
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push(expense);
+    }
+  });
+  
+  console.log('Final categories:', categories);
+  return categories;
+}
+
+function getExpenseCategory(expense) {
+  // Map expense types and subtypes to our categories
+  const type = expense.exp_type?.toLowerCase() || '';
+  const subtype = expense.exp_subtype?.toLowerCase() || '';
+  
+  if (type.includes('ground handling')) {
+    if (subtype.includes('departure')) return 'Ground handling departure';
+    if (subtype.includes('arrival')) return 'Ground handling arrival';
+    return 'Ground handling departure'; // default
+  }
+  
+  if (type.includes('fuel')) {
+    // For fuel expenses, we need to check the actual data to determine the category
+    // If it has fuel quantity data, it goes to Fuel quantity column
+    if (subtype.includes('quantity') || subtype.includes('amount') || (expense.exp_fuel_quan && expense.exp_fuel_quan > 0)) {
+      return 'Fuel quantity';
+    }
+    // If it has fuel provider data, it goes to Fuel provider column
+    if (subtype.includes('provider') || subtype.includes('supplier') || (expense.exp_fuel_provider && expense.exp_fuel_provider.trim() !== '')) {
+      return 'Fuel provider';
+    }
+    // Otherwise, it's a fuel cost
+    return 'Fuel cost';
+  }
+  
+  // ПЕРЕМЕЩЕНО ВЫШЕ: Сначала проверяем специфичные разрешения (Landing/Overflight permits)
+  if (type.includes('overflight') || type.includes('permit') || type.includes('landing') || type.includes('overfly') ||
+      subtype.includes('overflight') || subtype.includes('permit') || subtype.includes('landing') || subtype.includes('overfly')) {
+    if (subtype.includes('overflight') || type.includes('overflight') || type.includes('overfly')) return 'Overflight permits';
+    if (subtype.includes('landing') || type.includes('landing')) return 'Landing permits';
+    return 'Overflight permits'; // default for other permit types
+  }
+  
+  // Затем проверяем общие навигационные расходы
+  if (type.includes('navigation') || type.includes('enroute')) {
+    return 'Enroute navigation';
+  }
+  
+  if (type.includes('catering') || type.includes('food')) {
+    return 'Catering charges';
+  }
+  
+  // Default mapping based on type
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function formatExpenseCell(expenses, category = '') {
+  if (!expenses || expenses.length === 0) {
+    return '<span class="text-muted">—</span>';
+  }
+  
+  return expenses.map(expense => {
+    const amount = convertToUSD(expense.exp_amount, expense.exp_currency);
+    const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+    const station = expense.exp_place || '';
+    const fuelQuantity = expense.exp_fuel_quan || '';
+    const fuelProvider = expense.exp_fuel_provider || '';
+    
+    // For navigation-related expenses, show station
+    const showStation = ['Enroute navigation', 'Overflight permits', 'Landing permits'].includes(category);
+    
+    // For fuel quantity column, show only quantity (no invoice number)
+    if (category === 'Fuel quantity') {
+      return `
+        <div class="expense-item">
+          <div class="expense-fuel-quantity">${fuelQuantity} L</div>
+        </div>
+      `;
+    }
+    
+    // For fuel provider column, show only provider (no invoice number)
+    if (category === 'Fuel provider') {
+      return `
+        <div class="expense-item">
+          <div class="expense-fuel-provider">${fuelProvider}</div>
+        </div>
+      `;
+    }
+    
+    // For fuel cost column, show amount and invoice number
+    if (category === 'Fuel cost') {
+      return `
+        <div class="expense-item">
+          <div class="expense-amount">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="expense-invoice">${invoiceNumber}</div>
+        </div>
+      `;
+    }
+    
+    // For fuel cost and other columns, show amount and relevant info
+    return `
+      <div class="expense-item">
+        <div class="expense-amount">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        ${showStation && station ? `<div class="expense-station">${station}</div>` : ''}
+        <div class="expense-invoice">${invoiceNumber}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function convertToUSD(amount, currency) {
+  if (!amount) return 0;
+  
+  const numAmount = parseFloat(amount);
+  
+  switch (currency?.toUpperCase()) {
+    case 'USD':
+      return numAmount;
+    case 'AED':
+      return numAmount / 3.6735; // AED to USD
+    case 'EUR':
+      return numAmount * 1.08; // EUR to USD (approximate)
+    default:
+      return numAmount;
+  }
+}
+</script>
+
+<style>
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.loading-text {
+  margin-top: 1rem;
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+.content-container {
+  margin-top: 2rem;
+}
+
+/* Use existing table styles from layout.ejs */
+.flight-expenses-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.75rem !important;
+  table-layout: fixed !important;
+}
+
+.flight-expenses-table thead {
+  background-color: hsl(210, 11%, 96%) !important;
+}
+
+.flight-expenses-table th {
+  padding: 0.4rem 0.4rem !important;
+  text-align: left !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  line-height: 1.2 !important;
+  font-size: 0.65rem !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+}
+
+.flight-expenses-table td {
+  padding: 0.4rem 0.4rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  vertical-align: top !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.7rem !important;
+}
+
+.flight-expenses-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%) !important;
+}
+
+.table-wrapper {
+  overflow-x: auto !important;
+  max-height: 70vh !important;
+  overflow-y: auto !important;
+}
+
+.month-header {
+  background-color: hsl(210, 11%, 98%) !important;
+  border-top: 2px solid hsl(210, 11%, 90%) !important;
+}
+
+.month-header-cell {
+  font-size: 1rem !important;
+  padding: 0.75rem 0.5rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.expense-item {
+  margin-bottom: 0.5rem !important;
+  padding: 0.25rem 0 !important;
+}
+
+.expense-item:last-child {
+  margin-bottom: 0 !important;
+}
+
+.expense-amount {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-size: 0.7rem !important;
+}
+
+.expense-station {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(142, 76%, 36%) !important;
+  font-weight: 500 !important;
+}
+
+.expense-invoice {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(210, 6%, 46%) !important;
+}
+
+.expense-fuel-quantity {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(217, 91%, 60%) !important;
+  font-weight: 500 !important;
+}
+
+.expense-fuel-provider {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(142, 76%, 36%) !important;
+  font-weight: 500 !important;
+}
+
+.sortable {
+  cursor: pointer !important;
+  user-select: none !important;
+  position: relative !important;
+}
+
+.sortable:hover {
+  background-color: hsl(210, 11%, 90%) !important;
+}
+
+.sort-icon {
+  margin-left: 0.5rem !important;
+  opacity: 0.5 !important;
+  transition: opacity 0.2s !important;
+}
+
+.sortable:hover .sort-icon {
+  opacity: 1 !important;
+}
+
+.no-data-container {
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .table-wrapper {
+    font-size: 0.75rem;
+  }
+  
+  .flight-expenses-table th,
+  .flight-expenses-table td {
+    padding: 0.75rem 0.5rem;
+  }
+  
+  .table-header {
+    padding: 1rem;
+  }
+  
+  .table-title h3 {
+    font-size: 1.125rem;
+  }
+  }
+  </style>

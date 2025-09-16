@@ -37,6 +37,74 @@ function getNextMonth(yearMonth: string): string {
   }
 }
 
+// Helper function to sort flights logically (building flight chains)
+function sortFlightsLogically(flights: any[]): any[] {
+  if (!flights || flights.length === 0) return flights;
+
+  // First, sort by date (oldest first)
+  const sortedByDate = [...flights].sort(
+    (a, b) => new Date(a.flt_date).getTime() - new Date(b.flt_date).getTime()
+  );
+
+  // Group flights by date
+  const flightsByDate: { [date: string]: any[] } = {};
+  sortedByDate.forEach(flight => {
+    const date = flight.flt_date;
+    if (!flightsByDate[date]) {
+      flightsByDate[date] = [];
+    }
+    flightsByDate[date].push(flight);
+  });
+
+  // Sort flights within each date to create logical chains
+  const result: any[] = [];
+  const sortedDates = Object.keys(flightsByDate).sort(
+    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  sortedDates.forEach(date => {
+    const dayFlights = flightsByDate[date];
+    const sortedDayFlights = sortFlightsWithinDay(dayFlights);
+    result.push(...sortedDayFlights);
+  });
+
+  return result;
+}
+
+// Helper function to sort flights within a single day to create logical chains
+function sortFlightsWithinDay(flights: any[]): any[] {
+  if (flights.length <= 1) return flights;
+
+  const result: any[] = [];
+  const remaining = [...flights];
+
+  // Start with the first flight
+  let currentFlight = remaining.shift();
+  result.push(currentFlight);
+
+  // Build the chain by finding the next flight that starts where the current one ends
+  while (remaining.length > 0) {
+    const currentArrival = currentFlight.flt_arr;
+
+    // Find a flight that starts from the current arrival airport
+    const nextFlightIndex = remaining.findIndex(
+      flight => flight.flt_dep === currentArrival
+    );
+
+    if (nextFlightIndex !== -1) {
+      // Found a connecting flight
+      currentFlight = remaining.splice(nextFlightIndex, 1)[0];
+      result.push(currentFlight);
+    } else {
+      // No connecting flight found, start a new chain
+      currentFlight = remaining.shift();
+      result.push(currentFlight);
+    }
+  }
+
+  return result;
+}
+
 // ---------- Logging Function ----------
 async function logActivity(
   action: 'CREATE' | 'UPDATE' | 'DELETE',
@@ -414,6 +482,10 @@ app.get('/flights', (_req, res) => {
   res.render('flights/index', { title: 'Flights' });
 });
 
+app.get('/flights/expenses', (_req, res) => {
+  res.render('flights/expenses', { title: 'Flight Expenses' });
+});
+
 app.get('/reports', (_req, res) => {
   res.render('reports/index', { title: 'Reports' });
 });
@@ -770,23 +842,65 @@ const mockData = {
 app.get('/api/flights', async (_req, res) => {
   try {
     if (supabase) {
-      const { data, error } = await supabase
-        .from('flights')
-        .select('*')
-        .order('flt_date', { ascending: false });
+      const { data, error } = await supabase.from('flights').select('*');
 
       if (error) {
         console.log('Supabase error, using mock data:', error.message);
-        return res.json(mockData.flights);
+        return res.json(sortFlightsLogically(mockData.flights));
       }
 
-      return res.json(data || []);
+      return res.json(sortFlightsLogically(data || []));
     }
 
-    res.json(mockData.flights);
+    res.json(sortFlightsLogically(mockData.flights));
   } catch (error) {
     console.log('Error fetching flights:', error);
-    res.json(mockData.flights);
+    res.json(sortFlightsLogically(mockData.flights));
+  }
+});
+
+// API endpoint for flight expenses data
+app.get('/api/flights/expenses', async (_req, res) => {
+  try {
+    if (supabase) {
+      // Get all flights with their expenses
+      const { data: flights, error: flightsError } = await supabase.from(
+        'flights'
+      ).select(`
+          *,
+          expenses!exp_flight (
+            id,
+            exp_type,
+            exp_subtype,
+            exp_amount,
+            exp_currency,
+            exp_invoice_type,
+            exp_place,
+            exp_fuel_quan,
+            exp_fuel_provider,
+            invoices!exp_invoice (
+              inv_number
+            )
+          )
+        `);
+
+      if (flightsError) {
+        console.log(
+          'Supabase error fetching flights with expenses:',
+          flightsError.message
+        );
+        return res
+          .status(500)
+          .json({ error: 'Failed to fetch flight expenses data' });
+      }
+
+      return res.json(sortFlightsLogically(flights || []));
+    }
+
+    res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error fetching flight expenses:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
