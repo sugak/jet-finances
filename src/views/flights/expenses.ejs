@@ -319,11 +319,17 @@ function formatExpenseCell(expenses, category = '') {
     // For navigation-related expenses, show station
     const showStation = ['Enroute navigation', 'Overflight permits', 'Landing permits'].includes(category);
     
-    // For fuel quantity column, show only quantity (no invoice number)
+    // For fuel quantity column, show quantity, USG conversion, and cost per USG
     if (category === 'Fuel quantity') {
+      const quantityInLiters = parseFloat(fuelQuantity) || 0;
+      const quantityInUSG = quantityInLiters / 3.7854;
+      const costPerUSG = quantityInUSG > 0 ? amount / quantityInUSG : 0;
+      
       return `
         <div class="expense-item">
           <div class="expense-fuel-quantity">${fuelQuantity} L</div>
+          <div class="expense-fuel-usg">${quantityInUSG.toFixed(2)} USG</div>
+          <div class="expense-fuel-cost-per-usg">$${costPerUSG.toFixed(2)}/USG</div>
         </div>
       `;
     }
@@ -495,6 +501,20 @@ function convertToUSD(amount, currency) {
   margin-top: 0.125rem !important;
   color: hsl(142, 76%, 36%) !important;
   font-weight: 500 !important;
+}
+
+.expense-fuel-usg {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(217, 91%, 60%) !important;
+  font-weight: 500 !important;
+}
+
+.expense-fuel-cost-per-usg {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(0, 84%, 60%) !important;
+  font-weight: 600 !important;
 }
 
 .sortable {
