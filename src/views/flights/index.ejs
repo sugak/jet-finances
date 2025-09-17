@@ -130,10 +130,18 @@
 async function loadFlights() {
   try {
     const response = await apiRequest('/api/flights');
+    console.log('Flights API response status:', response.status);
     const flights = await response.json();
+    console.log('Flights API response data:', flights);
     
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = '';
+    
+    // Check if flights is an array
+    if (!Array.isArray(flights)) {
+      console.error('Flights data is not an array:', flights);
+      throw new Error('Invalid flights data format');
+    }
     
     // Flights are already sorted logically by the server
     
@@ -280,6 +288,12 @@ async function loadFlights() {
     });
   } catch (error) {
     console.error('Error loading flights:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
     // Show error message
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = `
@@ -287,8 +301,9 @@ async function loadFlights() {
         <td colspan="7" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load flights. Please try again.
-            </td>
-          </tr>
+          <br><small style="color: #9ca3af; margin-top: 0.5rem; display: block;">Error: ${error.message}</small>
+        </td>
+      </tr>
     `;
   }
 }
