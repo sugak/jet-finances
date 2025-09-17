@@ -992,13 +992,18 @@
     <script>
       // Get authentication token from cookie - make it global
       window.getAuthToken = function() {
+        console.log('All cookies:', document.cookie);
         const cookies = document.cookie.split(';');
+        console.log('Split cookies:', cookies);
         for (let cookie of cookies) {
           const [name, value] = cookie.trim().split('=');
+          console.log('Checking cookie:', name, '=', value);
           if (name === 'sb-access-token') {
+            console.log('Found token:', value);
             return value;
           }
         }
+        console.log('No token found');
         return null;
       }
 
