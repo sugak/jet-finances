@@ -244,7 +244,7 @@
       if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
         console.error('❌ Supabase credentials missing!');
         alert('Configuration error: Supabase credentials not found');
-        return;
+        throw new Error('Supabase credentials not found');
       }
       
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
