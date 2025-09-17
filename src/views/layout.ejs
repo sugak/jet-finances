@@ -1036,22 +1036,32 @@
           const response = await apiRequest('/api/auth/logout', {
             method: 'POST',
           });
-          console.log('Logout response:', response);
+          console.log('Logout response status:', response.status);
+          console.log('Logout response ok:', response.ok);
           
           if (response.ok) {
+            console.log('Logout successful, clearing data...');
             // Clear any local storage or session data
             localStorage.clear();
             sessionStorage.clear();
             
+            console.log('Redirecting to login page...');
             // Redirect to login page
             window.location.href = '/login';
           } else {
-            console.error('Logout failed');
+            console.error('Logout failed with status:', response.status);
+            const errorData = await response.json();
+            console.error('Logout error data:', errorData);
             // Still redirect to login page
             window.location.href = '/login';
           }
         } catch (error) {
           console.error('Logout error:', error);
+          console.error('Logout error details:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+          });
           // Still redirect to login page
           window.location.href = '/login';
         }
