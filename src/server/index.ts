@@ -602,6 +602,23 @@ app.get('/login', (_req, res) => {
   });
 });
 
+// Диагностическая страница для проверки переменных окружения
+app.get('/debug-env', (_req, res) => {
+  res.json({
+    SUPABASE_URL: process.env.SUPABASE_URL ? 'SET' : 'NOT SET',
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ? 'SET' : 'NOT SET',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? 'SET'
+      : 'NOT SET',
+    SESSION_SECRET: process.env.SESSION_SECRET ? 'SET' : 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV,
+    // Показываем первые 20 символов для проверки
+    SUPABASE_URL_PREVIEW: process.env.SUPABASE_URL?.substring(0, 30) + '...',
+    SUPABASE_ANON_KEY_PREVIEW:
+      process.env.SUPABASE_ANON_KEY?.substring(0, 30) + '...',
+  });
+});
+
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('sb-access-token');
   res.clearCookie('supabase-auth-token');
