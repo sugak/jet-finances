@@ -715,10 +715,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (data.user) {
-      // Set session cookie
+      // Set session cookie (httpOnly: false so JavaScript can read it)
       res.cookie('sb-access-token', data.session.access_token, {
         maxAge: 24 * 60 * 60 * 1000, // 1 day
-        httpOnly: true,
+        httpOnly: false, // Allow JavaScript to read the token
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
       });
