@@ -573,14 +573,19 @@ app.get('/api/test/rest', async (_req, res) => {
   }
 });
 
-// ---------- HTTPS to HTTP redirect ----------
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.header('x-forwarded-proto') === 'https' || req.secure) {
-    const httpUrl = `http://${req.get('host')}${req.url}`;
-    return res.redirect(301, httpUrl);
-  }
-  next();
-});
+// ---------- Trust proxy for Railway ----------
+app.set('trust proxy', 1);
+
+// ---------- HTTPS redirect (only in production) ----------
+if (process.env.NODE_ENV === 'production') {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      const httpsUrl = `https://${req.get('host')}${req.url}`;
+      return res.redirect(301, httpsUrl);
+    }
+    next();
+  });
+}
 
 // ---------- Routes ----------
 // ---------- Authentication Routes ----------
@@ -615,6 +620,13 @@ app.get('/invoices/:id', authenticateSession, async (req, res) => {
     const invoiceId = req.params.id;
 
     // Fetch invoice details from Supabase
+    if (!supabase) {
+      return res.status(500).render('error', {
+        title: 'Database Error',
+        message: 'Database connection not available.',
+      });
+    }
+
     const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*')
@@ -733,7 +745,7 @@ app.post('/api/create-logs-table', async (req, res) => {
     console.error('Error creating logs table:', error);
     res.status(500).json({
       error: 'Error creating table',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
       instruction: 'Please run the SQL script manually in Supabase dashboard',
     });
   }
@@ -780,7 +792,7 @@ app.post('/api/add-record-details-column', async (req, res) => {
     console.error('Error adding column:', error);
     res.status(500).json({
       error: 'Error adding column',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
       instruction: 'Please add the column manually in Supabase dashboard',
     });
   }

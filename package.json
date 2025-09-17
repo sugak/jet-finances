@@ -7,13 +7,15 @@
     "dev": "tsx watch src/server/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server/index.js",
+    "start:prod": "NODE_ENV=production node dist/server/index.js",
     "lint": "eslint 'src/**/*.ts'",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "commit": "git add . && git commit -m",
     "push": "git push origin main",
     "deploy": "npm run build && npm run push",
-    "auto-commit": "npm run format && npm run lint && git add . && git commit -m 'Auto-format and lint' && git push"
+    "auto-commit": "npm run format && npm run lint && git add . && git commit -m 'Auto-format and lint' && git push",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
