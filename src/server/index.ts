@@ -619,6 +619,76 @@ app.get('/debug-env', (_req, res) => {
   });
 });
 
+// Диагностический endpoint для проверки аутентификации
+app.get('/debug-auth', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.json({
+        status: 'no_token',
+        message: 'No authorization token provided',
+        cookies: req.headers.cookie,
+      });
+    }
+
+    if (!supabase) {
+      return res.json({
+        status: 'no_supabase',
+        message: 'Supabase not available',
+      });
+    }
+
+    // Проверяем токен
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      return res.json({
+        status: 'invalid_token',
+        message: 'Invalid or expired token',
+        error: error?.message,
+      });
+    }
+
+    // Проверяем пользователя в таблице users
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      return res.json({
+        status: 'user_not_found',
+        message: 'User not found in users table',
+        userId: user.id,
+        userEmail: user.email,
+        error: userError?.message,
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      user: {
+        id: user.id,
+        email: user.email,
+        role: userData.role,
+        full_name: userData.full_name,
+      },
+    });
+  } catch (error) {
+    return res.json({
+      status: 'error',
+      message: 'Authentication check failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 // Прокси для обхода CORS - временное решение
 app.post('/api/auth/login', async (req, res) => {
   try {
