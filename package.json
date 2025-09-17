@@ -14,8 +14,7 @@
     "commit": "git add . && git commit -m",
     "push": "git push origin main",
     "deploy": "npm run build && npm run push",
-    "auto-commit": "npm run format && npm run lint && git add . && git commit -m 'Auto-format and lint' && git push",
-    "postinstall": "npm run build"
+    "auto-commit": "npm run format && npm run lint && git add . && git commit -m 'Auto-format and lint' && git push"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
