@@ -439,7 +439,12 @@ app.use(
           "'unsafe-inline'",
         ],
         'img-src': ["'self'", 'data:', 'https:'],
-        'connect-src': ["'self'"],
+        'connect-src': [
+          "'self'",
+          supabaseUrl || 'https://qrmsxfmxnucjgglodjyb.supabase.co',
+          supabaseUrl?.replace('https://', 'wss://') ||
+            'wss://qrmsxfmxnucjgglodjyb.supabase.co',
+        ],
       },
     },
     crossOriginEmbedderPolicy: false,

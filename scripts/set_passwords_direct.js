@@ -111,11 +111,12 @@ async function ensureUserExists(email, role) {
   }
 }
 
-async function updateUserRole(userId, role) {
+async function updateUserRole(userId, role, email) {
   try {
     // Обновляем роль в таблице users
     const { error } = await supabase.from('users').upsert({
       id: userId,
+      email: email,
       role: role,
       updated_at: new Date().toISOString(),
     });
@@ -123,7 +124,7 @@ async function updateUserRole(userId, role) {
     if (error) {
       console.warn(`⚠️ Не удалось обновить роль для ${userId}:`, error.message);
     } else {
-      console.log(`✅ Роль ${role} установлена для пользователя ${userId}`);
+      console.log(`✅ Роль ${role} установлена для пользователя ${email}`);
     }
   } catch (error) {
     console.warn(`⚠️ Ошибка обновления роли:`, error.message);
@@ -144,7 +145,7 @@ async function main() {
       await setUserPassword(user.email, user.password);
 
       // Обновляем роль
-      await updateUserRole(userId, user.role);
+      await updateUserRole(userId, user.role, user.email);
 
       console.log(`✅ ${user.email} готов к использованию`);
       console.log(`   Пароль: ${user.password}`);
