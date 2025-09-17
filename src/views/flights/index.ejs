@@ -14,10 +14,17 @@
         <span class="table-subtitle">All scheduled and completed flights</span>
       </div>
       <div class="table-actions">
+        <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addFlightBtn">
           <i class="bi bi-plus-lg"></i>
           Add Flight
         </button>
+        <% } else { %>
+        <button class="btn btn-secondary" disabled title="Only superadmin can add flights">
+          <i class="bi bi-plus-lg"></i>
+          Add Flight
+        </button>
+        <% } %>
       </div>
     </div>
     
@@ -122,7 +129,7 @@
 // Load flights data from API
 async function loadFlights() {
   try {
-    const response = await fetch('/api/flights');
+    const response = await apiRequest('/api/flights');
     const flights = await response.json();
     
     const tbody = document.getElementById('flights-table-body');
@@ -232,12 +239,16 @@ async function loadFlights() {
               <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}">
                   <i class="bi bi-eye"></i>
                 </button>
+              <% if (user && user.role === 'superadmin') { %>
               <button class="btn-action" title="Edit" data-action="edit" data-id="${flight.id}">
                   <i class="bi bi-pencil"></i>
                 </button>
               <button class="btn-action" title="Delete" data-action="delete" data-id="${flight.id}">
                   <i class="bi bi-trash"></i>
                 </button>
+              <% } else { %>
+              <span class="text-muted" style="font-size: 0.75rem;">Read Only</span>
+              <% } %>
               </div>
           </td>
         `;
@@ -302,7 +313,7 @@ async function deleteFlight(id) {
   }
   
   try {
-    const response = await fetch(`/api/flights/${id}`, {
+    const response = await apiRequest(`/api/flights/${id}`, {
       method: 'DELETE',
     });
     
@@ -470,11 +481,8 @@ document.addEventListener('DOMContentLoaded', function() {
           flightData.flt_block = `${hours}:${minutes}:00`;
         }
         
-        const response = await fetch('/api/flights', {
+        const response = await apiRequest('/api/flights', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(flightData)
         });
         

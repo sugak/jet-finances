@@ -181,7 +181,7 @@ function toggleSection(sectionId) {
 async function loadExpenses() {
   try {
     const invoiceId = window.location.pathname.split('/').pop();
-    const response = await fetch(`/api/invoices/${invoiceId}/expenses`);
+    const response = await apiRequest(`/api/invoices/${invoiceId}/expenses`);
     const expenses = await response.json();
     
     const container = document.getElementById('expenses-container');
@@ -452,7 +452,7 @@ async function loadExpenses() {
 // Load expense types for dropdown
 async function loadExpenseTypes() {
   try {
-    const response = await fetch('/api/expense-types');
+    const response = await apiRequest('/api/expense-types');
     const types = await response.json();
     
     const select = document.getElementById('expType');
@@ -496,7 +496,7 @@ async function loadExpenseSubtypes(typeId) {
 // Load invoice types for dropdown
 async function loadInvoiceTypes() {
   try {
-    const response = await fetch('/api/invoice-types');
+    const response = await apiRequest('/api/invoice-types');
     const types = await response.json();
     
     const select = document.getElementById('expInvoiceType');
@@ -516,7 +516,7 @@ async function loadInvoiceTypes() {
 // Load flights for dropdown
 async function loadFlightsForDropdown() {
   try {
-    const response = await fetch('/api/flights');
+    const response = await apiRequest('/api/flights');
     const flights = await response.json();
     
     const select = document.getElementById('expFlight');

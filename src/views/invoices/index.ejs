@@ -15,10 +15,17 @@
         <span class="table-subtitle">All invoices and billing records</span>
       </div>
       <div class="table-actions">
+        <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addInvoiceBtn">
           <i class="bi bi-plus-lg"></i>
           Add Invoice
         </button>
+        <% } else { %>
+        <button class="btn btn-secondary" disabled title="Only superadmin can add invoices">
+          <i class="bi bi-plus-lg"></i>
+          Add Invoice
+        </button>
+        <% } %>
       </div>
     </div>
     
@@ -122,7 +129,7 @@ let currentSortOrder = 'oldest'; // 'newest' or 'oldest'
 // Load invoices data from API
 async function loadInvoices() {
   try {
-    const response = await fetch('/api/invoices');
+    const response = await apiRequest('/api/invoices');
     const invoices = await response.json();
     
     const tbody = document.getElementById('invoices-table-body');
@@ -238,12 +245,16 @@ async function loadInvoices() {
         </td>
         <td>
           <div class="action-buttons">
+            <% if (user && user.role === 'superadmin') { %>
             <button class="btn-action" title="Edit" data-action="edit" data-id="${invoice.id}">
               <i class="bi bi-pencil"></i>
             </button>
             <button class="btn-action" title="Delete" data-action="delete" data-id="${invoice.id}">
               <i class="bi bi-trash"></i>
             </button>
+            <% } else { %>
+            <span class="text-muted" style="font-size: 0.75rem;">Read Only</span>
+            <% } %>
           </div>
         </td>
       `;
@@ -339,7 +350,7 @@ async function deleteInvoice(id) {
   }
   
   try {
-    const response = await fetch(`/api/invoices/${id}`, {
+    const response = await apiRequest(`/api/invoices/${id}`, {
       method: 'DELETE',
     });
     
@@ -364,11 +375,8 @@ async function toggleInvoiceStatus(button) {
   const newStatus = !currentStatus;
   
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}/status`, {
+    const response = await apiRequest(`/api/invoices/${invoiceId}/status`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         inv_filled: newStatus
       }),

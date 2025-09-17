@@ -9,6 +9,7 @@ import csrf from 'csurf';
 import rateLimit from 'express-rate-limit';
 import expressLayouts from 'express-ejs-layouts';
 import { createClient } from '@supabase/supabase-js';
+// import jwt from 'jsonwebtoken'; // Not used in current implementation
 
 dotenv.config();
 
@@ -26,6 +27,25 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase =
   supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
+// ---------- Authentication Types ----------
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: 'superadmin' | 'reader';
+    full_name?: string;
+  };
+}
+
+// interface JWTPayload { // Not used in current implementation
+//   sub: string;
+//   email: string;
+//   aud: string;
+//   role: string;
+//   iat: number;
+//   exp: number;
+// }
 
 // Helper function to get next month for single month periods
 function getNextMonth(yearMonth: string): string {
@@ -103,6 +123,134 @@ function sortFlightsWithinDay(flights: any[]): any[] {
   }
 
   return result;
+}
+
+// ---------- Authentication Middleware ----------
+async function authenticateToken(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    // Verify JWT token with Supabase
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+
+    // Get user role from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      return res.status(403).json({ error: 'User not found' });
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email || '',
+      role: userData.role as 'superadmin' | 'reader',
+      full_name: userData.full_name,
+    };
+
+    next();
+  } catch (error) {
+    console.log('Authentication error:', error);
+    return res.status(403).json({ error: 'Authentication failed' });
+  }
+}
+
+// Middleware to check if user is superadmin
+function requireSuperadmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user || req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin access required' });
+  }
+  next();
+}
+
+// Middleware for session-based authentication (for EJS pages)
+async function authenticateSession(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const sessionToken =
+      req.cookies['sb-access-token'] || req.cookies['supabase-auth-token'];
+
+    if (!sessionToken) {
+      return res.redirect('/login');
+    }
+
+    if (!supabase) {
+      return res.status(500).render('error', {
+        title: 'Error',
+        error: 'Database not available',
+      });
+    }
+
+    // Verify session token
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(sessionToken);
+
+    if (error || !user) {
+      res.clearCookie('sb-access-token');
+      res.clearCookie('supabase-auth-token');
+      return res.redirect('/login');
+    }
+
+    // Get user role from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      res.clearCookie('sb-access-token');
+      res.clearCookie('supabase-auth-token');
+      return res.redirect('/login');
+    }
+
+    // Add user info to response locals for EJS templates
+    res.locals.user = {
+      id: user.id,
+      email: user.email || '',
+      role: userData.role as 'superadmin' | 'reader',
+      full_name: userData.full_name,
+    };
+
+    next();
+  } catch (error) {
+    console.log('Session authentication error:', error);
+    res.clearCookie('sb-access-token');
+    res.clearCookie('supabase-auth-token');
+    return res.redirect('/login');
+  }
 }
 
 // ---------- Logging Function ----------
@@ -435,7 +583,22 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // ---------- Routes ----------
-app.get('/', (_req, res) => {
+// ---------- Authentication Routes ----------
+app.get('/login', (_req, res) => {
+  res.render('auth/login', {
+    title: 'Login',
+    process: { env: process.env },
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('sb-access-token');
+  res.clearCookie('supabase-auth-token');
+  res.json({ success: true });
+});
+
+// ---------- Protected Routes ----------
+app.get('/', authenticateSession, (_req, res) => {
   res.render('dashboard/index', { title: 'Dashboard' });
 });
 
@@ -443,11 +606,11 @@ app.get('/transactions', (_req, res) => {
   res.render('transactions/index', { title: 'Transactions' });
 });
 
-app.get('/invoices', (_req, res) => {
+app.get('/invoices', authenticateSession, (_req, res) => {
   res.render('invoices/index', { title: 'Invoices' });
 });
 
-app.get('/invoices/:id', async (req, res) => {
+app.get('/invoices/:id', authenticateSession, async (req, res) => {
   try {
     const invoiceId = req.params.id;
 
@@ -478,28 +641,28 @@ app.get('/invoices/:id', async (req, res) => {
   }
 });
 
-app.get('/flights', (_req, res) => {
+app.get('/flights', authenticateSession, (_req, res) => {
   res.render('flights/index', { title: 'Flights' });
 });
 
-app.get('/flights/expenses', (_req, res) => {
+app.get('/flights/expenses', authenticateSession, (_req, res) => {
   res.render('flights/expenses', { title: 'Flight Expenses' });
 });
 
-app.get('/reports', (_req, res) => {
+app.get('/reports', authenticateSession, (_req, res) => {
   res.render('reports/index', { title: 'Reports' });
 });
 
-app.get('/expenses', (_req, res) => {
+app.get('/expenses', authenticateSession, (_req, res) => {
   res.render('expenses/index', { title: 'Expenses' });
 });
 
-app.get('/disputes', (_req, res) => {
+app.get('/disputes', authenticateSession, (_req, res) => {
   res.render('disputes/index', { title: 'Disputes' });
 });
 
 // Settings route - simple version
-app.get('/settings', (_req, res) => {
+app.get('/settings', authenticateSession, (_req, res) => {
   res.render('settings/index', { title: 'Settings' });
 });
 
@@ -839,7 +1002,7 @@ const mockData = {
 };
 
 // API маршруты
-app.get('/api/flights', async (_req, res) => {
+app.get('/api/flights', authenticateToken, async (_req, res) => {
   try {
     if (supabase) {
       const { data, error } = await supabase.from('flights').select('*');
@@ -860,7 +1023,7 @@ app.get('/api/flights', async (_req, res) => {
 });
 
 // API endpoint for flight expenses data
-app.get('/api/flights/expenses', async (_req, res) => {
+app.get('/api/flights/expenses', authenticateToken, async (_req, res) => {
   try {
     if (supabase) {
       // Get all flights with their expenses
@@ -905,72 +1068,77 @@ app.get('/api/flights/expenses', async (_req, res) => {
 });
 
 // POST endpoint to add new flight
-app.post('/api/flights', async (req, res) => {
-  try {
-    const { flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block } =
-      req.body;
+app.post(
+  '/api/flights',
+  authenticateToken,
+  requireSuperadmin,
+  async (req, res) => {
+    try {
+      const { flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block } =
+        req.body;
 
-    // Validate required fields
-    if (
-      !flt_date ||
-      !flt_number ||
-      !flt_dep ||
-      !flt_arr ||
-      !flt_time ||
-      !flt_block
-    ) {
-      return res.status(400).json({
-        error:
-          'All fields are required: flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block',
-      });
-    }
-
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('flights')
-        .insert([
-          {
-            flt_date,
-            flt_number,
-            flt_dep,
-            flt_arr,
-            flt_time,
-            flt_block,
-          },
-        ])
-        .select();
-
-      if (error) {
-        console.log('Supabase error adding flight:', error.message);
-        return res
-          .status(500)
-          .json({ error: 'Failed to add flight to database' });
+      // Validate required fields
+      if (
+        !flt_date ||
+        !flt_number ||
+        !flt_dep ||
+        !flt_arr ||
+        !flt_time ||
+        !flt_block
+      ) {
+        return res.status(400).json({
+          error:
+            'All fields are required: flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block',
+        });
       }
 
-      // Log the activity
-      await logActivity(
-        'CREATE',
-        'flights',
-        data[0].id,
-        null,
-        data[0],
-        'system',
-        req
-      );
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('flights')
+          .insert([
+            {
+              flt_date,
+              flt_number,
+              flt_dep,
+              flt_arr,
+              flt_time,
+              flt_block,
+            },
+          ])
+          .select();
 
-      return res.status(201).json({
-        message: 'Flight added successfully',
-        data: data[0],
-      });
+        if (error) {
+          console.log('Supabase error adding flight:', error.message);
+          return res
+            .status(500)
+            .json({ error: 'Failed to add flight to database' });
+        }
+
+        // Log the activity
+        await logActivity(
+          'CREATE',
+          'flights',
+          data[0].id,
+          null,
+          data[0],
+          'system',
+          req
+        );
+
+        return res.status(201).json({
+          message: 'Flight added successfully',
+          data: data[0],
+        });
+      }
+
+      // Fallback for when Supabase is not available
+      return res.status(503).json({ error: 'Database not available' });
+    } catch (error) {
+      console.log('Error adding flight:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Fallback for when Supabase is not available
-    return res.status(503).json({ error: 'Database not available' });
-  } catch (error) {
-    console.log('Error adding flight:', error);
-    return res.status(500).json({ error: 'Internal server error' });
   }
-});
+);
 
 // API endpoint to get single invoice data
 app.get('/api/invoices/:id', async (req, res) => {

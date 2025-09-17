@@ -144,7 +144,7 @@ let backupInfo = null;
 // Load backup information
 async function loadBackupInfo() {
   try {
-    const response = await fetch('/api/backup/info');
+    const response = await apiRequest('/api/backup/info');
     const info = await response.json();
     
     if (response.ok) {
@@ -218,7 +218,7 @@ async function createBackup() {
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Creating Backup...';
     
-    const response = await fetch('/api/backup/create');
+    const response = await apiRequest('/api/backup/create');
     
     if (response.ok) {
       // Get filename from Content-Disposition header
@@ -352,11 +352,8 @@ async function restoreBackup() {
       skipErrors: document.getElementById('skipErrorsCheckbox').checked
     };
     
-    const response = await fetch('/api/backup/restore', {
+    const response = await apiRequest('/api/backup/restore', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         backupData: backupData,
         options: options

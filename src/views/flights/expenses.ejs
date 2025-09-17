@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadFlightExpenses() {
   try {
-    const response = await fetch('/api/flights/expenses');
+    const response = await apiRequest('/api/flights/expenses');
     const flights = await response.json();
     
     // Hide loading spinner
