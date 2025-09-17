@@ -619,6 +619,54 @@ app.get('/debug-env', (_req, res) => {
   });
 });
 
+// Прокси для обхода CORS - временное решение
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    console.log('Server-side login attempt for:', email);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error('Login error:', error);
+      return res.status(401).json({ error: error.message });
+    }
+
+    if (data.user) {
+      // Set session cookie
+      res.cookie('sb-access-token', data.session.access_token, {
+        maxAge: 24 * 60 * 60 * 1000, // 1 day
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
+
+      return res.json({
+        success: true,
+        user: data.user,
+        redirect: '/',
+      });
+    }
+
+    return res.status(401).json({ error: 'Login failed' });
+  } catch (error) {
+    console.error('Server login error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('sb-access-token');
   res.clearCookie('supabase-auth-token');
