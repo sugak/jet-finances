@@ -593,6 +593,7 @@ app.get('/login', (_req, res) => {
   res.render('auth/login', {
     title: 'Login',
     process: { env: process.env },
+    layout: false, // Отключаем layout для страницы логина
   });
 });
 
