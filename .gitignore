@@ -248,3 +248,10 @@ docs/
 
 # Local documentation
 README.local.md
+
+# All documentation files
+*.md
+!README.md
+
+# Scripts with sensitive data
+scripts/
