@@ -245,3 +245,6 @@ $RECYCLE.BIN/
 
 # Documentation (exclude from git)
 docs/
+
+# Local documentation
+README.local.md
