@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Simple Logout Test</title>
+  </head>
+  <body>
+    <h1>Simple Logout Test</h1>
+    <button onclick="testLogout()">Test Logout</button>
+    <div id="result"></div>
+
+    <script>
+      async function testLogout() {
+        const result = document.getElementById('result');
+        result.innerHTML = 'Testing logout...';
+
+        try {
+          const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
+
+          const data = await response.json();
+          result.innerHTML = `Response: ${JSON.stringify(data)}<br>Status: ${response.status}`;
+
+          if (response.ok) {
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 1000);
+          }
+        } catch (error) {
+          result.innerHTML = `Error: ${error.message}`;
+        }
+      }
+    </script>
+  </body>
+</html>

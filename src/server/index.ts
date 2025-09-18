@@ -692,6 +692,21 @@ app.get('/login', (_req, res) => {
   });
 });
 
+// Test logout page
+app.get('/test-logout', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'test-logout.html'));
+});
+
+// Simple test logout page
+app.get('/test-logout-simple', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'test-logout-simple.html'));
+});
+
+// Test logout page without auth
+app.get('/test-logout-no-auth', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'test-logout-no-auth.html'));
+});
+
 // Диагностическая страница для проверки переменных окружения
 app.get('/debug-env', (_req, res) => {
   res.json({
