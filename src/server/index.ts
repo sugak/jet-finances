@@ -534,6 +534,7 @@ app.use(
           supabaseUrl || 'https://qrmsxfmxnucjgglodjyb.supabase.co',
           supabaseUrl?.replace('https://', 'wss://') ||
             'wss://qrmsxfmxnucjgglodjyb.supabase.co',
+          'https://cdn.jsdelivr.net', // Allow source maps
         ],
       },
     },
@@ -705,6 +706,11 @@ app.get('/test-logout-simple', (_req, res) => {
 // Test logout page without auth
 app.get('/test-logout-no-auth', (_req, res) => {
   res.sendFile(path.join(process.cwd(), 'test-logout-no-auth.html'));
+});
+
+// Minimal test logout page
+app.get('/test-logout-minimal', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'test-logout-minimal.html'));
 });
 
 // Диагностическая страница для проверки переменных окружения
