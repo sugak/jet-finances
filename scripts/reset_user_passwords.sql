@@ -1,22 +1,22 @@
 -- SQL скрипт для сброса паролей пользователей
 -- Выполните этот скрипт в Supabase SQL Editor
 
--- 1. Сброс пароля для admin@a6jrm.org
+-- 1. Сброс пароля для m.a.sugak@gmail.com
 -- Пользователь получит email с ссылкой для смены пароля
 UPDATE auth.users 
 SET 
   email_confirmed_at = NOW(),
   recovery_sent_at = NOW(),
   updated_at = NOW()
-WHERE email = 'admin@a6jrm.org';
+WHERE email = 'm.a.sugak@gmail.com';
 
--- 2. Сброс пароля для user@a6jrm.org
+-- 2. Сброс пароля для rts@a6jrm.org
 UPDATE auth.users 
 SET 
   email_confirmed_at = NOW(),
   recovery_sent_at = NOW(),
   updated_at = NOW()
-WHERE email = 'user@a6jrm.org';
+WHERE email = 'rts@a6jrm.org';
 
 -- 3. Проверим результат
 SELECT 
@@ -27,7 +27,7 @@ SELECT
   created_at,
   updated_at
 FROM auth.users 
-WHERE email IN ('admin@a6jrm.org', 'user@a6jrm.org')
+WHERE email IN ('m.a.sugak@gmail.com', 'rts@a6jrm.org')
 ORDER BY email;
 
 -- 4. Дополнительно: можно отправить recovery email программно

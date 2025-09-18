@@ -27,8 +27,8 @@ node scripts/set_passwords_direct.js
 ## 📋 Данные для входа (по умолчанию):
 
 ```
-admin@a6jrm.org / Admin123! (superadmin)
-user@a6jrm.org / User123! (reader)
+m.a.sugak@gmail.com / Admin123! (superadmin)
+rts@a6jrm.org / User123! (reader)
 ```
 
 ## ⚙️ Настройка паролей
@@ -38,12 +38,12 @@ user@a6jrm.org / User123! (reader)
 ```javascript
 const users = [
   {
-    email: 'admin@a6jrm.org',
+    email: 'm.a.sugak@gmail.com',
     password: 'ВашНовыйПароль123!', // Измените здесь
     role: 'superadmin',
   },
   {
-    email: 'user@a6jrm.org',
+    email: 'rts@a6jrm.org',
     password: 'ДругойПароль456!', // И здесь
     role: 'reader',
   },

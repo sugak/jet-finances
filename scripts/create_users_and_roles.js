@@ -68,22 +68,22 @@ async function createUsersAndRoles() {
       console.log('   Found', authUsers.users.length, 'users in auth.users');
 
       const adminUser = authUsers.users.find(
-        u => u.email === 'admin@a6jrm.org'
+        u => u.email === 'm.a.sugak@gmail.com'
       );
       const regularUser = authUsers.users.find(
-        u => u.email === 'user@a6jrm.org'
+        u => u.email === 'rts@a6jrm.org'
       );
 
       if (adminUser) {
-        console.log('   ✅ admin@a6jrm.org found');
+        console.log('   ✅ m.a.sugak@gmail.com found');
       } else {
-        console.log('   ❌ admin@a6jrm.org not found');
+        console.log('   ❌ m.a.sugak@gmail.com not found');
       }
 
       if (regularUser) {
-        console.log('   ✅ user@a6jrm.org found');
+        console.log('   ✅ rts@a6jrm.org found');
       } else {
-        console.log('   ❌ user@a6jrm.org not found');
+        console.log('   ❌ rts@a6jrm.org not found');
       }
     }
 
@@ -92,14 +92,14 @@ async function createUsersAndRoles() {
     const insertRolesSQL = `
       INSERT INTO users (id, email, role, full_name) VALUES
         (
-          (SELECT id FROM auth.users WHERE email = 'admin@a6jrm.org'),
-          'admin@a6jrm.org',
+          (SELECT id FROM auth.users WHERE email = 'm.a.sugak@gmail.com'),
+          'm.a.sugak@gmail.com',
           'superadmin',
           'Admin User'
         ),
         (
-          (SELECT id FROM auth.users WHERE email = 'user@a6jrm.org'),
-          'user@a6jrm.org',
+          (SELECT id FROM auth.users WHERE email = 'rts@a6jrm.org'),
+          'rts@a6jrm.org',
           'reader',
           'Regular User'
         )

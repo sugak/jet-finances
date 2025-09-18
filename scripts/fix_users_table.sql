@@ -26,8 +26,8 @@ CREATE POLICY "Users can update own profile" ON users
 -- 4. Добавляем пользователей с правильными данными
 INSERT INTO users (id, email, role, full_name) VALUES
   (
-    'ffcca9f2-9813-48c2-9827-0d0659192c04', -- ID admin пользователя
-    'admin@a6jrm.org',
+    (SELECT id FROM auth.users WHERE email = 'm.a.sugak@gmail.com'),
+    'm.a.sugak@gmail.com',
     'superadmin',
     'Admin User'
   )
@@ -39,8 +39,8 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO users (id, email, role, full_name) VALUES
   (
-    'e69f7eb9-e5dd-4691-9f86-364c93f1ec1b', -- ID user пользователя
-    'user@a6jrm.org',
+    (SELECT id FROM auth.users WHERE email = 'rts@a6jrm.org'),
+    'rts@a6jrm.org',
     'reader',
     'Regular User'
   )

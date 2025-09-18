@@ -27,12 +27,12 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 // Конфигурация пользователей и их новых паролей
 const users = [
   {
-    email: 'admin@a6jrm.org',
+    email: 'm.a.sugak@gmail.com',
     password: 'Admin123!',
     role: 'superadmin',
   },
   {
-    email: 'user@a6jrm.org',
+    email: 'rts@a6jrm.org',
     password: 'User123!',
     role: 'reader',
   },

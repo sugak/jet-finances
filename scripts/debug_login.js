@@ -62,7 +62,7 @@ async function testConnection() {
     // Тест 3: Проверяем аутентификацию
     console.log('\n🔄 Тестируем аутентификацию...');
 
-    const testEmail = 'admin@a6jrm.org';
+    const testEmail = 'm.a.sugak@gmail.com';
     const testPassword = 'Admin123!';
 
     console.log(`Попытка входа: ${testEmail}`);

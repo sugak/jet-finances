@@ -26,11 +26,11 @@ CREATE POLICY "Users can update own profile" ON users
 -- 4. Назначение ролей для ваших пользователей
 -- Замените email адреса на ваши реальные
 
--- Назначить роль superadmin для admin@a6jrm.org
+-- Назначить роль superadmin для m.a.sugak@gmail.com
 INSERT INTO users (id, email, role, full_name) VALUES
   (
-    (SELECT id FROM auth.users WHERE email = 'admin@a6jrm.org'),
-    'admin@a6jrm.org',
+    (SELECT id FROM auth.users WHERE email = 'm.a.sugak@gmail.com'),
+    'm.a.sugak@gmail.com',
     'superadmin',
     'Admin User'
   )
@@ -39,11 +39,11 @@ ON CONFLICT (id) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   updated_at = NOW();
 
--- Назначить роль reader для user@a6jrm.org
+-- Назначить роль reader для rts@a6jrm.org
 INSERT INTO users (id, email, role, full_name) VALUES
   (
-    (SELECT id FROM auth.users WHERE email = 'user@a6jrm.org'),
-    'user@a6jrm.org',
+    (SELECT id FROM auth.users WHERE email = 'rts@a6jrm.org'),
+    'rts@a6jrm.org',
     'reader',
     'Regular User'
   )
@@ -59,5 +59,5 @@ SELECT
   u.full_name,
   u.created_at
 FROM users u
-WHERE u.email IN ('admin@a6jrm.org', 'user@a6jrm.org')
+WHERE u.email IN ('m.a.sugak@gmail.com', 'rts@a6jrm.org')
 ORDER BY u.role DESC, u.email;

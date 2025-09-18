@@ -32,12 +32,12 @@ async function emergencyFix() {
 
     const users = [
       {
-        email: 'admin@a6jrm.org',
+        email: 'm.a.sugak@gmail.com',
         password: 'Admin123!',
         role: 'superadmin',
       },
       {
-        email: 'user@a6jrm.org',
+        email: 'rts@a6jrm.org',
         password: 'User123!',
         role: 'reader',
       },
@@ -91,8 +91,8 @@ async function emergencyFix() {
 
     console.log('\n🎉 ЭКСТРЕННОЕ ИСПРАВЛЕНИЕ ЗАВЕРШЕНО!');
     console.log('\n📋 Данные для входа:');
-    console.log('   admin@a6jrm.org / Admin123!');
-    console.log('   user@a6jrm.org / User123!');
+    console.log('   m.a.sugak@gmail.com / Admin123!');
+    console.log('   rts@a6jrm.org / User123!');
 
     console.log('\n💡 Теперь попробуйте войти в приложение!');
   } catch (error) {

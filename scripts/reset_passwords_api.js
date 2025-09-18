@@ -55,7 +55,7 @@ async function resetUserPassword(email) {
 async function main() {
   console.log('🚀 Начинаем сброс паролей...\n');
 
-  const users = ['admin@a6jrm.org', 'user@a6jrm.org'];
+  const users = ['m.a.sugak@gmail.com', 'rts@a6jrm.org'];
 
   for (const email of users) {
     await resetUserPassword(email);
