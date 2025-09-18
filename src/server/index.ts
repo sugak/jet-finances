@@ -987,16 +987,8 @@ app.get('/flights/expenses', authenticateSession, (_req, res) => {
   res.render('flights/expenses', { title: 'Flight Expenses' });
 });
 
-app.get('/reports', authenticateSession, (_req, res) => {
-  res.render('reports/index', { title: 'Reports' });
-});
-
 app.get('/expenses', authenticateSession, (_req, res) => {
   res.render('expenses/index', { title: 'Expenses' });
-});
-
-app.get('/disputes', authenticateSession, (_req, res) => {
-  res.render('disputes/index', { title: 'Disputes' });
 });
 
 // Settings route - simple version
