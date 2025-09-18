@@ -1060,130 +1060,62 @@
 
       // Logout function - make it global
       window.logout = async function() {
-        console.log('🔴 Logout function called');
-        console.log('🔴 Current URL:', window.location.href);
-        console.log('🔴 Current cookies:', document.cookie);
-        
         try {
-          console.log('🔴 Making logout request...');
-          
-          // Use fetch directly to avoid potential issues with apiRequest
           const response = await fetch('/api/auth/logout', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            credentials: 'include', // Important: include cookies
+            credentials: 'include',
           });
           
-          console.log('🔴 Logout response status:', response.status);
-          console.log('🔴 Logout response ok:', response.ok);
-          console.log('🔴 Logout response headers:', Object.fromEntries(response.headers.entries()));
-          
           if (response.ok) {
-            const data = await response.json();
-            console.log('🔴 Logout response data:', data);
-            console.log('🔴 Logout successful, clearing data...');
-            
             // Clear any local storage or session data
             localStorage.clear();
             sessionStorage.clear();
-            console.log('🔴 Local storage cleared');
             
             // Force clear cookies on client side as well
             document.cookie = 'sb-access-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'sb-refresh-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'supabase-auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-            console.log('🔴 Cookies cleared');
             
-            console.log('🔴 Redirecting to login page...');
             // Redirect to login page
             window.location.href = '/login';
           } else {
-            console.error('🔴 Logout failed with status:', response.status);
-            try {
-              const errorData = await response.json();
-              console.error('🔴 Logout error data:', errorData);
-            } catch (e) {
-              console.error('🔴 Could not parse error response');
-            }
-            // Still redirect to login page
-            console.log('🔴 Redirecting to login page despite error...');
+            // Still redirect to login page even if logout failed
             window.location.href = '/login';
           }
         } catch (error) {
-          console.error('🔴 Logout error:', error);
-          console.error('🔴 Logout error details:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-          });
+          console.error('Logout error:', error);
           // Still redirect to login page
-          console.log('🔴 Redirecting to login page despite exception...');
           window.location.href = '/login';
         }
       }
 
-      // Also add a simple test function
-      window.testLogout = function() {
-        console.log('🧪 Test logout function called');
-        console.log('🧪 window.logout exists:', typeof window.logout);
-        console.log('🧪 window.logout type:', typeof window.logout);
-        if (typeof window.logout === 'function') {
-          console.log('🧪 Calling logout function...');
-          window.logout();
-        } else {
-          console.error('🧪 Logout function not found!');
-        }
-      }
-
-      // Debug: log when the script loads
-      console.log('🔧 Layout script loaded');
-      console.log('🔧 window.logout function defined:', typeof window.logout);
-      console.log('🔧 window.testLogout function defined:', typeof window.testLogout);
-      console.log('🔧 Bootstrap available:', typeof window.bootstrap !== 'undefined');
-      console.log('🔧 Document ready state:', document.readyState);
-      console.log('🔧 Current URL:', window.location.href);
 
       // Add event listener as backup for logout button
       document.addEventListener('DOMContentLoaded', function() {
-        console.log('🔧 DOM loaded, setting up logout button...');
         const logoutButton = document.getElementById('logout-button');
         if (logoutButton) {
-          console.log('🔧 Logout button found, adding event listener...');
           logoutButton.addEventListener('click', function(e) {
-            console.log('🔧 Logout button clicked via event listener');
             e.preventDefault();
             if (typeof window.logout === 'function') {
               window.logout();
-            } else {
-              console.error('🔧 Logout function not available!');
             }
           });
-        } else {
-          console.error('🔧 Logout button not found!');
         }
       });
 
       // Also try to set up immediately if DOM is already loaded
-      if (document.readyState === 'loading') {
-        console.log('🔧 DOM still loading, will set up on DOMContentLoaded');
-      } else {
-        console.log('🔧 DOM already loaded, setting up logout button immediately...');
+      if (document.readyState !== 'loading') {
         const logoutButton = document.getElementById('logout-button');
         if (logoutButton) {
-          console.log('🔧 Logout button found, adding event listener immediately...');
           logoutButton.addEventListener('click', function(e) {
-            console.log('🔧 Logout button clicked via immediate event listener');
             e.preventDefault();
             if (typeof window.logout === 'function') {
               window.logout();
-            } else {
-              console.error('🔧 Logout function not available!');
             }
           });
-        } else {
-          console.error('🔧 Logout button not found immediately!');
         }
       }
     </script>
