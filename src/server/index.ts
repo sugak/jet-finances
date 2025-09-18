@@ -199,6 +199,7 @@ async function authenticateSession(
   try {
     const sessionToken =
       req.cookies['sb-access-token'] || req.cookies['supabase-auth-token'];
+    const refreshToken = req.cookies['sb-refresh-token'];
 
     if (!sessionToken) {
       return res.redirect('/login');
@@ -217,8 +218,95 @@ async function authenticateSession(
       error,
     } = await supabase.auth.getUser(sessionToken);
 
+    // If token is invalid/expired, try to refresh it
+    if ((error || !user) && refreshToken) {
+      console.log('Access token expired, attempting refresh...');
+      try {
+        const { data: refreshData, error: refreshError } =
+          await supabase.auth.refreshSession({
+            refresh_token: refreshToken,
+          });
+
+        if (refreshError || !refreshData.session) {
+          console.log('Token refresh failed:', refreshError?.message);
+          // Clear invalid cookies and redirect to login
+          res.clearCookie('sb-access-token');
+          res.clearCookie('sb-refresh-token');
+          res.clearCookie('supabase-auth-token');
+          return res.redirect('/login');
+        }
+
+        // Set new tokens in cookies
+        const cookieOptions = {
+          maxAge: 24 * 60 * 60 * 1000, // 1 day
+          httpOnly: false, // Allow JavaScript to read the access token
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: (process.env.NODE_ENV === 'production'
+            ? 'none'
+            : 'strict') as 'none' | 'strict',
+          path: '/',
+        };
+
+        res.cookie(
+          'sb-access-token',
+          refreshData.session.access_token,
+          cookieOptions
+        );
+
+        if (refreshData.session.refresh_token) {
+          res.cookie('sb-refresh-token', refreshData.session.refresh_token, {
+            ...cookieOptions,
+            httpOnly: true, // Refresh token should be httpOnly
+          });
+        }
+
+        console.log('Token refreshed successfully');
+        // Use the new user data
+        const newUser = refreshData.user;
+
+        if (!newUser) {
+          res.clearCookie('sb-access-token');
+          res.clearCookie('sb-refresh-token');
+          res.clearCookie('supabase-auth-token');
+          return res.redirect('/login');
+        }
+
+        // Get user role from database
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('role, full_name')
+          .eq('id', newUser.id)
+          .single();
+
+        if (userError || !userData) {
+          res.clearCookie('sb-access-token');
+          res.clearCookie('sb-refresh-token');
+          res.clearCookie('supabase-auth-token');
+          return res.redirect('/login');
+        }
+
+        // Add user info to response locals for EJS templates
+        res.locals.user = {
+          id: newUser.id,
+          email: newUser.email || '',
+          role: userData.role as 'superadmin' | 'reader',
+          full_name: userData.full_name,
+        };
+
+        return next();
+      } catch (refreshError) {
+        console.log('Token refresh exception:', refreshError);
+        res.clearCookie('sb-access-token');
+        res.clearCookie('sb-refresh-token');
+        res.clearCookie('supabase-auth-token');
+        return res.redirect('/login');
+      }
+    }
+
+    // If no refresh token or refresh failed, check original token
     if (error || !user) {
       res.clearCookie('sb-access-token');
+      res.clearCookie('sb-refresh-token');
       res.clearCookie('supabase-auth-token');
       return res.redirect('/login');
     }
@@ -232,6 +320,7 @@ async function authenticateSession(
 
     if (userError || !userData) {
       res.clearCookie('sb-access-token');
+      res.clearCookie('sb-refresh-token');
       res.clearCookie('supabase-auth-token');
       return res.redirect('/login');
     }
@@ -248,6 +337,7 @@ async function authenticateSession(
   } catch (error) {
     console.log('Session authentication error:', error);
     res.clearCookie('sb-access-token');
+    res.clearCookie('sb-refresh-token');
     res.clearCookie('supabase-auth-token');
     return res.redirect('/login');
   }
@@ -715,13 +805,27 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (data.user) {
-      // Set session cookie (httpOnly: false so JavaScript can read it)
-      res.cookie('sb-access-token', data.session.access_token, {
+      // Set session cookies with proper production settings
+      const cookieOptions = {
         maxAge: 24 * 60 * 60 * 1000, // 1 day
         httpOnly: false, // Allow JavaScript to read the token
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
+        sameSite: (process.env.NODE_ENV === 'production'
+          ? 'none'
+          : 'strict') as 'none' | 'strict', // 'none' for cross-site in production
+        domain: process.env.NODE_ENV === 'production' ? undefined : undefined, // Let browser handle domain
+        path: '/',
+      };
+
+      res.cookie('sb-access-token', data.session.access_token, cookieOptions);
+
+      // Also store refresh token for session renewal
+      if (data.session.refresh_token) {
+        res.cookie('sb-refresh-token', data.session.refresh_token, {
+          ...cookieOptions,
+          httpOnly: true, // Refresh token should be httpOnly for security
+        });
+      }
 
       return res.json({
         success: true,
@@ -737,10 +841,90 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  res.clearCookie('sb-access-token');
-  res.clearCookie('supabase-auth-token');
-  res.json({ success: true });
+// Check session status endpoint
+app.get('/api/auth/status', async (req, res) => {
+  try {
+    const sessionToken = req.cookies['sb-access-token'];
+
+    if (!sessionToken || !supabase) {
+      return res.json({ authenticated: false });
+    }
+
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(sessionToken);
+
+    if (error || !user) {
+      return res.json({ authenticated: false });
+    }
+
+    // Get user role from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      return res.json({ authenticated: false });
+    }
+
+    res.json({
+      authenticated: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: userData.role,
+        full_name: userData.full_name,
+      },
+    });
+  } catch (error) {
+    console.error('Session status check error:', error);
+    res.json({ authenticated: false });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    // Get the access token from cookie
+    const accessToken = req.cookies['sb-access-token'];
+
+    // If we have a token and supabase client, sign out from Supabase
+    if (accessToken && supabase) {
+      try {
+        await supabase.auth.signOut();
+        console.log('Successfully signed out from Supabase');
+      } catch (error) {
+        console.warn('Supabase signOut error (non-critical):', error);
+        // Continue with cookie cleanup even if Supabase signOut fails
+      }
+    }
+
+    // Clear all session cookies with proper options
+    const cookieOptions = {
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? undefined : undefined,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'strict') as
+        | 'none'
+        | 'strict',
+    };
+
+    res.clearCookie('sb-access-token', cookieOptions);
+    res.clearCookie('sb-refresh-token', cookieOptions);
+    res.clearCookie('supabase-auth-token', cookieOptions);
+
+    console.log('Session cookies cleared');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Still clear cookies even if there's an error
+    res.clearCookie('sb-access-token');
+    res.clearCookie('sb-refresh-token');
+    res.clearCookie('supabase-auth-token');
+    res.json({ success: true });
+  }
 });
 
 // ---------- Protected Routes ----------

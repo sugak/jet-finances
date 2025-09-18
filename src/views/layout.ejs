@@ -1007,6 +1007,20 @@
         return null;
       }
 
+      // Check session status - make it global
+      window.checkSessionStatus = async function() {
+        try {
+          const response = await fetch('/api/auth/status', {
+            credentials: 'include'
+          });
+          const data = await response.json();
+          return data;
+        } catch (error) {
+          console.error('Session status check failed:', error);
+          return { authenticated: false };
+        }
+      }
+
       // Make authenticated API request - make it global
       window.apiRequest = async function(url, options = {}) {
         console.log('apiRequest called with:', url);
@@ -1022,10 +1036,25 @@
         }
         
         console.log('Making request with headers:', headers);
-        return fetch(url, {
+        
+        const response = await fetch(url, {
           ...options,
-          headers
+          headers,
+          credentials: 'include' // Important: include cookies for session management
         });
+        
+        // If we get a 401, the session might be expired
+        if (response.status === 401) {
+          console.log('Received 401, checking session status...');
+          const sessionStatus = await checkSessionStatus();
+          if (!sessionStatus.authenticated) {
+            console.log('Session expired, redirecting to login...');
+            window.location.href = '/login';
+            return response;
+          }
+        }
+        
+        return response;
       }
 
       // Logout function - make it global
@@ -1033,9 +1062,16 @@
         console.log('Logout function called');
         try {
           console.log('Making logout request...');
-          const response = await apiRequest('/api/auth/logout', {
+          
+          // Use fetch directly to avoid potential issues with apiRequest
+          const response = await fetch('/api/auth/logout', {
             method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include', // Important: include cookies
           });
+          
           console.log('Logout response status:', response.status);
           console.log('Logout response ok:', response.ok);
           
@@ -1045,13 +1081,22 @@
             localStorage.clear();
             sessionStorage.clear();
             
+            // Force clear cookies on client side as well
+            document.cookie = 'sb-access-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            document.cookie = 'sb-refresh-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            document.cookie = 'supabase-auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            
             console.log('Redirecting to login page...');
             // Redirect to login page
             window.location.href = '/login';
           } else {
             console.error('Logout failed with status:', response.status);
-            const errorData = await response.json();
-            console.error('Logout error data:', errorData);
+            try {
+              const errorData = await response.json();
+              console.error('Logout error data:', errorData);
+            } catch (e) {
+              console.error('Could not parse error response');
+            }
             // Still redirect to login page
             window.location.href = '/login';
           }
