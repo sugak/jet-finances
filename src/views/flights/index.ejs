@@ -5,6 +5,55 @@
   </div>
 </div>
 
+<!-- Finance Cards -->
+<div class="finance-cards" id="stats-cards">
+  <div class="finance-card animation-delay-0">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--orange">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <div class="finance-card-info" style="flex: 1; display: flex; flex-direction: column;">
+        <h3 class="finance-card-title">Total Flights</h3>
+        <div class="finance-card-value-row" style="display: flex; justify-content: space-between; align-items: flex-end;">
+          <span class="finance-card-value" id="total-flights-value">0</span>
+          <div id="flights-year-details" style="display: none; text-align: right; font-size: 0.7rem; color: hsl(210, 6%, 46%); line-height: 1.3;">
+            <div>
+              <span id="flights-this-year">0</span> this year
+            </div>
+            <div>
+              <span id="flights-last-year">0</span> last year
+            </div>
+            <div id="flights-change" style="font-weight: 500; margin-top: 0.125rem;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-card animation-delay-100">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--blue">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Active Invoices</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value" id="active-invoices-value">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Flights Table -->
 <div class="table-container">
   <div class="table-card">
@@ -14,6 +63,10 @@
         <span class="table-subtitle">All scheduled and completed flights</span>
       </div>
       <div class="table-actions">
+        <a href="/flights/expenses" class="btn btn-primary" style="margin-right: 0.5rem;">
+          <i class="bi bi-airplane"></i>
+          Check flight expenses
+        </a>
         <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addFlightBtn">
           <i class="bi bi-plus-lg"></i>
@@ -129,6 +182,62 @@
 let flightsData = [];
 let currentSortOrder = 'desc';
 
+// Load statistics
+async function loadStats() {
+  try {
+    const response = await fetch('/api/dashboard/stats', {
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      const stats = await response.json();
+      
+      // Update Total Flights
+      const totalFlightsEl = document.getElementById('total-flights-value');
+      if (totalFlightsEl) {
+        totalFlightsEl.textContent = stats.flights_count || 0;
+      }
+
+      // Update year details
+      const flightsThisYearEl = document.getElementById('flights-this-year');
+      const flightsLastYearEl = document.getElementById('flights-last-year');
+      const flightsChangeEl = document.getElementById('flights-change');
+      const flightsYearDetailsEl = document.getElementById('flights-year-details');
+
+      if (flightsThisYearEl && flightsLastYearEl && flightsChangeEl && flightsYearDetailsEl) {
+        const thisYear = stats.flights_this_year || 0;
+        const lastYear = stats.flights_last_year || 0;
+        const changePercent = stats.flights_change_percent || 0;
+
+        flightsThisYearEl.textContent = thisYear;
+        flightsLastYearEl.textContent = lastYear;
+
+        if (changePercent !== 0) {
+          const isIncrease = changePercent > 0;
+          const sign = isIncrease ? '+' : '';
+          const color = isIncrease ? 'hsl(142, 76%, 36%)' : 'hsl(0, 84%, 60%)';
+          flightsChangeEl.innerHTML = `<span style="color: ${color};">${sign}${changePercent.toFixed(1)}%</span> vs last year`;
+        } else {
+          flightsChangeEl.innerHTML = '<span style="color: hsl(210, 6%, 46%);">No change</span>';
+        }
+
+        // Показываем детали только если есть данные
+        if (thisYear > 0 || lastYear > 0) {
+          flightsYearDetailsEl.style.display = 'block';
+        }
+      }
+      
+      // Update Active Invoices
+      const activeInvoicesEl = document.getElementById('active-invoices-value');
+      if (activeInvoicesEl) {
+        activeInvoicesEl.textContent = stats.invoices_pending || 0;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading stats:', error);
+  }
+}
+
 // Load flights data from API
 async function loadFlights() {
   try {
@@ -145,6 +254,9 @@ async function loadFlights() {
     
     flightsData = flights;
     renderFlights();
+    
+    // Update stats after loading flights
+    await loadStats();
   } catch (error) {
     console.error('Error loading flights:', error);
     console.error('Error details:', {
@@ -481,6 +593,8 @@ function validateTimeInput(input) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Load statistics
+  loadStats();
   // Load flights data
   loadFlights();
   

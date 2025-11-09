@@ -930,7 +930,7 @@ app.post('/api/auth/logout', async (req, res) => {
 
 // ---------- Protected Routes ----------
 app.get('/', authenticateSession, (_req, res) => {
-  res.render('dashboard/index', { title: 'Dashboard' });
+  res.redirect('/flights');
 });
 
 app.get('/transactions', (_req, res) => {
@@ -3242,6 +3242,9 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       total_revenue: 0,
       total_expenses: 0,
       flights_count: 0,
+      flights_this_year: 0,
+      flights_last_year: 0,
+      flights_change_percent: 0,
       invoices_pending: 0,
     };
 
@@ -3250,24 +3253,51 @@ app.get('/api/dashboard/stats', async (_req, res) => {
         // Получаем статистику из базы данных
         const [flightsResult, invoicesResult, expensesResult] =
           await Promise.all([
-            supabase.from('flights').select('revenue'),
-            supabase.from('invoices').select('amount, status'),
+            supabase.from('flights').select('*'),
+            supabase.from('invoices').select('*'),
             supabase.from('expenses').select('amount'),
           ]);
 
         if (!flightsResult.error) {
-          stats.flights_count = flightsResult.data?.length || 0;
-          stats.total_revenue =
-            flightsResult.data?.reduce(
-              (sum, flight) => sum + (flight.revenue || 0),
-              0
-            ) || 0;
+          const flights = flightsResult.data || [];
+          stats.flights_count = flights.length;
+
+          // Подсчитываем рейсы по годам
+          const currentYear = new Date().getFullYear();
+          const previousYear = currentYear - 1;
+
+          stats.flights_this_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === currentYear;
+            }).length || 0;
+
+          stats.flights_last_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === previousYear;
+            }).length || 0;
+
+          // Вычисляем процент изменения
+          if (stats.flights_last_year > 0) {
+            stats.flights_change_percent =
+              ((stats.flights_this_year - stats.flights_last_year) /
+                stats.flights_last_year) *
+              100;
+          } else {
+            stats.flights_change_percent =
+              stats.flights_this_year > 0 ? 100 : 0;
+          }
         }
 
         if (!invoicesResult.error) {
+          // Считаем активные инвойсы (не заполненные или не оспоренные)
           stats.invoices_pending =
-            invoicesResult.data?.filter(inv => inv.status === 'pending')
-              .length || 0;
+            invoicesResult.data?.filter(
+              inv => !inv.inv_filled || inv.inv_disputed
+            ).length || 0;
         }
 
         if (!expensesResult.error) {
@@ -3284,6 +3314,9 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           total_revenue: 5300,
           total_expenses: 20500,
           flights_count: 2,
+          flights_this_year: 1,
+          flights_last_year: 1,
+          flights_change_percent: 0,
           invoices_pending: 1,
         };
       }
