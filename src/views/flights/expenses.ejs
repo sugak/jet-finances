@@ -70,8 +70,41 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  // Устанавливаем правильный top для заголовка таблицы
+  updateTableHeaderPosition();
   loadFlightExpenses();
 });
+
+function updateTableHeaderPosition() {
+  const header = document.querySelector('.header');
+  const pageHeader = document.querySelector('.page-header');
+  const tableHeaders = document.querySelectorAll('.flight-expenses-table th');
+  
+  if (header && pageHeader && tableHeaders.length > 0) {
+    const headerHeight = header.offsetHeight;
+    const pageHeaderHeight = pageHeader.offsetHeight;
+    const totalHeight = headerHeight + pageHeaderHeight;
+    
+    // Устанавливаем top для каждого заголовка таблицы
+    tableHeaders.forEach(th => {
+      th.style.top = totalHeight + 'px';
+    });
+    
+    // Также обновляем при изменении размера окна
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(function() {
+        const newHeaderHeight = header.offsetHeight;
+        const newPageHeaderHeight = pageHeader.offsetHeight;
+        const newTotalHeight = newHeaderHeight + newPageHeaderHeight;
+        tableHeaders.forEach(th => {
+          th.style.top = newTotalHeight + 'px';
+        });
+      }, 100);
+    });
+  }
+}
 
 async function loadFlightExpenses() {
   try {
@@ -95,6 +128,9 @@ async function loadFlightExpenses() {
     
     // Populate table
     populateExpensesTable(groupedFlights);
+    
+    // Обновляем позицию заголовка таблицы после загрузки данных
+    setTimeout(updateTableHeaderPosition, 100);
     
   } catch (error) {
     console.error('Error loading flight expenses:', error);
@@ -411,6 +447,16 @@ function convertToUSD(amount, currency) {
   background-color: hsl(210, 11%, 96%) !important;
 }
 
+.page-header {
+  position: sticky !important;
+  top: 4rem !important;
+  z-index: 90 !important;
+  background-color: hsl(210, 11%, 98%) !important;
+  padding: 1rem 0 !important;
+  margin-bottom: 1rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+}
+
 .flight-expenses-table th {
   padding: 0.4rem 0.4rem !important;
   text-align: left !important;
@@ -422,8 +468,9 @@ function convertToUSD(amount, currency) {
   line-height: 1.2 !important;
   font-size: 0.65rem !important;
   position: sticky !important;
-  top: 0 !important;
-  z-index: 10 !important;
+  top: 0 !important; /* Будет установлено динамически через JavaScript */
+  z-index: 50 !important;
+  background-color: hsl(210, 11%, 96%) !important;
 }
 
 .flight-expenses-table td {

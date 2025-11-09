@@ -1155,23 +1155,162 @@ app.get('/logs', async (req, res) => {
         title: 'Logs',
         logs: [],
         error: 'Database not available',
+        months: [],
+        selectedPeriod: null,
       });
     }
 
-    const { data: logs, error } = await supabase
+    const { data: monthsRaw, error: monthsError } = await supabase
       .from('activity_logs')
-      .select('*')
+      .select('created_at')
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(5000);
 
-    if (error) {
-      console.error('Error loading logs:', error);
+    if (monthsError) {
+      console.error('Error fetching log periods:', monthsError);
+    }
+
+    const months: { key: string; label: string }[] = [];
+    const seenMonths = new Set<string>();
+    const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+      month: 'long',
+      year: 'numeric',
+    });
+
+    if (monthsRaw) {
+      monthsRaw.forEach(entry => {
+        if (!entry.created_at) {
+          return;
+        }
+
+        const date = new Date(entry.created_at as string);
+        if (Number.isNaN(date.getTime())) {
+          return;
+        }
+
+        const key = `${date.getFullYear()}-${(date.getMonth() + 1)
+          .toString()
+          .padStart(2, '0')}`;
+
+        if (!seenMonths.has(key)) {
+          seenMonths.add(key);
+          months.push({ key, label: dateFormatter.format(date) });
+        }
+      });
+    }
+
+    const requestedPeriod =
+      typeof req.query.period === 'string' &&
+      /^\d{4}-\d{2}$/.test(req.query.period)
+        ? req.query.period
+        : null;
+
+    let selectedPeriod = requestedPeriod;
+
+    if (!selectedPeriod) {
+      selectedPeriod = months.length > 0 ? months[0].key : null;
+    }
+
+    if (
+      selectedPeriod &&
+      !months.some(month => month.key === selectedPeriod) &&
+      /^\d{4}-\d{2}$/.test(selectedPeriod)
+    ) {
+      const [yearStr, monthStr] = selectedPeriod.split('-');
+      const year = Number.parseInt(yearStr, 10);
+      const monthIndex = Number.parseInt(monthStr, 10) - 1;
+
+      if (Number.isFinite(year) && Number.isFinite(monthIndex)) {
+        const customDate = new Date(Date.UTC(year, monthIndex, 1));
+        months.push({
+          key: selectedPeriod,
+          label: dateFormatter.format(customDate),
+        });
+      }
+    }
+
+    if (months.length > 1) {
+      // Сортируем месяцы по убыванию (новые первыми)
+      months.sort((a, b) => {
+        if (a.key < b.key) return 1;
+        if (a.key > b.key) return -1;
+        return 0;
+      });
+    }
+
+    let logs: any[] = [];
+
+    if (selectedPeriod) {
+      const [yearStr, monthStr] = selectedPeriod.split('-');
+      const year = Number.parseInt(yearStr, 10);
+      const monthIndex = Number.parseInt(monthStr, 10) - 1;
+
+      if (Number.isFinite(year) && Number.isFinite(monthIndex)) {
+        // Создаем даты в UTC для начала и конца месяца
+        // Начало месяца: 1-е число в 00:00:00 UTC
+        const startDate = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0));
+        // Конец месяца: 1-е число следующего месяца в 00:00:00 UTC
+        const endDate = new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0));
+
+        // Форматируем даты для Supabase (ISO формат)
+        const startDateISO = startDate.toISOString();
+        const endDateISO = endDate.toISOString();
+
+        console.log('Filtering logs for period:', {
+          selectedPeriod,
+          year,
+          monthIndex: monthIndex + 1,
+          startDate: startDateISO,
+          endDate: endDateISO,
+        });
+
+        // Используем строковое сравнение для фильтрации по дате
+        // Формат: YYYY-MM-DD для начала месяца и YYYY-MM-DD для конца месяца
+        const startDateStr = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-01`;
+        const endDateStr =
+          monthIndex === 11
+            ? `${year + 1}-01-01`
+            : `${year}-${(monthIndex + 2).toString().padStart(2, '0')}-01`;
+
+        console.log('Using date string filtering:', {
+          startDateStr,
+          endDateStr,
+          startDateISO,
+          endDateISO,
+        });
+
+        // Пробуем оба способа фильтрации
+        let query = supabase
+          .from('activity_logs')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        // Используем ISO формат для фильтрации
+        query = query
+          .gte('created_at', startDateISO)
+          .lt('created_at', endDateISO);
+
+        const { data: logsData, error: logsError } = await query;
+
+        if (logsError) {
+          console.error('Error loading logs:', logsError);
+          console.error('Error details:', logsError);
+        } else {
+          console.log(
+            `Loaded ${logsData?.length || 0} logs for period ${selectedPeriod}`
+          );
+        }
+
+        logs = logsData || [];
+      }
     }
 
     res.render('logs/index', {
       title: 'Logs',
-      logs: logs || [],
+      logs,
       error: null,
+      months,
+      selectedPeriod,
     });
   } catch (error) {
     console.error('Error loading logs page:', error);
@@ -1179,6 +1318,8 @@ app.get('/logs', async (req, res) => {
       title: 'Logs',
       logs: [],
       error: 'Error loading logs',
+      months: [],
+      selectedPeriod: null,
     });
   }
 });

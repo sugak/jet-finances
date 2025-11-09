@@ -35,9 +35,9 @@
             <th class="checkbox-col">
               <input type="checkbox" class="form-check-input" id="selectAll">
             </th>
-            <th class="sortable">
+            <th class="sortable" id="dateSortHeader">
               DATE
-              <i class="bi bi-chevron-down sort-icon"></i>
+              <i class="bi bi-chevron-up sort-icon" id="dateSortIcon"></i>
             </th>
             <th class="sortable">
               FLIGHT NO
@@ -126,6 +126,9 @@
               </div>
 
 <script>
+let flightsData = [];
+let currentSortOrder = 'desc';
+
 // Load flights data from API
 async function loadFlights() {
   try {
@@ -134,158 +137,14 @@ async function loadFlights() {
     const flights = await response.json();
     console.log('Flights API response data:', flights);
     
-    const tbody = document.getElementById('flights-table-body');
-    tbody.innerHTML = '';
-    
     // Check if flights is an array
     if (!Array.isArray(flights)) {
       console.error('Flights data is not an array:', flights);
       throw new Error('Invalid flights data format');
     }
     
-    // Flights are already sorted logically by the server
-    
-    // Group flights by month
-    const groupedFlights = {};
-    flights.forEach(flight => {
-      const date = new Date(flight.flt_date);
-      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-      
-      if (!groupedFlights[monthKey]) {
-        groupedFlights[monthKey] = {
-          month: date.getMonth(),
-          year: date.getFullYear(),
-          flights: []
-        };
-      }
-      groupedFlights[monthKey].flights.push(flight);
-    });
-    
-    // Sort months (oldest first) - proper numeric sorting
-    const sortedMonths = Object.keys(groupedFlights).sort((a, b) => {
-      const [yearA, monthA] = a.split('-').map(Number);
-      const [yearB, monthB] = b.split('-').map(Number);
-      
-      // First compare years, then months
-      if (yearA !== yearB) {
-        return yearA - yearB; // Oldest year first
-      }
-      return monthA - monthB; // Oldest month first within same year
-    });
-    
-    sortedMonths.forEach(monthKey => {
-      const monthData = groupedFlights[monthKey];
-      
-      // Add month separator
-      const monthRow = document.createElement('tr');
-      const monthName = new Date(monthData.year, monthData.month).toLocaleDateString('en-US', { 
-        month: 'long', 
-        year: 'numeric' 
-      });
-      monthRow.innerHTML = `
-        <td colspan="8" class="month-separator">
-          <div class="month-divider">
-            <span class="month-label">${monthName}</span>
-              </div>
-            </td>
-      `;
-      tbody.appendChild(monthRow);
-      
-      // Add flights for this month
-      monthData.flights.forEach(flight => {
-        const row = document.createElement('tr');
-        
-        // Format date
-        const date = new Date(flight.flt_date);
-        const formattedDate = date.toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric' 
-        });
-        
-        // Format route: flt_dep - flt_arr
-        const route = `${flight.flt_dep} - ${flight.flt_arr}`;
-        
-        // Format time (convert from HH:MM:SS to HH:MM format)
-        const formatTime = (timeString) => {
-          const [hours, minutes] = timeString.split(':');
-          return `${hours}:${minutes}`;
-        };
-        
-        row.innerHTML = `
-            <td class="checkbox-col">
-              <input type="checkbox" class="form-check-input">
-            </td>
-            <td>
-            <div class="date-badge">${formattedDate}</div>
-            </td>
-            <td>
-            <div class="flight-number">${flight.flt_number}</div>
-            </td>
-            <td>
-              <div class="route-info">
-              <div class="route-main">${route}</div>
-              </div>
-            </td>
-            <td>
-              <div class="time-info">
-              <div class="time-main">${formatTime(flight.flt_time)}</div>
-              </div>
-            </td>
-            <td>
-              <div class="time-info">
-              <div class="time-main">${formatTime(flight.flt_block)}</div>
-              </div>
-            </td>
-            <td>
-              <div class="comments-info">
-              <div class="comments-main ${!flight.flt_comments ? 'comments-empty' : ''}">${flight.flt_comments || 'n/a'}</div>
-              </div>
-            </td>
-            <td>
-              <div class="action-buttons">
-              <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}">
-                  <i class="bi bi-eye"></i>
-                </button>
-              <% if (user && user.role === 'superadmin') { %>
-              <button class="btn-action" title="Edit" data-action="edit" data-id="${flight.id}">
-                  <i class="bi bi-pencil"></i>
-                </button>
-              <button class="btn-action" title="Delete" data-action="delete" data-id="${flight.id}">
-                  <i class="bi bi-trash"></i>
-                </button>
-              <% } else { %>
-              <span class="text-muted" style="font-size: 0.75rem;">Read Only</span>
-              <% } %>
-              </div>
-          </td>
-        `;
-        
-        // Add event listeners for action buttons
-        const actionButtons = row.querySelectorAll('.btn-action');
-        actionButtons.forEach(button => {
-          button.addEventListener('click', function(e) {
-            e.stopPropagation(); // Prevent any parent click handlers
-            const action = this.getAttribute('data-action');
-            const id = this.getAttribute('data-id');
-            
-            switch(action) {
-              case 'view':
-                viewFlight(id);
-                break;
-              case 'edit':
-                editFlight(id);
-                break;
-              case 'delete':
-                deleteFlight(id);
-                break;
-            }
-          });
-        });
-        
-        tbody.appendChild(row);
-      });
-    });
+    flightsData = flights;
+    renderFlights();
   } catch (error) {
     console.error('Error loading flights:', error);
     console.error('Error details:', {
@@ -305,6 +164,191 @@ async function loadFlights() {
         </td>
       </tr>
     `;
+  }
+}
+
+function renderFlights() {
+  const tbody = document.getElementById('flights-table-body');
+
+  if (!tbody) {
+    return;
+  }
+
+  tbody.innerHTML = '';
+
+  if (!Array.isArray(flightsData) || flightsData.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">
+          <i class="bi bi-info-circle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+          No flights available.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const sortedFlights = [...flightsData].sort((a, b) => {
+    const dateA = new Date(a.flt_date).getTime();
+    const dateB = new Date(b.flt_date).getTime();
+
+    return currentSortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+  });
+
+  const monthGroups = [];
+  let currentGroupKey = null;
+  let currentGroup = null;
+
+  sortedFlights.forEach(flight => {
+    const date = new Date(flight.flt_date);
+    const monthKey = `${date.getFullYear()}-${date.getMonth().toString().padStart(2, '0')}`;
+
+    if (!currentGroup || currentGroupKey !== monthKey) {
+      currentGroupKey = monthKey;
+      currentGroup = {
+        label: date.toLocaleDateString('en-US', {
+          month: 'long',
+          year: 'numeric'
+        }),
+        flights: []
+      };
+      monthGroups.push(currentGroup);
+    }
+
+    currentGroup.flights.push(flight);
+  });
+
+  monthGroups.forEach(group => {
+    const monthRow = document.createElement('tr');
+    monthRow.innerHTML = `
+      <td colspan="8" class="month-separator">
+        <div class="month-divider">
+          <span class="month-label">${group.label}</span>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(monthRow);
+
+    const getCreatedTimestamp = flight => {
+      const raw = flight.created_at || flight.inserted_at || flight.flt_created_at || flight.flt_updated_at || flight.flt_date;
+      const timestamp = raw ? new Date(raw).getTime() : 0;
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
+    group.flights
+      .slice()
+      .sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a))
+      .forEach(flight => {
+      const row = document.createElement('tr');
+
+      const date = new Date(flight.flt_date);
+      const formattedDate = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+
+      const route = `${flight.flt_dep} - ${flight.flt_arr}`;
+
+      const formatTime = timeString => {
+        if (!timeString) {
+          return '00:00';
+        }
+
+        const [hours, minutes] = timeString.split(':');
+        return `${hours}:${minutes}`;
+      };
+
+      row.innerHTML = `
+        <td class="checkbox-col">
+          <input type="checkbox" class="form-check-input">
+        </td>
+        <td>
+          <div class="date-badge">${formattedDate}</div>
+        </td>
+        <td>
+          <div class="flight-number">${flight.flt_number}</div>
+        </td>
+        <td>
+          <div class="route-info">
+            <div class="route-main">${route}</div>
+          </div>
+        </td>
+        <td>
+          <div class="time-info">
+            <div class="time-main">${formatTime(flight.flt_time)}</div>
+          </div>
+        </td>
+        <td>
+          <div class="time-info">
+            <div class="time-main">${formatTime(flight.flt_block)}</div>
+          </div>
+        </td>
+        <td>
+          <div class="comments-info">
+            <div class="comments-main ${!flight.flt_comments ? 'comments-empty' : ''}">${flight.flt_comments || 'n/a'}</div>
+          </div>
+        </td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}">
+              <i class="bi bi-eye"></i>
+            </button>
+            <% if (user && user.role === 'superadmin') { %>
+            <button class="btn-action" title="Edit" data-action="edit" data-id="${flight.id}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn-action" title="Delete" data-action="delete" data-id="${flight.id}">
+              <i class="bi bi-trash"></i>
+            </button>
+            <% } else { %>
+            <span class="text-muted" style="font-size: 0.75rem;">Read Only</span>
+            <% } %>
+          </div>
+        </td>
+      `;
+
+      const actionButtons = row.querySelectorAll('.btn-action');
+      actionButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const action = this.getAttribute('data-action');
+          const id = this.getAttribute('data-id');
+
+          switch (action) {
+            case 'view':
+              viewFlight(id);
+              break;
+            case 'edit':
+              editFlight(id);
+              break;
+            case 'delete':
+              deleteFlight(id);
+              break;
+          }
+        });
+      });
+
+      tbody.appendChild(row);
+      });
+  });
+
+  updateSortIcon();
+}
+
+function updateSortIcon() {
+  const sortIcon = document.getElementById('dateSortIcon');
+
+  if (!sortIcon) {
+    return;
+  }
+
+  sortIcon.classList.remove('bi-chevron-up', 'bi-chevron-down');
+
+  if (currentSortOrder === 'asc') {
+    sortIcon.classList.add('bi-chevron-down');
+  } else {
+    sortIcon.classList.add('bi-chevron-up');
   }
 }
 
@@ -450,6 +494,14 @@ document.addEventListener('DOMContentLoaded', function() {
   if (addFlightBtn) {
     addFlightBtn.addEventListener('click', openAddFlightModal);
     console.log('Add Flight button event listener added');
+  }
+  
+  const dateSortHeader = document.getElementById('dateSortHeader');
+  if (dateSortHeader) {
+    dateSortHeader.addEventListener('click', () => {
+      currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+      renderFlights();
+    });
   }
   
   const closeModalBtn = document.getElementById('closeModalBtn');
