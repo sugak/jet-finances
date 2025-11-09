@@ -13,6 +13,10 @@
         <span class="table-subtitle">All operational expenses and cost records</span>
       </div>
       <div class="table-actions">
+        <a href="/expenses/report" class="btn btn-primary" style="margin-right: 0.5rem;">
+          <i class="bi bi-file-earmark-text"></i>
+          Expenses report
+        </a>
         <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addExpenseBtn">
           <i class="bi bi-plus-lg"></i>

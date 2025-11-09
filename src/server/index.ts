@@ -991,6 +991,10 @@ app.get('/expenses', authenticateSession, (_req, res) => {
   res.render('expenses/index', { title: 'Expenses' });
 });
 
+app.get('/expenses/report', authenticateSession, (_req, res) => {
+  res.render('expenses/report', { title: 'Expenses Report' });
+});
+
 // Settings route - simple version
 app.get('/settings', authenticateSession, (_req, res) => {
   res.render('settings/index', { title: 'Settings' });
@@ -2332,14 +2336,16 @@ app.get('/api/expenses', async (_req, res) => {
         .from('expenses')
         .select(
           `
-          *,
-          invoices!exp_invoice (
-            inv_number
-          ),
-          flights!exp_flight (
-            flt_number
-          )
-        `
+                 *,
+                 invoices!exp_invoice (
+                   id,
+                   inv_number
+                 ),
+                 flights!exp_flight (
+                   flt_number,
+                   flt_date
+                 )
+               `
         )
         .order('id', { ascending: false });
 
