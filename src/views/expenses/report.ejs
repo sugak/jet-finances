@@ -64,12 +64,11 @@
 <script>
 // Currency conversion rates
 // AED_TO_USD: 3.6735 means 1 USD = 3.6735 AED, so 1 AED = 1/3.6735 USD ≈ 0.2722 USD
-// AED_TO_EUR: 4.3002 means 1 EUR = 4.3002 AED, so 1 AED = 1/4.3002 EUR ≈ 0.2325 EUR
-// From this: 1 EUR = 4.3002 / 3.6735 USD ≈ 1.1705 USD, so 1 USD = 1/1.1705 EUR ≈ 0.8545 EUR
+// AED_TO_EUR: 4.3119 means 1 EUR = 4.3119 AED, so 1 AED = 1/4.3119 EUR ≈ 0.2319 EUR
+// EUR conversions always go through AED (not directly to USD)
 const CURRENCY_RATES = {
   AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
-  AED_TO_EUR: 4.3002, // 1 EUR = 4.3002 AED
-  EUR_TO_USD: 1.1705, // 1 EUR = 1.1705 USD (calculated: 4.3002 / 3.6735)
+  AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
 };
 
 // Expense categories
@@ -96,18 +95,43 @@ const FLIGHT_CATEGORIES = [
 ];
 
 // Convert amount to target currency
+// EUR conversions always go through AED (not directly to USD)
 function convertCurrency(amount, fromCurrency, toCurrency) {
   if (!amount || !fromCurrency || !toCurrency) return 0;
   if (fromCurrency === toCurrency) return amount;
 
-  // Convert to USD first, then to target
+  // Handle EUR conversions - always through AED
+  if (fromCurrency === 'EUR') {
+    // EUR → AED: 1 EUR = 4.3119 AED
+    const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
+    
+    if (toCurrency === 'AED') {
+      return amountInAED;
+    } else if (toCurrency === 'USD') {
+      // EUR → AED → USD: 1 AED = 1/3.6735 USD
+      return amountInAED / CURRENCY_RATES.AED_TO_USD;
+    }
+  }
+  
+  if (toCurrency === 'EUR') {
+    // Convert to AED first, then to EUR
+    let amountInAED = 0;
+    if (fromCurrency === 'USD') {
+      // USD → AED: 1 USD = 3.6735 AED
+      amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+    } else if (fromCurrency === 'AED') {
+      amountInAED = amount;
+    }
+    // AED → EUR: 1 AED = 1/4.3119 EUR
+    return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+  }
+
+  // For non-EUR conversions, convert through USD
+  // Convert to USD first
   let amountInUSD = amount;
   if (fromCurrency === 'AED') {
-    // 1 AED = 1/3.6735 USD (AED is cheaper than USD)
+    // 1 AED = 1/3.6735 USD
     amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
-  } else if (fromCurrency === 'EUR') {
-    // 1 EUR = 1.1705 USD (EUR is more expensive than USD)
-    amountInUSD = amount * CURRENCY_RATES.EUR_TO_USD;
   }
 
   // Convert from USD to target
@@ -116,89 +140,91 @@ function convertCurrency(amount, fromCurrency, toCurrency) {
   } else if (toCurrency === 'AED') {
     // 1 USD = 3.6735 AED
     return amountInUSD * CURRENCY_RATES.AED_TO_USD;
-  } else if (toCurrency === 'EUR') {
-    // 1 USD = 1/1.1705 EUR ≈ 0.8545 EUR
-    return amountInUSD / CURRENCY_RATES.EUR_TO_USD;
   }
 
   return amount;
 }
 
-// Get expense category with subtype
-function getExpenseCategory(expense) {
+// Get base expense category (without subtype) - for table display
+function getBaseExpenseCategory(expense) {
   const type = (expense.exp_type || '').toLowerCase();
-  const subtype = (expense.exp_subtype || '').trim();
 
   // Check for non-flight categories
   if (type === 'camo and management' || (type.includes('camo') && type.includes('management'))) {
-    return subtype ? `CAMO and Management - ${subtype}` : 'CAMO and Management';
+    return 'CAMO and Management';
   }
   if (type === 'crew') {
-    return subtype ? `Crew - ${subtype}` : 'Crew';
+    return 'Crew';
   }
   if (type === 'disbursement fee' || type.includes('disbursement')) {
-    return subtype ? `Disbursement fee - ${subtype}` : 'Disbursement fee';
+    return 'Disbursement fee';
   }
   if (type === 'insurance charge' || type.includes('insurance')) {
-    return subtype ? `Insurance charge - ${subtype}` : 'Insurance charge';
+    return 'Insurance charge';
   }
   if (type === 'maintenance') {
-    return subtype ? `Maintenance - ${subtype}` : 'Maintenance';
+    return 'Maintenance';
   }
   if (type === 'subscriptions' || type.includes('subscription')) {
-    return subtype ? `Subscriptions - ${subtype}` : 'Subscriptions';
+    return 'Subscriptions';
   }
   if (type === 'falconcare' || type.includes('falconcare') || type.includes('falcon care')) {
-    return subtype ? `FalconCare - ${subtype}` : 'FalconCare';
+    return 'FalconCare';
   }
   if (type === 'honeywell') {
-    return subtype ? `Honeywell - ${subtype}` : 'Honeywell';
+    return 'Honeywell';
   }
   
   // Check for flight categories
   if (type === 'ground handling' || type.includes('ground handling') || type.includes('groundhandling')) {
-    return subtype ? `Ground handling - ${subtype}` : 'Ground handling';
+    return 'Ground handling';
   }
   if (type === 'fuel') {
-    return subtype ? `Fuel - ${subtype}` : 'Fuel';
+    return 'Fuel';
   }
   if (type === 'navigation charges' || type.includes('navigation') || type.includes('enroute')) {
-    return subtype ? `Navigation charges - ${subtype}` : 'Navigation charges';
+    return 'Navigation charges';
   }
   if (type === 'overfly charges' || type.includes('overfly') || type.includes('overflight')) {
-    return subtype ? `Overfly charges - ${subtype}` : 'Overfly charges';
+    return 'Overfly charges';
   }
   if (type === 'catering' || type.includes('catering') || type.includes('food')) {
-    return subtype ? `Catering - ${subtype}` : 'Catering';
+    return 'Catering';
   }
   if (type === 'flight planning' || type.includes('flight planning') || type.includes('flightplanning')) {
-    return subtype ? `Flight planning - ${subtype}` : 'Flight planning';
+    return 'Flight planning';
   }
   
   // Check for Other charges - determine by flight association
   if (type === 'other charges' || type.includes('other charges')) {
-    // If it has flight association, it's flight-related
-    if (expense.exp_flight) {
-      return subtype ? `Other charges - ${subtype}` : 'Other charges'; // Flight-related
-    }
-    return subtype ? `Other charges - ${subtype}` : 'Other charges'; // Non-flight
+    return 'Other charges';
   }
 
   // Return null if not in any category
   return null;
 }
 
-// Check if expense is non-flight related
-function isNonFlightExpense(expense) {
-  const category = getExpenseCategory(expense);
+// Get expense category with subtype - for modal display
+function getExpenseCategory(expense) {
+  const type = (expense.exp_type || '').toLowerCase();
+  const subtype = (expense.exp_subtype || '').trim();
+  const baseCategory = getBaseExpenseCategory(expense);
   
-  // If category is null, expense doesn't belong to any group - skip it
-  if (category === null) {
+  if (baseCategory === null) {
     return null;
   }
   
-  // Extract base category (without subtype)
-  const baseCategory = category.split(' - ')[0];
+  return subtype ? `${baseCategory} - ${subtype}` : baseCategory;
+}
+
+// Check if expense is non-flight related
+function isNonFlightExpense(expense) {
+  const baseCategory = getBaseExpenseCategory(expense);
+  
+  // If category is null, expense doesn't belong to any group - skip it
+  if (baseCategory === null) {
+    return null;
+  }
   
   // Check if base category is in non-flight list
   return NON_FLIGHT_CATEGORIES.includes(baseCategory);
@@ -304,6 +330,9 @@ async function loadExpensesReport() {
     // Hide loading spinner and show content
     document.getElementById('loading-spinner').style.display = 'none';
     document.getElementById('content-container').style.display = 'block';
+    
+    // Update table header position after content is shown
+    setTimeout(updateTableHeaderPosition, 100);
   } catch (error) {
     console.error('Error loading expenses report:', error);
     document.getElementById('loading-spinner').innerHTML = `
@@ -330,18 +359,18 @@ function processExpensesData(expenses) {
   };
 
   for (const expense of expenses) {
-    const category = getExpenseCategory(expense);
+    const baseCategory = getBaseExpenseCategory(expense);
     
     // Skip expenses that don't belong to any category
-    if (category === null) {
+    if (baseCategory === null) {
       continue;
     }
 
     const isNonFlight = isNonFlightExpense(expense);
     const group = isNonFlight ? categoryGroups.nonFlight : categoryGroups.flight;
 
-    if (!group[category]) {
-      group[category] = {};
+    if (!group[baseCategory]) {
+      group[baseCategory] = {};
     }
 
     const months = splitExpenseByMonths(expense);
@@ -351,12 +380,12 @@ function processExpensesData(expenses) {
         expensesByMonth[monthKey] = {};
       }
 
-      if (!group[category][monthKey]) {
-        group[category][monthKey] = { USD: 0, AED: 0 };
+      if (!group[baseCategory][monthKey]) {
+        group[baseCategory][monthKey] = { USD: 0, AED: 0 };
       }
 
-      // Store expense details for this cell
-      const detailKey = `${category}_${monthKey}`;
+      // Store expense details for this cell (using base category for table, but store full category for modal)
+      const detailKey = `${baseCategory}_${monthKey}`;
       if (!expenseDetailsMap[detailKey]) {
         expenseDetailsMap[detailKey] = [];
       }
@@ -374,7 +403,7 @@ function processExpensesData(expenses) {
       });
       
       console.log(`Stored expense for ${detailKey}:`, {
-        category,
+        baseCategory,
         monthKey,
         currency,
         monthlyAmount,
@@ -383,27 +412,27 @@ function processExpensesData(expenses) {
 
       // Add amount in original currency and convert to fill both columns
       if (currency === 'USD') {
-        group[category][monthKey].USD += amount;
+        group[baseCategory][monthKey].USD += amount;
         // Convert USD to AED
         const aedAmount = convertCurrency(amount, 'USD', 'AED');
-        group[category][monthKey].AED += aedAmount;
+        group[baseCategory][monthKey].AED += aedAmount;
       } else if (currency === 'AED') {
-        group[category][monthKey].AED += amount;
+        group[baseCategory][monthKey].AED += amount;
         // Convert AED to USD
         const usdAmount = convertCurrency(amount, 'AED', 'USD');
-        group[category][monthKey].USD += usdAmount;
+        group[baseCategory][monthKey].USD += usdAmount;
       } else if (currency === 'EUR') {
         // Convert EUR to USD and AED
         const usdAmount = convertCurrency(amount, 'EUR', 'USD');
         const aedAmount = convertCurrency(amount, 'EUR', 'AED');
-        group[category][monthKey].USD += usdAmount;
-        group[category][monthKey].AED += aedAmount;
+        group[baseCategory][monthKey].USD += usdAmount;
+        group[baseCategory][monthKey].AED += aedAmount;
       } else {
         // Unknown currency, try to convert to USD and AED
         const usdAmount = convertCurrency(amount, currency, 'USD');
         const aedAmount = convertCurrency(amount, currency, 'AED');
-        group[category][monthKey].USD += usdAmount;
-        group[category][monthKey].AED += aedAmount;
+        group[baseCategory][monthKey].USD += usdAmount;
+        group[baseCategory][monthKey].AED += aedAmount;
       }
     }
   }
@@ -501,8 +530,9 @@ function renderExpensesReportTable(categoryGroups, months) {
   categoryHeader.rowSpan = 2;
   categoryHeader.style.position = 'sticky';
   categoryHeader.style.left = '0';
-  categoryHeader.style.zIndex = '60';
+  categoryHeader.style.zIndex = '70';
   categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
+  categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
   headerRow.appendChild(categoryHeader);
 
   // Add month columns with USD and AED subcolumns
@@ -535,6 +565,8 @@ function renderExpensesReportTable(categoryGroups, months) {
     usdHeader.style.textAlign = 'center';
     usdHeader.style.minWidth = '120px';
     usdHeader.style.width = '120px';
+    usdHeader.style.position = 'sticky';
+    usdHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     // Add border-left for all months except the first
     if (monthIndex > 0) {
       usdHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -546,48 +578,27 @@ function renderExpensesReportTable(categoryGroups, months) {
     aedHeader.style.textAlign = 'center';
     aedHeader.style.minWidth = '120px';
     aedHeader.style.width = '120px';
+    aedHeader.style.position = 'sticky';
+    aedHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     subHeaderRow.appendChild(aedHeader);
   });
 
   thead.appendChild(subHeaderRow);
 
-  // Render Non-flight-related costs
-  const nonFlightGroupHeader = document.createElement('tr');
-  nonFlightGroupHeader.className = 'group-header';
-  const nonFlightGroupCell = document.createElement('td');
-  nonFlightGroupCell.colSpan = months.length * 2 + 1;
-  nonFlightGroupCell.textContent = 'Non–flight-related costs';
-  nonFlightGroupCell.style.fontWeight = 'bold';
-  nonFlightGroupCell.style.backgroundColor = 'hsl(210, 11%, 96%)';
-  nonFlightGroupHeader.appendChild(nonFlightGroupCell);
-  tbody.appendChild(nonFlightGroupHeader);
-
-  // Sort categories: first by base category, then by subtype
-  const sortedNonFlightCategories = Object.keys(categoryGroups.nonFlight).sort((a, b) => {
-    const baseA = a.split(' - ')[0];
-    const baseB = b.split(' - ')[0];
-    if (baseA !== baseB) {
-      return baseA.localeCompare(baseB);
-    }
-    return a.localeCompare(b);
-  });
+  // Sort categories alphabetically
+  const sortedNonFlightCategories = Object.keys(categoryGroups.nonFlight).sort();
 
   sortedNonFlightCategories.forEach(category => {
     const row = document.createElement('tr');
     const categoryCell = document.createElement('td');
     
-    // Format category display: show base category and subtype separately
-    const parts = category.split(' - ');
-    if (parts.length > 1) {
-      categoryCell.innerHTML = `<div style="font-weight: 500;">${parts[0]}</div><div style="font-size: 0.75rem; color: hsl(210, 6%, 46%); margin-top: 0.125rem;">${parts[1]}</div>`;
-    } else {
-      categoryCell.textContent = category;
-      categoryCell.style.fontWeight = '500';
-    }
+    // Display only base category (no subtype in table)
+    categoryCell.textContent = category;
+    categoryCell.style.fontWeight = '500';
     
     categoryCell.style.position = 'sticky';
     categoryCell.style.left = '0';
-    categoryCell.style.zIndex = '40';
+    categoryCell.style.zIndex = '50';
     categoryCell.style.backgroundColor = 'white';
     categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
     row.appendChild(categoryCell);
@@ -604,10 +615,9 @@ function renderExpensesReportTable(categoryGroups, months) {
       if (monthIndex > 0) {
         usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
       }
-      if (data.USD > 0) {
+      if (data.USD > 0 || data.AED > 0) {
         usdCell.style.cursor = 'pointer';
         usdCell.style.color = 'hsl(210, 76%, 36%)';
-        usdCell.style.textDecoration = 'underline';
         usdCell.title = 'Click to view details';
         usdCell.addEventListener('click', function(e) {
           e.preventDefault();
@@ -622,10 +632,9 @@ function renderExpensesReportTable(categoryGroups, months) {
       aedCell.style.textAlign = 'right';
       aedCell.style.minWidth = '120px';
       aedCell.style.width = '120px';
-      if (data.AED > 0) {
+      if (data.USD > 0 || data.AED > 0) {
         aedCell.style.cursor = 'pointer';
         aedCell.style.color = 'hsl(210, 76%, 36%)';
-        aedCell.style.textDecoration = 'underline';
         aedCell.title = 'Click to view details';
         aedCell.addEventListener('click', function(e) {
           e.preventDefault();
@@ -639,43 +648,20 @@ function renderExpensesReportTable(categoryGroups, months) {
     tbody.appendChild(row);
   });
 
-  // Render Flight-related costs
-  const flightGroupHeader = document.createElement('tr');
-  flightGroupHeader.className = 'group-header';
-  const flightGroupCell = document.createElement('td');
-  flightGroupCell.colSpan = months.length * 2 + 1;
-  flightGroupCell.textContent = 'Flight-related costs';
-  flightGroupCell.style.fontWeight = 'bold';
-  flightGroupCell.style.backgroundColor = 'hsl(210, 11%, 96%)';
-  flightGroupHeader.appendChild(flightGroupCell);
-  tbody.appendChild(flightGroupHeader);
-
-  // Sort categories: first by base category, then by subtype
-  const sortedFlightCategories = Object.keys(categoryGroups.flight).sort((a, b) => {
-    const baseA = a.split(' - ')[0];
-    const baseB = b.split(' - ')[0];
-    if (baseA !== baseB) {
-      return baseA.localeCompare(baseB);
-    }
-    return a.localeCompare(b);
-  });
+  // Sort categories alphabetically
+  const sortedFlightCategories = Object.keys(categoryGroups.flight).sort();
 
   sortedFlightCategories.forEach(category => {
     const row = document.createElement('tr');
     const categoryCell = document.createElement('td');
     
-    // Format category display: show base category and subtype separately
-    const parts = category.split(' - ');
-    if (parts.length > 1) {
-      categoryCell.innerHTML = `<div style="font-weight: 500;">${parts[0]}</div><div style="font-size: 0.75rem; color: hsl(210, 6%, 46%); margin-top: 0.125rem;">${parts[1]}</div>`;
-    } else {
-      categoryCell.textContent = category;
-      categoryCell.style.fontWeight = '500';
-    }
+    // Display only base category (no subtype in table)
+    categoryCell.textContent = category;
+    categoryCell.style.fontWeight = '500';
     
     categoryCell.style.position = 'sticky';
     categoryCell.style.left = '0';
-    categoryCell.style.zIndex = '40';
+    categoryCell.style.zIndex = '50';
     categoryCell.style.backgroundColor = 'white';
     categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
     row.appendChild(categoryCell);
@@ -692,10 +678,9 @@ function renderExpensesReportTable(categoryGroups, months) {
       if (monthIndex > 0) {
         usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
       }
-      if (data.USD > 0) {
+      if (data.USD > 0 || data.AED > 0) {
         usdCell.style.cursor = 'pointer';
         usdCell.style.color = 'hsl(210, 76%, 36%)';
-        usdCell.style.textDecoration = 'underline';
         usdCell.title = 'Click to view details';
         usdCell.addEventListener('click', function(e) {
           e.preventDefault();
@@ -710,10 +695,9 @@ function renderExpensesReportTable(categoryGroups, months) {
       aedCell.style.textAlign = 'right';
       aedCell.style.minWidth = '120px';
       aedCell.style.width = '120px';
-      if (data.AED > 0) {
+      if (data.USD > 0 || data.AED > 0) {
         aedCell.style.cursor = 'pointer';
         aedCell.style.color = 'hsl(210, 76%, 36%)';
-        aedCell.style.textDecoration = 'underline';
         aedCell.title = 'Click to view details';
         aedCell.addEventListener('click', function(e) {
           e.preventDefault();
@@ -727,50 +711,87 @@ function renderExpensesReportTable(categoryGroups, months) {
     tbody.appendChild(row);
   });
 
-  // Update table header position
-  updateTableHeaderPosition();
+  // Update table header position after rendering
+  // Use requestAnimationFrame to ensure DOM is fully updated
+  requestAnimationFrame(() => {
+    setTimeout(updateTableHeaderPosition, 50);
+  });
 }
 
 // Show expense details modal
 function showExpenseDetails(category, monthKey, currency) {
-  console.log('showExpenseDetails called:', { category, monthKey, currency });
-  const detailKey = `${category}_${monthKey}`;
-  console.log('Looking for detailKey:', detailKey);
-  console.log('expenseDetailsMap keys:', Object.keys(expenseDetailsMap));
-  const expenses = expenseDetailsMap[detailKey] || [];
-  console.log('Found expenses for', detailKey, ':', expenses.length);
-  
-  if (expenses.length === 0) {
-    console.log('No expenses found for this cell');
-    alert(`No expenses found for ${category} in ${monthKey}`);
-    return;
-  }
-
-  const modal = document.getElementById('expenseDetailsModal');
-  const modalTitle = document.getElementById('modalTitle');
-  const modalContent = document.getElementById('expenseDetailsContent');
-  
-  if (!modal) {
-    console.error('Modal element not found');
-    alert('Modal element not found');
-    return;
-  }
-  
-  if (!modalTitle || !modalContent) {
-    console.error('Modal title or content not found');
-    return;
-  }
+  try {
+    console.log('showExpenseDetails called:', { category, monthKey, currency });
+    const detailKey = `${category}_${monthKey}`;
+    console.log('Looking for detailKey:', detailKey);
+    console.log('expenseDetailsMap keys:', Object.keys(expenseDetailsMap));
+    const expenses = expenseDetailsMap[detailKey] || [];
+    console.log('Found expenses for', detailKey, ':', expenses.length);
+    
+    const modal = document.getElementById('expenseDetailsModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('expenseDetailsContent');
+    
+    if (!modal) {
+      console.error('Modal element not found');
+      alert('Modal element not found');
+      return;
+    }
+    
+    if (!modalTitle || !modalContent) {
+      console.error('Modal title or content not found');
+      return;
+    }
+    
+    if (expenses.length === 0) {
+      console.log('No expenses found for this cell');
+      alert(`No expenses found for ${category} in ${monthKey}`);
+      return;
+    }
   
   const [year, month] = monthKey.split('-');
   const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   
   modalTitle.textContent = `${category} - ${monthName} (${currency})`;
   
+  // Group expenses by subtype for modal display
+  const expensesBySubtype = {};
+  expenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
+    // Get full category with subtype
+    const fullCategory = getExpenseCategory(expense);
+    const baseCategory = getBaseExpenseCategory(expense);
+    
+    // Only include expenses that match the base category
+    if (baseCategory !== category) {
+      return;
+    }
+    
+    // Extract subtype (or use base category if no subtype)
+    const subtype = fullCategory && fullCategory.includes(' - ') 
+      ? fullCategory.split(' - ')[1] 
+      : baseCategory;
+    
+    if (!expensesBySubtype[subtype]) {
+      expensesBySubtype[subtype] = [];
+    }
+    
+    expensesBySubtype[subtype].push({
+      expense: expense,
+      amount: amount,
+      currency: expCurrency,
+      monthlyAmount: monthlyAmount
+    });
+  });
+  
   // Calculate totals
   let totalOriginal = 0;
   let totalConverted = 0;
   
-  expenses.forEach(({ amount, currency: expCurrency, monthlyAmount }) => {
+  expenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
+    const baseCategory = getBaseExpenseCategory(expense);
+    if (baseCategory !== category) {
+      return;
+    }
     if (expCurrency === currency) {
       totalOriginal += monthlyAmount;
     } else {
@@ -793,134 +814,169 @@ function showExpenseDetails(category, monthKey, currency) {
         <div style="text-align: right;">
           <div style="font-size: 0.875rem; color: hsl(210, 6%, 46%);">Number of Expenses</div>
           <div style="font-size: 1.25rem; font-weight: 600; color: hsl(210, 6%, 21%);">
-            ${expenses.length}
+            ${expenses.filter(({ expense }) => getBaseExpenseCategory(expense) === category).length}
           </div>
         </div>
       </div>
     </div>
     
     <div style="margin-bottom: 1rem;">
-      <h4 style="font-size: 1rem; font-weight: 600; color: hsl(210, 6%, 21%); margin-bottom: 0.75rem;">Expense List</h4>
+      <h4 style="font-size: 1rem; font-weight: 600; color: hsl(210, 6%, 21%); margin-bottom: 0.75rem;">Expense List by Subcategory</h4>
       <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+  `;
+  
+  // Render expenses grouped by subtype
+  Object.keys(expensesBySubtype).sort().forEach(subtype => {
+    const subtypeExpenses = expensesBySubtype[subtype];
+    
+    content += `
+      <div style="margin-bottom: 1.5rem;">
+        <h5 style="font-size: 0.875rem; font-weight: 600; color: hsl(210, 6%, 46%); margin-bottom: 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid hsl(210, 11%, 90%);">${subtype}</h5>
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-bottom: 1rem;">
           <thead>
             <tr style="background-color: hsl(210, 11%, 96%); border-bottom: 2px solid hsl(210, 11%, 90%);">
-              <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Date</th>
               <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Type</th>
               <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Place</th>
               <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Invoice #</th>
               <th style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%);">Original Amount</th>
               <th style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%);">${currency} Amount</th>
               <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Period</th>
+              <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%);">Comments</th>
             </tr>
           </thead>
           <tbody>
-  `;
-  
-  expenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
-    // Filter by category - ensure expense matches the selected category
-    const expenseCategory = getExpenseCategory(expense);
-    if (expenseCategory !== category) {
-      return; // Skip expenses that don't match the selected category
-    }
+    `;
     
-    const expenseDate = expense.created_at ? new Date(expense.created_at).toLocaleDateString('en-US') : 'N/A';
-    const expenseType = expense.exp_type || 'N/A';
-    const expensePlace = expense.exp_place || 'N/A';
-    const invoiceNumber = expense.invoices?.inv_number || 'N/A';
-    const invoiceId = expense.exp_invoice || null;
-    const originalAmount = monthlyAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const convertedAmount = expCurrency === currency 
-      ? monthlyAmount 
-      : convertCurrency(monthlyAmount, expCurrency, currency);
-    
-    // Format period - show range only if multiple months
-    let period = 'N/A';
-    if (expense.exp_period_start && expense.exp_period_end) {
-      const startDate = new Date(expense.exp_period_start);
-      const endDate = new Date(expense.exp_period_end);
+    subtypeExpenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
+      const expenseType = expense.exp_type || 'N/A';
+      const expensePlace = expense.exp_place || 'N/A';
+      const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+      const invoiceId = expense.exp_invoice || null;
+      const comments = expense.exp_comments || '—';
+      const originalAmount = monthlyAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const convertedAmount = expCurrency === currency 
+        ? monthlyAmount 
+        : convertCurrency(monthlyAmount, expCurrency, currency);
       
-      // Check if this is a single month period
-      const startMonth = startDate.getMonth();
-      const startYear = startDate.getFullYear();
-      const endMonth = endDate.getMonth();
-      const endYear = endDate.getFullYear();
-      
-      // If period is within the same month, show only one month
-      const isSingleMonth = (startYear === endYear && startMonth === endMonth);
-      
-      const startDateFormatted = startDate.toLocaleDateString('en-US', { 
-        month: 'short', 
-        year: 'numeric' 
-      });
-      
-      if (isSingleMonth) {
-        // Single month - show only start month
-        period = startDateFormatted;
-      } else {
-        // Multiple months - show range
-        const endDateFormatted = endDate.toLocaleDateString('en-US', { 
+      // Format period - show range only if multiple months
+      let period = 'N/A';
+      if (expense.exp_period_start && expense.exp_period_end) {
+        const startDate = new Date(expense.exp_period_start);
+        const endDate = new Date(expense.exp_period_end);
+        
+        // Check if this is a single month period
+        const startMonth = startDate.getMonth();
+        const startYear = startDate.getFullYear();
+        const endMonth = endDate.getMonth();
+        const endYear = endDate.getFullYear();
+        
+        // If period is within the same month, show only one month
+        const isSingleMonth = (startYear === endYear && startMonth === endMonth);
+        
+        const startDateFormatted = startDate.toLocaleDateString('en-US', { 
           month: 'short', 
           year: 'numeric' 
         });
-        period = `${startDateFormatted} - ${endDateFormatted}`;
+        
+        if (isSingleMonth) {
+          // Single month - show only start month
+          period = startDateFormatted;
+        } else {
+          // Multiple months - show range
+          const endDateFormatted = endDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            year: 'numeric' 
+          });
+          period = `${startDateFormatted} - ${endDateFormatted}`;
+        }
+      } else if (expense.flights?.flt_date) {
+        period = new Date(expense.flights.flt_date).toLocaleDateString('en-US');
       }
-    } else if (expense.flights?.flt_date) {
-      period = new Date(expense.flights.flt_date).toLocaleDateString('en-US');
-    }
-    
-    // Create invoice link if invoice ID exists
-    const invoiceCell = invoiceId 
-      ? `<a href="/invoices/${invoiceId}" style="color: hsl(210, 76%, 36%); text-decoration: underline; cursor: pointer;">${invoiceNumber}</a>`
-      : invoiceNumber;
+      
+      // Create invoice link if invoice ID exists
+      const invoiceCell = invoiceId 
+        ? `<a href="/invoices/${invoiceId}" style="color: hsl(210, 76%, 36%); text-decoration: underline; cursor: pointer;">${invoiceNumber}</a>`
+        : invoiceNumber;
+      
+      content += `
+        <tr style="border-bottom: 1px solid hsl(210, 11%, 90%);">
+          <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${expenseType}</td>
+          <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${expensePlace}</td>
+          <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${invoiceCell}</td>
+          <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%);">${originalAmount} ${expCurrency}</td>
+          <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%); font-weight: 500;">${convertedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}</td>
+          <td style="padding: 0.75rem; color: hsl(210, 6%, 46%); font-size: 0.8125rem;">${period}</td>
+          <td style="padding: 0.75rem; color: hsl(210, 6%, 46%); font-size: 0.8125rem; max-width: 200px; word-wrap: break-word;">${comments}</td>
+        </tr>
+      `;
+    });
     
     content += `
-      <tr style="border-bottom: 1px solid hsl(210, 11%, 90%);">
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${expenseDate}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${expenseType}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${expensePlace}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%);">${invoiceCell}</td>
-        <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%);">${originalAmount} ${expCurrency}</td>
-        <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%); font-weight: 500;">${convertedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 46%); font-size: 0.8125rem;">${period}</td>
-      </tr>
+          </tbody>
+        </table>
+      </div>
     `;
   });
   
   content += `
-          </tbody>
-        </table>
       </div>
     </div>
   `;
   
-  modalContent.innerHTML = content;
-  console.log('Setting modal display to flex');
-  modal.style.display = 'flex';
-  console.log('Modal display style:', modal.style.display);
-  console.log('Modal element:', modal);
+    modalContent.innerHTML = content;
+    console.log('Setting modal display to flex');
+    
+    // Use the same approach as other modals in the app
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    console.log('Modal display style:', modal.style.display);
+    console.log('Modal element:', modal);
+    console.log('Modal computed style:', window.getComputedStyle(modal).display);
+    console.log('Modal classList:', modal.classList);
+  } catch (error) {
+    console.error('Error in showExpenseDetails:', error);
+    alert('Error opening expense details: ' + error.message);
+  }
 }
 
 // Close expense details modal
 function closeExpenseDetailsModal() {
   const modal = document.getElementById('expenseDetailsModal');
-  modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('show');
+    document.body.style.overflow = 'auto';
+  }
 }
 
 // Update table header position (similar to flights/expenses.ejs)
 function updateTableHeaderPosition() {
   const header = document.querySelector('.header');
   const pageHeader = document.querySelector('.page-header');
-  const tableHeaders = document.querySelectorAll('.expenses-report-table th');
+  const table = document.querySelector('.expenses-report-table');
 
-  if (header && pageHeader && tableHeaders.length > 0) {
-    const headerHeight = header.offsetHeight;
-    const pageHeaderHeight = pageHeader.offsetHeight;
+  if (header && pageHeader && table) {
+    const headerHeight = header.offsetHeight || 0;
+    const pageHeaderHeight = pageHeader.offsetHeight || 0;
     const totalHeight = headerHeight + pageHeaderHeight;
 
-    tableHeaders.forEach(th => {
-      th.style.top = totalHeight + 'px';
-    });
+    // Set top for first row headers (months)
+    const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
+    if (firstRowHeaders.length > 0) {
+      firstRowHeaders.forEach(th => {
+        th.style.top = totalHeight + 'px';
+      });
+
+      // Set top for second row headers (USD/AED)
+      const secondRowHeaders = table.querySelectorAll('thead tr:last-child th');
+      if (secondRowHeaders.length > 0) {
+        // Calculate first row height after it's rendered
+        const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
+        secondRowHeaders.forEach(th => {
+          th.style.top = (totalHeight + firstRowHeight) + 'px';
+        });
+      }
+    }
   }
 }
 
@@ -963,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Update header position on resize
+  // Update header position on resize and after table render
   let resizeTimeout;
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimeout);
@@ -997,24 +1053,27 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expenses-report-table th {
-  padding: 0.75rem 1rem !important;
+  padding: 0.5rem 0.75rem !important;
   text-align: left !important;
   font-weight: 600 !important;
   color: hsl(210, 6%, 21%) !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   border-right: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
+  background-color: hsl(210, 11%, 96%) !important;
+  min-width: 120px !important;
+}
+
+.expenses-report-table thead th {
   position: sticky !important;
   top: 0 !important;
   z-index: 50 !important;
-  background-color: hsl(210, 11%, 96%) !important;
-  min-width: 120px !important;
 }
 
 .expenses-report-table th:first-child {
   position: sticky !important;
   left: 0 !important;
-  z-index: 60 !important;
+  z-index: 70 !important;
   background-color: hsl(210, 11%, 96%) !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
 }
@@ -1024,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expenses-report-table td {
-  padding: 0.75rem 1rem !important;
+  padding: 0.5rem 0.75rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   border-right: 1px solid hsl(210, 11%, 90%) !important;
   vertical-align: middle !important;
@@ -1033,20 +1092,20 @@ document.addEventListener('DOMContentLoaded', function() {
   min-width: 120px !important;
   width: 120px !important;
   max-width: 120px !important;
+  font-size: 0.75rem !important;
 }
 
 .expenses-report-table td:last-child {
   border-right: none !important;
 }
 
-.expenses-report-table td:first-child,
-.expenses-report-table th:first-child {
+.expenses-report-table td:first-child {
   font-weight: 500 !important;
   min-width: 220px !important;
   width: auto !important;
   position: sticky !important;
   left: 0 !important;
-  z-index: 40 !important;
+  z-index: 50 !important;
   background-color: white !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
 }
@@ -1100,7 +1159,8 @@ document.addEventListener('DOMContentLoaded', function() {
   z-index: 10000 !important;
 }
 
-.modal-overlay[style*="display: flex"] {
+.modal-overlay[style*="display: flex"],
+.modal-overlay.show {
   display: flex !important;
 }
 
@@ -1150,4 +1210,5 @@ document.addEventListener('DOMContentLoaded', function() {
   padding: 0 1.5rem 1.5rem 1.5rem !important;
 }
 </style>
+
 

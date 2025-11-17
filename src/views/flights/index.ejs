@@ -131,37 +131,44 @@
               </div>
     
     <form id="addFlightForm" class="modal-form">
-      <div class="form-group">
-        <label for="flightDate">Date</label>
-        <input type="date" id="flightDate" name="flt_date" required>
+      <div style="flex: 1; min-height: 0;">
+        <div class="form-group">
+          <label for="flightDate">Date</label>
+          <input type="date" id="flightDate" name="flt_date" required>
               </div>
-      
-      <div class="form-group">
-        <label for="flightNumber">Flight Number</label>
-        <input type="text" id="flightNumber" name="flt_number" placeholder="e.g., F9105" required>
+        
+        <div class="form-group">
+          <label for="flightNumber">Flight Number</label>
+          <input type="text" id="flightNumber" name="flt_number" placeholder="e.g., F9105" required>
               </div>
-      
-      <div class="form-group">
-        <label for="departure">Departure</label>
-        <input type="text" id="departure" name="flt_dep" placeholder="e.g., Abu Dhabi" required>
+        
+        <div class="form-group">
+          <label for="departure">Departure</label>
+          <input type="text" id="departure" name="flt_dep" placeholder="e.g., Abu Dhabi" required>
               </div>
-      
-      <div class="form-group">
-        <label for="arrival">Arrival</label>
-        <input type="text" id="arrival" name="flt_arr" placeholder="e.g., Dubai" required>
+        
+        <div class="form-group">
+          <label for="arrival">Arrival</label>
+          <input type="text" id="arrival" name="flt_arr" placeholder="e.g., Dubai" required>
               </div>
-      
-      <div class="form-group">
-        <label for="flightTime">Flight Time</label>
-        <input type="text" id="flightTime" name="flt_time" placeholder="e.g., 0130 (01:30)" maxlength="4" pattern="[0-9]{4}" required>
-        <small class="form-help">Enter 4 digits (e.g., 0130 for 01:30)</small>
+        
+        <div class="form-group">
+          <label for="flightTime">Flight Time</label>
+          <input type="text" id="flightTime" name="flt_time" placeholder="e.g., 0130 (01:30)" maxlength="4" pattern="[0-9]{4}" required>
+          <small class="form-help">Enter 4 digits (e.g., 0130 for 01:30)</small>
               </div>
-      
-      <div class="form-group">
-        <label for="blockTime">Block Time</label>
-        <input type="text" id="blockTime" name="flt_block" placeholder="e.g., 0215 (02:15)" maxlength="4" pattern="[0-9]{4}" required>
-        <small class="form-help">Enter 4 digits (e.g., 0215 for 02:15)</small>
+        
+        <div class="form-group">
+          <label for="blockTime">Block Time</label>
+          <input type="text" id="blockTime" name="flt_block" placeholder="e.g., 0215 (02:15)" maxlength="4" pattern="[0-9]{4}" required>
+          <small class="form-help">Enter 4 digits (e.g., 0215 for 02:15)</small>
               </div>
+        
+        <div class="form-group">
+          <label for="flightComments">Comments</label>
+          <textarea id="flightComments" name="flt_comments" rows="3" placeholder="Enter comments (optional)"></textarea>
+        </div>
+      </div>
       
       <div class="modal-actions">
         <button type="button" class="btn btn-cancel" id="cancelBtn">
@@ -379,7 +386,7 @@ function renderFlights() {
           <div class="date-badge">${formattedDate}</div>
         </td>
         <td>
-          <div class="flight-number">${flight.flt_number}</div>
+          <div class="flight-number clickable-flight-number" data-flight-number="${flight.flt_number}" style="cursor: pointer; color: hsl(210, 76%, 36%);">${flight.flt_number}</div>
         </td>
         <td>
           <div class="route-info">
@@ -403,7 +410,7 @@ function renderFlights() {
         </td>
         <td>
           <div class="action-buttons">
-            <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}">
+            <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}" data-flight-number="${flight.flt_number}" style="pointer-events: none; opacity: 0.5;">
               <i class="bi bi-eye"></i>
             </button>
             <% if (user && user.role === 'superadmin') { %>
@@ -420,16 +427,27 @@ function renderFlights() {
         </td>
       `;
 
+      // Make flight number clickable
+      const flightNumberElement = row.querySelector('.clickable-flight-number');
+      if (flightNumberElement) {
+        flightNumberElement.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const flightNumber = this.getAttribute('data-flight-number');
+          viewFlight(flightNumber);
+        });
+      }
+
       const actionButtons = row.querySelectorAll('.btn-action');
       actionButtons.forEach(button => {
         button.addEventListener('click', function(e) {
           e.stopPropagation();
           const action = this.getAttribute('data-action');
           const id = this.getAttribute('data-id');
+          const flightNumber = this.getAttribute('data-flight-number');
 
           switch (action) {
             case 'view':
-              viewFlight(id);
+              // Disabled - use flight number click instead
               break;
             case 'edit':
               editFlight(id);
@@ -465,9 +483,10 @@ function updateSortIcon() {
 }
 
 // Action functions
-function viewFlight(id) {
-  console.log('View flight:', id);
-  // TODO: Implement view functionality
+function viewFlight(flightNumber) {
+  // Encode flight number for URL (handle special characters)
+  const encodedFlightNumber = encodeURIComponent(flightNumber);
+  window.location.href = `/flights/${encodedFlightNumber}/expenses`;
 }
 
 function editFlight(id) {
@@ -764,17 +783,19 @@ document.addEventListener('DOMContentLoaded', function() {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
   width: 90% !important;
   max-width: 500px !important;
-  max-height: 90vh !important;
-  overflow-y: auto !important;
+  overflow-y: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 95vh !important;
 }
 
 .modal-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  padding: 1.5rem 1.5rem 0 1.5rem !important;
+  padding: 1rem 1.5rem 0 1.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
-  margin-bottom: 1.5rem !important;
+  margin-bottom: 1rem !important;
 }
 
 .modal-header h3 {
@@ -801,22 +822,28 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .modal-form {
-  padding: 0 1.5rem 1.5rem 1.5rem !important;
+  padding: 0 1.5rem 0.5rem 1.5rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 .form-group {
-  margin-bottom: 1.25rem !important;
+  margin-bottom: 0.875rem !important;
 }
 
 .form-group label {
   display: block !important;
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 0.375rem !important;
   font-weight: 500 !important;
   color: hsl(210, 6%, 21%) !important;
   font-size: 0.875rem !important;
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea {
   width: 100% !important;
   padding: 0.75rem !important;
   border: 1px solid hsl(210, 11%, 90%) !important;
@@ -824,15 +851,24 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size: 0.875rem !important;
   transition: all 0.2s ease !important;
   background-color: white !important;
+  font-family: inherit !important;
+  box-sizing: border-box !important;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   outline: none !important;
   border-color: hsl(142, 76%, 36%) !important;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1) !important;
 }
 
-.form-group input::placeholder {
+.form-group textarea {
+  resize: vertical !important;
+  min-height: 80px !important;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
   color: hsl(210, 6%, 60%) !important;
 }
 
@@ -857,9 +893,10 @@ document.addEventListener('DOMContentLoaded', function() {
   display: flex !important;
   justify-content: flex-end !important;
   gap: 0.75rem !important;
-  margin-top: 2rem !important;
-  padding-top: 1.5rem !important;
+  margin-top: 0 !important;
+  padding: 1rem 1.5rem !important;
   border-top: 1px solid hsl(210, 11%, 90%) !important;
+  flex-shrink: 0 !important;
 }
 
 .btn {
@@ -945,11 +982,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   .modal-header {
-    padding: 1rem 1rem 0 1rem !important;
+    padding: 0.75rem 1rem 0 1rem !important;
+    margin-bottom: 0.75rem !important;
   }
   
   .modal-form {
-    padding: 0 1rem 1rem 1rem !important;
+    padding: 0 1rem 0.5rem 1rem !important;
   }
   
   .modal-actions {

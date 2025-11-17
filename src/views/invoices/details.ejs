@@ -133,6 +133,15 @@
         
         <div class="form-row">
           <div class="form-group full-width">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto; margin: 0;">
+              <span>Include disbursement fee</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group full-width">
             <label for="expComments">Comments</label>
             <textarea id="expComments" name="exp_comments" rows="3" placeholder="Enter comments"></textarea>
           </div>
@@ -215,23 +224,83 @@ async function loadExpenses() {
       return;
     }
 
-    // Calculate totals
-    const exchangeRate = 3.6735;
+    // Currency conversion rates
+    // EUR conversions always go through AED (not directly to USD)
+    const CURRENCY_RATES = {
+      AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
+      AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
+    };
+    
+    // Convert currency function
+    // EUR conversions always go through AED (not directly to USD)
+    function convertCurrency(amount, fromCurrency, toCurrency) {
+      if (fromCurrency === toCurrency) {
+        return amount;
+      }
+      
+      // Handle EUR conversions - always through AED
+      if (fromCurrency === 'EUR') {
+        // EUR → AED: 1 EUR = 4.3119 AED
+        const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
+        
+        if (toCurrency === 'AED') {
+          return amountInAED;
+        } else if (toCurrency === 'USD') {
+          // EUR → AED → USD: 1 AED = 1/3.6735 USD
+          return amountInAED / CURRENCY_RATES.AED_TO_USD;
+        }
+      }
+      
+      if (toCurrency === 'EUR') {
+        // Convert to AED first, then to EUR
+        let amountInAED = 0;
+        if (fromCurrency === 'USD') {
+          // USD → AED: 1 USD = 3.6735 AED
+          amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+        } else if (fromCurrency === 'AED') {
+          amountInAED = amount;
+        }
+        // AED → EUR: 1 AED = 1/4.3119 EUR
+        return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+      }
+      
+      // For non-EUR conversions, convert through USD
+      // Convert to USD first
+      let amountInUSD = 0;
+      if (fromCurrency === 'USD') {
+        amountInUSD = amount;
+      } else if (fromCurrency === 'AED') {
+        // 1 AED = 1/3.6735 USD
+        amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+      }
+      
+      // Convert from USD to target currency
+      if (toCurrency === 'USD') {
+        return amountInUSD;
+      } else if (toCurrency === 'AED') {
+        // 1 USD = 3.6735 AED
+        return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+      }
+      
+      return amount;
+    }
+    
+    // Calculate totals - convert all expenses to USD and AED
     let totalUSD = 0;
     let totalAED = 0;
     
     expenses.forEach(expense => {
       if (expense.exp_amount) {
-        if (expense.exp_currency === 'USD') {
-          totalUSD += parseFloat(expense.exp_amount);
-        } else if (expense.exp_currency === 'AED') {
-          totalAED += parseFloat(expense.exp_amount);
-        }
+        const amount = parseFloat(expense.exp_amount);
+        const currency = expense.exp_currency || 'USD';
+        
+        // Convert to USD
+        totalUSD += convertCurrency(amount, currency, 'USD');
+        
+        // Convert to AED
+        totalAED += convertCurrency(amount, currency, 'AED');
       }
     });
-    
-    // Convert AED to USD for total
-    const totalUSDConverted = totalUSD + (totalAED / exchangeRate);
     
     // Get invoice data from the page
     const invoiceData = {
@@ -242,7 +311,7 @@ async function loadExpenses() {
     // Update summary
     summaryContainer.innerHTML = `
       <div class="summary-item">
-        <strong>Total: $${totalUSDConverted.toLocaleString('en-US', { 
+        <strong>Total: $${totalUSD.toLocaleString('en-US', { 
           minimumFractionDigits: 2, 
           maximumFractionDigits: 2 
         })} USD / ${totalAED.toLocaleString('en-US', { 
@@ -273,21 +342,22 @@ async function loadExpenses() {
     Object.keys(groupedExpenses).sort().forEach(type => {
       const typeExpenses = groupedExpenses[type];
       
-      // Calculate total for this type
+      // Calculate total for this type - convert all expenses to USD and AED
       let typeTotalUSD = 0;
       let typeTotalAED = 0;
       
       typeExpenses.forEach(expense => {
         if (expense.exp_amount) {
-          if (expense.exp_currency === 'USD') {
-            typeTotalUSD += parseFloat(expense.exp_amount);
-          } else if (expense.exp_currency === 'AED') {
-            typeTotalAED += parseFloat(expense.exp_amount);
-          }
+          const amount = parseFloat(expense.exp_amount);
+          const currency = expense.exp_currency || 'USD';
+          
+          // Convert to USD
+          typeTotalUSD += convertCurrency(amount, currency, 'USD');
+          
+          // Convert to AED
+          typeTotalAED += convertCurrency(amount, currency, 'AED');
         }
       });
-      
-      const typeTotalUSDConverted = typeTotalUSD + (typeTotalAED / exchangeRate);
       
       const sectionId = type.replace(/[^a-zA-Z0-9]/g, '_');
       html += `
@@ -295,7 +365,7 @@ async function loadExpenses() {
           <div class="section-header" data-section-id="${sectionId}">
             <h4>${type}</h4>
             <div class="section-controls">
-              <span class="section-total">$${typeTotalUSDConverted.toFixed(2)} USD / ${typeTotalAED.toFixed(2)} AED</span>
+              <span class="section-total">$${typeTotalUSD.toFixed(2)} USD / ${typeTotalAED.toFixed(2)} AED</span>
               <span class="section-count">${typeExpenses.length} items</span>
               <i class="bi bi-chevron-right section-toggle" id="toggle-${sectionId}"></i>
             </div>
@@ -396,12 +466,19 @@ async function loadExpenses() {
               <div class="expense-flight">${expense.flights ? expense.flights.flt_number || '-' : '-'}</div>
             </td>
             <td>
-              <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
-                      data-expense-id="${expense.id}"
-                      data-expense-data='${JSON.stringify(expense)}'
-                      title="Edit expense">
-                <i class="bi bi-pencil"></i>
-              </button>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                        data-expense-id="${expense.id}"
+                        data-expense-data='${JSON.stringify(expense)}'
+                        title="Edit expense">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
+                        data-expense-id="${expense.id}"
+                        title="Delete expense">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
             </td>
           </tr>
         `;
@@ -432,6 +509,15 @@ async function loadExpenses() {
       button.addEventListener('click', async function() {
         const expenseData = JSON.parse(this.getAttribute('data-expense-data'));
         await openEditExpenseModal(expenseData);
+      });
+    });
+
+    // Add event listeners for delete expense buttons
+    const deleteButtons = container.querySelectorAll('.delete-expense-btn');
+    deleteButtons.forEach(button => {
+      button.addEventListener('click', async function() {
+        const expenseId = this.getAttribute('data-expense-id');
+        await deleteExpense(expenseId);
       });
     });
   } catch (error) {
@@ -730,6 +816,41 @@ function closeAddExpenseModal() {
   }
 }
 
+// Delete expense function
+async function deleteExpense(expenseId) {
+  // Show confirmation dialog
+  const confirmed = confirm('Are you sure you want to delete this expense? The associated disbursement fee (if any) will also be deleted. This action cannot be undone.');
+  
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/expenses/${expenseId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      // Reload expenses after successful deletion
+      loadExpenses();
+      console.log('Expense deleted successfully');
+      if (result.disbursementFeeDeleted) {
+        console.log('Associated disbursement fee was also deleted');
+      }
+    } else {
+      throw new Error(result.error || 'Failed to delete expense');
+    }
+  } catch (error) {
+    console.error('Error deleting expense:', error);
+    alert('Failed to delete expense: ' + error.message);
+  }
+}
+
 // Toggle invoice status
 async function toggleInvoiceStatus() {
   const statusBtn = document.getElementById('statusBtn');
@@ -844,9 +965,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(addExpenseForm);
         const data = Object.fromEntries(formData.entries());
         
-        // Check if we're editing an existing expense
+        // Check if disbursement fee should be included (only for new expenses)
         const expenseId = document.getElementById('expenseId').value;
         const isEdit = expenseId && expenseId.trim() !== '';
+        const includeDisbursementFee = !isEdit && data.include_disbursement_fee === 'on';
+        delete data.include_disbursement_fee; // Remove checkbox from data
         
         // Get current invoice ID from URL
         const invoiceId = window.location.pathname.split('/').pop();
@@ -873,14 +996,97 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const result = await response.json();
         
-        if (response.ok) {
-          // Success - reload expenses (modal will be closed in finally block)
-          loadExpenses(); // Reload the expenses list
-        } else {
+        if (!response.ok) {
           // Error - show message
           const action = isEdit ? 'updating' : 'adding';
           alert(`Error ${action} expense: ` + (result.error || 'Unknown error'));
+          return;
         }
+        
+        // If disbursement fee should be included, create second expense
+        if (includeDisbursementFee && data.exp_amount) {
+          // Get expense type and subtype names for comment
+          const expTypeSelect = document.getElementById('expType');
+          const expSubtypeSelect = document.getElementById('expSubtype');
+          const typeName = expTypeSelect.options[expTypeSelect.selectedIndex]?.textContent || '';
+          const subtypeName = expSubtypeSelect.options[expSubtypeSelect.selectedIndex]?.textContent || '';
+          
+          // Calculate disbursement fee amount (5% of expense amount)
+          const disbursementAmount = parseFloat(data.exp_amount) * 0.05;
+          
+          // Build comment
+          let comment = `${typeName}`;
+          if (subtypeName && subtypeName !== 'Select Subtype') {
+            comment += ` - ${subtypeName}`;
+          }
+          comment += `, ${data.exp_amount} ${data.exp_currency || 'AED'}`;
+          
+          // Add period or flight info
+          if (data.exp_period_start && data.exp_period_end) {
+            comment += `, ${data.exp_period_start} - ${data.exp_period_end}`;
+          } else if (data.exp_flight) {
+            const flightSelect = document.getElementById('expFlight');
+            const flightText = flightSelect.options[flightSelect.selectedIndex]?.textContent || '';
+            if (flightText && flightText !== 'Select Flight (Optional)') {
+              comment += `, ${flightText}`;
+            }
+          }
+          
+          // Find Disbursement fee type and subtype IDs
+          const expenseTypesResponse = await fetch('/api/expense-types');
+          const expenseTypes = await expenseTypesResponse.json();
+          const disbursementType = expenseTypes.find(type => 
+            type.name.toLowerCase().includes('disbursement')
+          );
+          
+          if (disbursementType) {
+            const subtypesResponse = await fetch(`/api/expense-subtypes/${disbursementType.id}`);
+            const subtypes = await subtypesResponse.json();
+            const disbursementSubtype = subtypes.find(subtype => 
+              subtype.name.toLowerCase().includes('disbursement')
+            );
+            
+            // Find Disbursement fee invoice type
+            const invoiceTypesResponse = await fetch('/api/invoice-types');
+            const invoiceTypes = await invoiceTypesResponse.json();
+            const disbursementInvoiceType = invoiceTypes.find(type => 
+              type.name.toLowerCase().includes('disbursement')
+            );
+            
+            // Create disbursement fee expense
+            const disbursementData = {
+              exp_type: disbursementType.id,
+              exp_subtype: disbursementSubtype ? disbursementSubtype.id : null,
+              exp_invoice_type: disbursementInvoiceType ? disbursementInvoiceType.id : null,
+              exp_amount: disbursementAmount.toFixed(2),
+              exp_currency: data.exp_currency || 'AED',
+              exp_invoice: invoiceId,
+              exp_flight: data.exp_flight,
+              exp_period_start: data.exp_period_start,
+              exp_period_end: data.exp_period_end,
+              exp_place: data.exp_place,
+              exp_comments: comment
+            };
+            
+            // Convert empty strings to null
+            Object.keys(disbursementData).forEach(key => {
+              if (disbursementData[key] === '') {
+                disbursementData[key] = null;
+              }
+            });
+            
+            await fetch('/api/expenses', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(disbursementData),
+            });
+          }
+        }
+        
+        // Success - reload expenses (modal will be closed in finally block)
+        loadExpenses(); // Reload the expenses list
       } catch (error) {
         console.error('Error submitting expense:', error);
         const action = document.getElementById('expenseId').value ? 'updating' : 'adding';
@@ -1163,8 +1369,6 @@ document.addEventListener('DOMContentLoaded', function() {
     justify-content: center !important;
   }
 }
-  color: hsl(210, 6%, 46%) !important;
-}
 
 .content-body {
   padding: 0 1.5rem 1.5rem 1.5rem !important;
@@ -1236,7 +1440,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .section-header h4 {
   margin: 0 !important;
-  font-size: 1rem !important;
+  font-size: 0.875rem !important;
   font-weight: 600 !important;
   color: hsl(210, 6%, 21%) !important;
 }
@@ -1320,13 +1524,21 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Table cell content */
 .expense-type, .expense-subtype, .expense-description,
 .expense-place, .expense-amount, .expense-fuel-qty, 
-.expense-fuel-provider, .expense-flight, .expense-period {
+.expense-fuel-provider, .expense-period {
   font-size: 0.875rem !important;
   color: hsl(210, 6%, 21%) !important;
   word-wrap: break-word !important;
   white-space: normal !important;
   overflow: visible !important;
   max-width: none !important;
+}
+
+.expense-flight {
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 /* Group cell styling - pastel background */
@@ -1477,6 +1689,27 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .edit-expense-btn i {
+  font-size: 0.75rem !important;
+}
+
+/* Delete expense button styles */
+.delete-expense-btn {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.75rem !important;
+  border: 1px solid hsl(0, 84%, 60%) !important;
+  background-color: hsl(0, 0%, 100%) !important;
+  color: hsl(0, 84%, 60%) !important;
+  border-radius: 0.375rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.delete-expense-btn:hover {
+  background-color: hsl(0, 84%, 60%) !important;
+  border-color: hsl(0, 84%, 55%) !important;
+  color: white !important;
+}
+
+.delete-expense-btn i {
   font-size: 0.75rem !important;
 }
 </style>

@@ -987,6 +987,51 @@ app.get('/flights/expenses', authenticateSession, (_req, res) => {
   res.render('flights/expenses', { title: 'Flight Expenses' });
 });
 
+app.get(
+  '/flights/:flightNumber/expenses',
+  authenticateSession,
+  async (req, res) => {
+    try {
+      const flightNumber = decodeURIComponent(req.params.flightNumber);
+
+      if (!supabase) {
+        return res.status(500).render('error', {
+          title: 'Database Error',
+          message: 'Database connection not available.',
+        });
+      }
+
+      // Fetch first flight with this number to get basic info
+      const { data: flights, error: flightsError } = await supabase
+        .from('flights')
+        .select('*')
+        .eq('flt_number', flightNumber)
+        .limit(1);
+
+      if (flightsError || !flights || flights.length === 0) {
+        return res.status(404).render('error', {
+          title: 'Flight Not Found',
+          message: `Flight ${flightNumber} could not be found.`,
+        });
+      }
+
+      // Use first flight for display info
+      const flight = flights[0];
+
+      res.render('flights/expense-details', {
+        title: `Flight ${flight.flt_number} Expenses`,
+        flight: { ...flight, flt_number: flightNumber },
+      });
+    } catch (error) {
+      console.error('Error fetching flight details:', error);
+      res.status(500).render('error', {
+        title: 'Error',
+        message: 'An error occurred while loading the flight details.',
+      });
+    }
+  }
+);
+
 app.get('/expenses', authenticateSession, (_req, res) => {
   res.render('expenses/index', { title: 'Expenses' });
 });
@@ -1542,6 +1587,93 @@ app.get('/api/flights/expenses', authenticateToken, async (_req, res) => {
   }
 });
 
+// API endpoint for single flight expenses by flight number
+app.get(
+  '/api/flights/:flightNumber/expenses',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const flightNumber = decodeURIComponent(req.params.flightNumber);
+
+      if (supabase) {
+        // Get all flights with this flight number
+        const { data: flights, error: flightsError } = await supabase
+          .from('flights')
+          .select(
+            `
+          id,
+          flt_number,
+          flt_date,
+          flt_dep,
+          flt_arr
+        `
+          )
+          .eq('flt_number', flightNumber);
+
+        if (flightsError) {
+          console.log('Supabase error fetching flights:', flightsError.message);
+          return res.status(500).json({ error: 'Failed to fetch flights' });
+        }
+
+        if (!flights || flights.length === 0) {
+          return res.status(404).json({ error: 'Flight not found' });
+        }
+
+        // Get all flight IDs
+        const flightIds = flights.map(f => f.id);
+
+        // Get all expenses for all flights with this flight number
+        const { data: expenses, error: expensesError } = await supabase
+          .from('expenses')
+          .select(
+            `
+          id,
+          exp_type,
+          exp_subtype,
+          exp_amount,
+          exp_currency,
+          exp_invoice_type,
+          exp_place,
+          exp_fuel_quan,
+          exp_fuel_provider,
+          exp_comments,
+          exp_flight,
+          invoices!exp_invoice (
+            id,
+            inv_number
+          ),
+          flights!exp_flight (
+            id,
+            flt_date
+          )
+        `
+          )
+          .in('exp_flight', flightIds);
+
+        if (expensesError) {
+          console.log(
+            'Supabase error fetching expenses:',
+            expensesError.message
+          );
+          return res.status(500).json({ error: 'Failed to fetch expenses' });
+        }
+
+        // Return combined data
+        return res.json({
+          flt_number: flightNumber,
+          flights: flights,
+          expenses: expenses || [],
+        });
+      }
+
+      res.status(503).json({ error: 'Database not available' });
+    } catch (error) {
+      console.log('Error fetching flight expenses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // POST endpoint to add new flight
 app.post(
   '/api/flights',
@@ -1549,8 +1681,15 @@ app.post(
   requireSuperadmin,
   async (req, res) => {
     try {
-      const { flt_date, flt_number, flt_dep, flt_arr, flt_time, flt_block } =
-        req.body;
+      const {
+        flt_date,
+        flt_number,
+        flt_dep,
+        flt_arr,
+        flt_time,
+        flt_block,
+        flt_comments,
+      } = req.body;
 
       // Validate required fields
       if (
@@ -1578,6 +1717,7 @@ app.post(
               flt_arr,
               flt_time,
               flt_block,
+              flt_comments: flt_comments || null,
             },
           ])
           .select();
@@ -2343,7 +2483,9 @@ app.get('/api/expenses', async (_req, res) => {
                  ),
                  flights!exp_flight (
                    flt_number,
-                   flt_date
+                   flt_date,
+                   flt_dep,
+                   flt_arr
                  )
                `
         )
@@ -2765,6 +2907,165 @@ app.delete('/api/flights/:id', async (req, res) => {
     });
   } catch (error) {
     console.log('Error deleting flight:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+});
+
+// DELETE endpoint to remove expense
+app.delete('/api/expenses/:id', async (req, res) => {
+  try {
+    const expenseId = req.params.id;
+
+    if (!expenseId) {
+      return res.status(400).json({
+        error: 'Expense ID is required',
+      });
+    }
+
+    if (supabase) {
+      // First get the expense data for logging and to find related disbursement fee
+      const { data: expense, error: fetchError } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', expenseId)
+        .single();
+
+      if (fetchError) {
+        console.log('Supabase error fetching expense:', fetchError.message);
+        return res.status(404).json({ error: 'Expense not found' });
+      }
+
+      // Find related disbursement fee expense
+      // Disbursement fee is linked by: same invoice, same flight (if exists), same period (if exists)
+      // and type is Disbursement fee
+      let disbursementFeeId = null;
+
+      // Get Disbursement fee type ID
+      const { data: disbursementType } = await supabase
+        .from('expense_types')
+        .select('id')
+        .ilike('name', '%disbursement%')
+        .single();
+
+      if (disbursementType) {
+        // Build query to find disbursement fee
+        let query = supabase
+          .from('expenses')
+          .select('id')
+          .eq('exp_invoice', expense.exp_invoice)
+          .eq('exp_type', disbursementType.id);
+
+        // Match by flight if exists
+        if (expense.exp_flight) {
+          query = query.eq('exp_flight', expense.exp_flight);
+        } else {
+          query = query.is('exp_flight', null);
+        }
+
+        // Match by period if exists
+        if (expense.exp_period_start && expense.exp_period_end) {
+          query = query
+            .eq('exp_period_start', expense.exp_period_start)
+            .eq('exp_period_end', expense.exp_period_end);
+        } else {
+          query = query.is('exp_period_start', null).is('exp_period_end', null);
+        }
+
+        // Match by place if exists
+        if (expense.exp_place) {
+          query = query.eq('exp_place', expense.exp_place);
+        } else {
+          query = query.is('exp_place', null);
+        }
+
+        // Also check if comments contain information about this expense
+        // Format: "Type - Subtype, Amount Currency, Period/Flight"
+        const { data: disbursementFees } = await query;
+
+        if (disbursementFees && disbursementFees.length > 0) {
+          // Check comments to find the exact match
+          for (const fee of disbursementFees) {
+            const { data: feeData } = await supabase
+              .from('expenses')
+              .select('exp_comments, exp_amount, exp_currency')
+              .eq('id', fee.id)
+              .single();
+
+            if (feeData && feeData.exp_comments) {
+              // Check if comment contains amount and currency from original expense
+              const amountStr = parseFloat(expense.exp_amount).toFixed(2);
+              const currencyStr = expense.exp_currency || 'AED';
+              if (
+                feeData.exp_comments.includes(amountStr) &&
+                feeData.exp_comments.includes(currencyStr)
+              ) {
+                disbursementFeeId = fee.id;
+                break;
+              }
+            }
+          }
+
+          // If no exact match found by comment, use first match
+          if (!disbursementFeeId && disbursementFees.length > 0) {
+            disbursementFeeId = disbursementFees[0].id;
+          }
+        }
+      }
+
+      // Delete disbursement fee first if found
+      if (disbursementFeeId) {
+        const { error: feeDeleteError } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('id', disbursementFeeId);
+
+        if (feeDeleteError) {
+          console.log(
+            'Supabase error deleting disbursement fee:',
+            feeDeleteError.message
+          );
+          // Continue with main expense deletion even if fee deletion fails
+        }
+      }
+
+      // Delete the main expense
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) {
+        console.log('Supabase error deleting expense:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to delete expense from database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'DELETE',
+        'expenses',
+        expenseId,
+        expense,
+        null,
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Expense deleted successfully',
+        disbursementFeeDeleted: !!disbursementFeeId,
+      });
+    }
+
+    // Fallback for when Supabase is not available
+    return res.status(503).json({
+      error: 'Database not available',
+    });
+  } catch (error) {
+    console.log('Error deleting expense:', error);
     return res.status(500).json({
       error: 'Internal server error',
     });

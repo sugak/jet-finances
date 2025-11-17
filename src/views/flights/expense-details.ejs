@@ -1,0 +1,446 @@
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title" style="font-size: 1.5rem;">Flight <%= flight.flt_number %> Expenses</h1>
+    <p class="page-description" id="flight-info-description">
+      Loading flight information...
+    </p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-secondary" id="backBtn">
+      <i class="bi bi-arrow-left"></i>
+      Back to Flights
+    </button>
+  </div>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loading-spinner" class="loading-container">
+  <div class="spinner-border text-primary" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+  <p class="loading-text">Loading flight expenses...</p>
+</div>
+
+<!-- Content Container -->
+<div id="content-container" class="content-container" style="display: none;">
+  <div id="expenses-cards-container">
+    <!-- Expense cards will be populated by JavaScript -->
+  </div>
+</div>
+
+<!-- No Data Message -->
+<div id="no-data-message" class="no-data-container" style="display: none;">
+  <div class="text-center py-5">
+    <i class="bi bi-receipt text-muted" style="font-size: 3rem;"></i>
+    <h3 class="text-muted mt-3">No Expenses Found</h3>
+    <p class="text-muted">This flight has no associated expenses.</p>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  loadFlightExpenses();
+  
+  // Back button handler
+  document.getElementById('backBtn').addEventListener('click', function() {
+    window.location.href = '/flights';
+  });
+});
+
+async function loadFlightExpenses() {
+  try {
+    const flightNumber = '<%= flight.flt_number %>';
+    const encodedFlightNumber = encodeURIComponent(flightNumber);
+    const response = await apiRequest(`/api/flights/${encodedFlightNumber}/expenses`);
+    const flightData = await response.json();
+    
+    // Hide loading spinner
+    document.getElementById('loading-spinner').style.display = 'none';
+    
+    // Update flight info description with all flights
+    updateFlightInfoDescription(flightData.flights || []);
+    
+    if (!flightData || !flightData.expenses || flightData.expenses.length === 0) {
+      document.getElementById('no-data-message').style.display = 'block';
+      return;
+    }
+    
+    // Show content
+    document.getElementById('content-container').style.display = 'block';
+    
+    // Group expenses by category
+    const groupedExpenses = groupExpensesByCategory(flightData.expenses);
+    
+    // Render expense cards
+    renderExpenseCards(groupedExpenses);
+    
+  } catch (error) {
+    console.error('Error loading flight expenses:', error);
+    document.getElementById('loading-spinner').style.display = 'none';
+    document.getElementById('no-data-message').style.display = 'block';
+  }
+}
+
+function updateFlightInfoDescription(flights) {
+  const descriptionElement = document.getElementById('flight-info-description');
+  
+  if (!flights || flights.length === 0) {
+    descriptionElement.textContent = 'No flight information available';
+    return;
+  }
+  
+  // Sort flights by date
+  const sortedFlights = flights.sort((a, b) => {
+    const dateA = new Date(a.flt_date);
+    const dateB = new Date(b.flt_date);
+    return dateA - dateB;
+  });
+  
+  // Format flights info
+  const flightInfoParts = sortedFlights.map(flight => {
+    const date = new Date(flight.flt_date);
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+    const route = `${flight.flt_dep} → ${flight.flt_arr}`;
+    return `${formattedDate} • ${route}`;
+  });
+  
+  descriptionElement.textContent = flightInfoParts.join(' | ');
+}
+
+function groupExpensesByCategory(expenses) {
+  const groups = {};
+  
+  expenses.forEach(expense => {
+    const category = getExpenseCategory(expense);
+    
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+    
+    groups[category].push(expense);
+  });
+  
+  return groups;
+}
+
+function getExpenseCategory(expense) {
+  const type = (expense.exp_type || '').toLowerCase();
+  const subtype = (expense.exp_subtype || '').trim();
+  
+  // Map expense types to categories
+  if (type.includes('ground handling')) {
+    if (subtype && subtype.toLowerCase().includes('departure')) {
+      return 'Ground Handling - Departure';
+    }
+    if (subtype && subtype.toLowerCase().includes('arrival')) {
+      return 'Ground Handling - Arrival';
+    }
+    return 'Ground Handling';
+  }
+  
+  if (type.includes('fuel')) {
+    return 'Fuel';
+  }
+  
+  if (type.includes('navigation') || type.includes('enroute')) {
+    return 'Enroute Navigation';
+  }
+  
+  if (type.includes('overflight')) {
+    return 'Overflight Permits';
+  }
+  
+  if (type.includes('landing')) {
+    return 'Landing Permits';
+  }
+  
+  if (type.includes('catering') || type.includes('food')) {
+    return 'Catering';
+  }
+  
+  if (type.includes('flight planning')) {
+    return 'Flight Planning';
+  }
+  
+  // Default: capitalize first letter
+  return type.charAt(0).toUpperCase() + type.slice(1) + (subtype ? ` - ${subtype}` : '');
+}
+
+function renderExpenseCards(groupedExpenses) {
+  const container = document.getElementById('expenses-cards-container');
+  container.innerHTML = '';
+  
+  const categories = Object.keys(groupedExpenses).sort();
+  
+  categories.forEach(category => {
+    const expenses = groupedExpenses[category];
+    
+    // Create category section
+    const categorySection = document.createElement('div');
+    categorySection.className = 'expense-category-section';
+    
+    const categoryTitle = document.createElement('h2');
+    categoryTitle.className = 'expense-category-title';
+    categoryTitle.textContent = category;
+    categorySection.appendChild(categoryTitle);
+    
+    // Create cards container
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'expense-cards-grid';
+    
+    expenses.forEach(expense => {
+      const card = createExpenseCard(expense);
+      cardsContainer.appendChild(card);
+    });
+    
+    categorySection.appendChild(cardsContainer);
+    container.appendChild(categorySection);
+  });
+}
+
+function createExpenseCard(expense) {
+  const card = document.createElement('div');
+  card.className = 'expense-card';
+  
+  const amount = parseFloat(expense.exp_amount) || 0;
+  const currency = expense.exp_currency || 'USD';
+  const amountInUSD = convertToUSD(amount, currency);
+  
+  const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+  const invoiceId = expense.invoices?.id || null;
+  const place = expense.exp_place || '';
+  const fuelQuantity = expense.exp_fuel_quan || '';
+  const fuelProvider = expense.exp_fuel_provider || '';
+  const comments = expense.exp_comments || '';
+  const subtype = expense.exp_subtype || '';
+  
+  // Create invoice link if available
+  const invoiceLink = invoiceId 
+    ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
+    : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
+  
+  card.innerHTML = `
+    <div class="expense-card-header">
+      <div class="expense-card-amount">
+        <span class="expense-amount-value">$${amountInUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <span class="expense-amount-currency">${currency}</span>
+      </div>
+      ${subtype ? `<div class="expense-card-subtype">${subtype}</div>` : ''}
+    </div>
+    <div class="expense-card-body">
+      ${place ? `<div class="expense-card-field">
+        <span class="expense-field-label">Place:</span>
+        <span class="expense-field-value">${place}</span>
+      </div>` : ''}
+      ${fuelQuantity ? `<div class="expense-card-field">
+        <span class="expense-field-label">Fuel Quantity:</span>
+        <span class="expense-field-value">${fuelQuantity} L</span>
+      </div>` : ''}
+      ${fuelProvider ? `<div class="expense-card-field">
+        <span class="expense-field-label">Fuel Provider:</span>
+        <span class="expense-field-value">${fuelProvider}</span>
+      </div>` : ''}
+      <div class="expense-card-field">
+        <span class="expense-field-label">Invoice:</span>
+        ${invoiceLink}
+      </div>
+      ${comments ? `<div class="expense-card-field expense-card-comments">
+        <span class="expense-field-label">Comments:</span>
+        <span class="expense-field-value">${comments}</span>
+      </div>` : ''}
+    </div>
+  `;
+  
+  return card;
+}
+
+function convertToUSD(amount, currency) {
+  if (!amount) return 0;
+  
+  const numAmount = parseFloat(amount);
+  
+  switch (currency?.toUpperCase()) {
+    case 'USD':
+      return numAmount;
+    case 'AED':
+      return numAmount / 3.6735; // AED to USD
+    case 'EUR':
+      // EUR conversions always go through AED (not directly to USD)
+      // EUR → AED: 1 EUR = 4.3119 AED, then AED → USD: 1 AED = 1/3.6735 USD
+      return (numAmount * 4.3119) / 3.6735; // EUR → AED → USD
+    default:
+      return numAmount;
+  }
+}
+</script>
+
+<style>
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.loading-text {
+  margin-top: 1rem;
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+.content-container {
+  margin-top: 0.5rem;
+}
+
+.no-data-container {
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.expense-category-section {
+  margin-bottom: 2rem;
+}
+
+.expense-category-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid hsl(210, 11%, 90%);
+}
+
+.expense-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.expense-card {
+  background-color: white;
+  border: 1px solid hsl(210, 11%, 90%);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.expense-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.expense-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+}
+
+.expense-card-amount {
+  display: flex;
+  flex-direction: column;
+}
+
+.expense-amount-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  line-height: 1.2;
+}
+
+.expense-amount-currency {
+  font-size: 0.75rem;
+  color: hsl(210, 6%, 46%);
+  margin-top: 0.25rem;
+}
+
+.expense-card-subtype {
+  font-size: 0.75rem;
+  color: hsl(210, 6%, 46%);
+  background-color: hsl(210, 11%, 96%);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+.expense-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.expense-card-field {
+  display: flex;
+  align-items: flex-start;
+  font-size: 0.875rem;
+}
+
+.expense-field-label {
+  font-weight: 500;
+  color: hsl(210, 6%, 46%);
+  min-width: 100px;
+  margin-right: 0.5rem;
+}
+
+.expense-field-value {
+  color: hsl(210, 6%, 21%);
+  flex: 1;
+}
+
+.expense-card-comments {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid hsl(210, 11%, 95%);
+}
+
+.expense-card-comments .expense-field-value {
+  font-style: italic;
+  color: hsl(210, 6%, 46%);
+}
+
+.expense-invoice-link {
+  color: hsl(210, 76%, 36%);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.expense-invoice-link:hover {
+  color: hsl(210, 76%, 30%);
+}
+
+.expense-invoice-text {
+  color: hsl(210, 6%, 46%);
+}
+
+.page-header {
+  position: sticky;
+  top: 4rem;
+  z-index: 90;
+  background-color: hsl(210, 11%, 98%);
+  padding: 1rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+}
+
+.page-description {
+  color: hsl(210, 6%, 46%);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.page-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+</style>
+

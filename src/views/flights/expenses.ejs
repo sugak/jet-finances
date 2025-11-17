@@ -408,7 +408,9 @@ function convertToUSD(amount, currency) {
     case 'AED':
       return numAmount / 3.6735; // AED to USD
     case 'EUR':
-      return numAmount * 1.08; // EUR to USD (approximate)
+      // EUR conversions always go through AED (not directly to USD)
+      // EUR → AED: 1 EUR = 4.3119 AED, then AED → USD: 1 AED = 1/3.6735 USD
+      return (numAmount * 4.3119) / 3.6735; // EUR → AED → USD
     default:
       return numAmount;
   }

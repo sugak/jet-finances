@@ -228,6 +228,15 @@
           </div>
         </div>
         
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto; margin: 0;">
+              <span>Include disbursement fee</span>
+            </label>
+          </div>
+        </div>
+        
         <div class="form-group">
           <label for="expComments">Comments</label>
           <textarea id="expComments" name="exp_comments" rows="3" placeholder="Enter comments (optional)"></textarea>
@@ -344,11 +353,11 @@ function applyFilters() {
   filteredExpenses.forEach(expense => {
       const row = document.createElement('tr');
       
-      // Format amount with currency (assuming USD for now)
-      const formattedAmount = expense.exp_amount ? `$${parseFloat(expense.exp_amount).toLocaleString('en-US', { 
+      // Format amount without currency symbol (currency is shown in separate column)
+      const formattedAmount = expense.exp_amount ? parseFloat(expense.exp_amount).toLocaleString('en-US', { 
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2 
-      })}` : 'N/A';
+      }) : 'N/A';
       
       
       // Format fuel quantity
@@ -392,7 +401,10 @@ function applyFilters() {
           <div class="invoice-number-compact">${expense.invoices?.inv_number || 'N/A'}</div>
         </td>
         <td>
-          <div class="flight-number-compact">${expense.flights?.flt_number || 'N/A'}</div>
+          <div class="flight-number-compact">
+            ${expense.flights?.flt_number || 'N/A'}
+            ${expense.flights?.flt_dep && expense.flights?.flt_arr ? ` (${expense.flights.flt_dep} - ${expense.flights.flt_arr})` : ''}
+          </div>
         </td>
         <td>
           <div class="action-buttons">
@@ -860,6 +872,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(addExpenseForm);
         const data = Object.fromEntries(formData.entries());
         
+        // Check if disbursement fee should be included
+        const includeDisbursementFee = data.include_disbursement_fee === 'on';
+        delete data.include_disbursement_fee; // Remove checkbox from data
+        
         // Currency field is now stored in database, so keep it
         
         // Convert empty strings to null for optional fields
@@ -869,20 +885,100 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         });
         
+        // Create main expense
         const response = await apiRequest('/api/expenses', {
           method: 'POST',
           body: JSON.stringify(data),
         });
         
-        if (response.ok) {
-          // Close modal and reload expenses
-          closeAddExpenseModal();
-          await loadExpenses();
-          console.log('Expense added successfully');
-        } else {
+        if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to add expense');
         }
+        
+        // If disbursement fee should be included, create second expense
+        if (includeDisbursementFee && data.exp_amount) {
+          // Get expense type and subtype names for comment
+          const expTypeSelect = document.getElementById('expType');
+          const expSubtypeSelect = document.getElementById('expSubtype');
+          const typeName = expTypeSelect.options[expTypeSelect.selectedIndex]?.textContent || '';
+          const subtypeName = expSubtypeSelect.options[expSubtypeSelect.selectedIndex]?.textContent || '';
+          
+          // Calculate disbursement fee amount (5% of expense amount)
+          const disbursementAmount = parseFloat(data.exp_amount) * 0.05;
+          
+          // Build comment
+          let comment = `${typeName}`;
+          if (subtypeName && subtypeName !== 'Select Subtype') {
+            comment += ` - ${subtypeName}`;
+          }
+          comment += `, ${data.exp_amount} ${data.exp_currency || 'AED'}`;
+          
+          // Add period or flight info
+          if (data.exp_period_start && data.exp_period_end) {
+            comment += `, ${data.exp_period_start} - ${data.exp_period_end}`;
+          } else if (data.exp_flight) {
+            const flightSelect = document.getElementById('expFlight');
+            const flightText = flightSelect.options[flightSelect.selectedIndex]?.textContent || '';
+            if (flightText && flightText !== 'Select Flight (Optional)') {
+              comment += `, ${flightText}`;
+            }
+          }
+          
+          // Find Disbursement fee type and subtype IDs
+          const expenseTypesResponse = await apiRequest('/api/expense-types');
+          const expenseTypes = await expenseTypesResponse.json();
+          const disbursementType = expenseTypes.find(type => 
+            type.name.toLowerCase().includes('disbursement')
+          );
+          
+          if (disbursementType) {
+            const subtypesResponse = await fetch(`/api/expense-subtypes/${disbursementType.id}`);
+            const subtypes = await subtypesResponse.json();
+            const disbursementSubtype = subtypes.find(subtype => 
+              subtype.name.toLowerCase().includes('disbursement')
+            );
+            
+            // Find Disbursement fee invoice type
+            const invoiceTypesResponse = await apiRequest('/api/invoice-types');
+            const invoiceTypes = await invoiceTypesResponse.json();
+            const disbursementInvoiceType = invoiceTypes.find(type => 
+              type.name.toLowerCase().includes('disbursement')
+            );
+            
+            // Create disbursement fee expense
+            const disbursementData = {
+              exp_type: disbursementType.id,
+              exp_subtype: disbursementSubtype ? disbursementSubtype.id : null,
+              exp_invoice_type: disbursementInvoiceType ? disbursementInvoiceType.id : null,
+              exp_amount: disbursementAmount.toFixed(2),
+              exp_currency: data.exp_currency || 'AED',
+              exp_invoice: data.exp_invoice,
+              exp_flight: data.exp_flight,
+              exp_period_start: data.exp_period_start,
+              exp_period_end: data.exp_period_end,
+              exp_place: data.exp_place,
+              exp_comments: comment
+            };
+            
+            // Convert empty strings to null
+            Object.keys(disbursementData).forEach(key => {
+              if (disbursementData[key] === '') {
+                disbursementData[key] = null;
+              }
+            });
+            
+            await apiRequest('/api/expenses', {
+              method: 'POST',
+              body: JSON.stringify(disbursementData),
+            });
+          }
+        }
+        
+        // Close modal and reload expenses
+        closeAddExpenseModal();
+        await loadExpenses();
+        console.log('Expense added successfully');
       } catch (error) {
         console.error('Error adding expense:', error);
         alert('Failed to add expense: ' + error.message);
@@ -909,11 +1005,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <style>
 /* Expense-specific styles */
+.table-wrapper {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  max-height: 70vh !important;
+  width: 100% !important;
+}
+
 .expenses-table {
   width: 100% !important;
   border-collapse: collapse !important;
   font-size: 0.8rem !important;
-  table-layout: auto !important;
+  table-layout: fixed !important;
 }
 
 .expenses-table thead {
@@ -926,7 +1029,8 @@ document.addEventListener('DOMContentLoaded', function() {
   font-weight: 600 !important;
   color: hsl(210, 6%, 21%) !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
   font-size: 0.75rem !important;
 }
 
@@ -956,6 +1060,9 @@ document.addEventListener('DOMContentLoaded', function() {
   padding: 0.5rem 0.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   vertical-align: middle !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow: hidden !important;
 }
 
 .expenses-table tbody tr:hover {
