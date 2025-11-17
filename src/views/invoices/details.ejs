@@ -330,7 +330,7 @@ async function loadExpenses() {
     // Group expenses by exp_invoice_type
     const groupedExpenses = {};
     expenses.forEach(expense => {
-      const type = expense.exp_invoice_type || 'Other';
+      const type = expense.invoice_types?.name || expense.exp_invoice_type || 'Other';
       if (!groupedExpenses[type]) {
         groupedExpenses[type] = [];
       }
@@ -437,12 +437,12 @@ async function loadExpenses() {
         }
         
         html += `
-          <tr>
+          <tr data-expense-id="${expense.id}">
             <td class="group-cell">
-              <div class="expense-type">${expense.exp_type || '-'}</div>
+              <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
             </td>
             <td class="group-cell">
-              <div class="expense-subtype">${expense.exp_subtype || '-'}</div>
+              <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
             </td>
             <td class="group-cell">
               <div class="expense-description">${comments}</div>
@@ -463,7 +463,12 @@ async function loadExpenses() {
               <div class="expense-fuel-provider">${fuelProvider}</div>
             </td>
             <td>
-              <div class="expense-flight">${expense.flights ? expense.flights.flt_number || '-' : '-'}</div>
+              <div class="expense-flight">
+                ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
+                ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
+                  ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
+                  : ''}
+              </div>
             </td>
             <td>
               <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -520,6 +525,36 @@ async function loadExpenses() {
         await deleteExpense(expenseId);
       });
     });
+
+    // Check if we need to expand a specific expense section
+    const urlParams = new URLSearchParams(window.location.search);
+    const expenseId = urlParams.get('expense');
+    if (expenseId) {
+      // Find the expense in the expenses array
+      const targetExpense = expenses.find(exp => exp.id == expenseId);
+      if (targetExpense) {
+        // Get the expense type (used for section grouping)
+        const expenseType = targetExpense.exp_invoice_type || 'Other';
+        // Create section ID from type (same logic as when creating sections)
+        const sectionId = expenseType.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Expand the section
+        toggleSection(sectionId);
+        
+        // Scroll to the expense row after a short delay to ensure DOM is ready
+        setTimeout(() => {
+          const expenseRow = container.querySelector(`[data-expense-id="${expenseId}"]`);
+          if (expenseRow) {
+            expenseRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Highlight the row briefly
+            expenseRow.style.backgroundColor = 'hsl(210, 11%, 95%)';
+            setTimeout(() => {
+              expenseRow.style.backgroundColor = '';
+            }, 2000);
+          }
+        }, 100);
+      }
+    }
   } catch (error) {
     console.error('Error loading expenses:', error);
     const container = document.getElementById('expenses-container');
@@ -668,8 +703,8 @@ async function openEditExpenseModal(expenseData) {
       loadFlightsForDropdown()
     ]);
     
-    // Wait a bit more to ensure DOM is updated
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait longer to ensure DOM is updated and dropdowns are fully populated
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     // Fill form with existing data after dropdowns are loaded
     await fillExpenseForm(expenseData);
@@ -680,107 +715,308 @@ async function fillExpenseForm(expenseData) {
   console.log('=== FILLING FORM ===');
   console.log('Expense data:', expenseData);
   
-  // Fill form fields with expense data
-  document.getElementById('expAmount').value = expenseData.exp_amount || '';
-  document.getElementById('expCurrency').value = expenseData.exp_currency || '';
-  document.getElementById('expPlace').value = expenseData.exp_place || '';
-  document.getElementById('expFuelQty').value = expenseData.exp_fuel_quan || '';
-  document.getElementById('expFuelProvider').value = expenseData.exp_fuel_provider || '';
-  document.getElementById('expComments').value = expenseData.exp_comments || '';
-  
-  // Handle period dates
-  if (expenseData.exp_period_start) {
-    const startDate = new Date(expenseData.exp_period_start);
-    const startMonth = startDate.getFullYear() + '-' + String(startDate.getMonth() + 1).padStart(2, '0');
-    document.getElementById('expPeriodStart').value = startMonth;
-  }
-  
-  if (expenseData.exp_period_end) {
-    const endDate = new Date(expenseData.exp_period_end);
-    const endMonth = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0');
-    document.getElementById('expPeriodEnd').value = endMonth;
-  }
-  
-  // Handle dropdown selections - need to find matching IDs by name
   try {
+    // Fill basic text fields
+    const expAmountField = document.getElementById('expAmount');
+    if (expAmountField) {
+      expAmountField.value = expenseData.exp_amount || '';
+      console.log('Set expAmount:', expenseData.exp_amount);
+    }
+    
+    const expCurrencyField = document.getElementById('expCurrency');
+    if (expCurrencyField) {
+      expCurrencyField.value = expenseData.exp_currency || 'AED';
+      console.log('Set expCurrency:', expenseData.exp_currency);
+    }
+    
+    const expPlaceField = document.getElementById('expPlace');
+    if (expPlaceField) {
+      expPlaceField.value = expenseData.exp_place || '';
+      console.log('Set expPlace:', expenseData.exp_place);
+    }
+    
+    const expFuelQtyField = document.getElementById('expFuelQuan');
+    if (expFuelQtyField) {
+      expFuelQtyField.value = expenseData.exp_fuel_quan || '';
+      console.log('Set expFuelQuan:', expenseData.exp_fuel_quan);
+    }
+    
+    const expFuelProviderField = document.getElementById('expFuelProvider');
+    if (expFuelProviderField) {
+      expFuelProviderField.value = expenseData.exp_fuel_provider || '';
+      console.log('Set expFuelProvider:', expenseData.exp_fuel_provider);
+    }
+    
+    const expCommentsField = document.getElementById('expComments');
+    if (expCommentsField) {
+      expCommentsField.value = expenseData.exp_comments || '';
+      console.log('Set expComments:', expenseData.exp_comments);
+    }
+    
+    // Handle period dates - support both Date objects and string formats
+    const expPeriodStartField = document.getElementById('expPeriodStart');
+    const expPeriodEndField = document.getElementById('expPeriodEnd');
+    
+    if (expPeriodStartField && expenseData.exp_period_start) {
+      try {
+        let startDate;
+        let startMonthStr;
+        
+        if (typeof expenseData.exp_period_start === 'string') {
+          // If it's already in YYYY-MM format, use it directly
+          if (expenseData.exp_period_start.match(/^\d{4}-\d{2}$/)) {
+            startMonthStr = expenseData.exp_period_start;
+            expPeriodStartField.value = startMonthStr;
+            // Parse for comparison
+            const [year, month] = startMonthStr.split('-');
+            startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+          } else {
+            // Otherwise parse it as a date
+            startDate = new Date(expenseData.exp_period_start);
+            startMonthStr = startDate.getFullYear() + '-' + String(startDate.getMonth() + 1).padStart(2, '0');
+            expPeriodStartField.value = startMonthStr;
+          }
+        } else {
+          startDate = new Date(expenseData.exp_period_start);
+          startMonthStr = startDate.getFullYear() + '-' + String(startDate.getMonth() + 1).padStart(2, '0');
+          expPeriodStartField.value = startMonthStr;
+        }
+        console.log('Set expPeriodStart:', expPeriodStartField.value);
+        
+        // Handle period end - check if it's a single month period
+        if (expPeriodEndField && expenseData.exp_period_end && startDate) {
+          try {
+            let endDate;
+            let endMonthStr;
+            
+            if (typeof expenseData.exp_period_end === 'string') {
+              // If it's already in YYYY-MM format, use it directly
+              if (expenseData.exp_period_end.match(/^\d{4}-\d{2}$/)) {
+                endMonthStr = expenseData.exp_period_end;
+                // Parse for comparison
+                const [year, month] = endMonthStr.split('-');
+                endDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+              } else {
+                // Otherwise parse it as a date
+                endDate = new Date(expenseData.exp_period_end);
+                endMonthStr = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0');
+              }
+            } else {
+              endDate = new Date(expenseData.exp_period_end);
+              endMonthStr = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0');
+            }
+            
+            // Check if this is a single month period
+            // Single month periods have end date as first day of next month
+            const startMonth = startDate.getMonth();
+            const startYear = startDate.getFullYear();
+            const endMonth = endDate.getMonth();
+            const endYear = endDate.getFullYear();
+            
+            // If end date is first day of next month, it's a single month period
+            const isSingleMonth = (
+              endDate.getDate() === 1 && 
+              ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+               (endMonth === 0 && endYear === startYear + 1))
+            );
+            
+            if (isSingleMonth) {
+              // Single month - use the same month as start
+              expPeriodEndField.value = startMonthStr;
+              console.log('Set expPeriodEnd (single month):', startMonthStr);
+            } else {
+              // Multiple months - use the actual end month
+              expPeriodEndField.value = endMonthStr;
+              console.log('Set expPeriodEnd (multiple months):', endMonthStr);
+            }
+          } catch (e) {
+            console.error('Error setting period end:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Error setting period start:', e);
+      }
+    } else if (expPeriodEndField && expenseData.exp_period_end) {
+      // If start is not set, just set end normally
+      try {
+        let endDate;
+        if (typeof expenseData.exp_period_end === 'string') {
+          // If it's already in YYYY-MM format, use it directly
+          if (expenseData.exp_period_end.match(/^\d{4}-\d{2}$/)) {
+            expPeriodEndField.value = expenseData.exp_period_end;
+          } else {
+            // Otherwise parse it as a date
+            endDate = new Date(expenseData.exp_period_end);
+            const endMonth = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0');
+            expPeriodEndField.value = endMonth;
+          }
+        } else {
+          endDate = new Date(expenseData.exp_period_end);
+          const endMonth = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0');
+          expPeriodEndField.value = endMonth;
+        }
+        console.log('Set expPeriodEnd (no start):', expPeriodEndField.value);
+      } catch (e) {
+        console.error('Error setting period end:', e);
+      }
+    }
+    
+    // Handle dropdown selections - try ID first, then name
     console.log('=== FILLING DROPDOWNS ===');
     
-    // Set expense type by finding matching name
+    // Set expense type - try ID first, then name
     const expTypeSelect = document.getElementById('expType');
-    console.log('Expense type select found:', !!expTypeSelect);
-    console.log('Looking for expense type:', expenseData.exp_type);
-    
-    if (expenseData.exp_type && expTypeSelect) {
-      console.log('Available expense type options:', Array.from(expTypeSelect.options).map(opt => ({ value: opt.value, text: opt.textContent })));
-      // Try exact match first
-      let found = false;
-      for (let option of expTypeSelect.options) {
-        if (option.textContent.trim() === expenseData.exp_type.trim()) {
-          expTypeSelect.value = option.value;
-          await loadExpenseSubtypes(option.value);
-          // Wait for subtypes to load
-          await new Promise(resolve => setTimeout(resolve, 200));
-          found = true;
-          break;
+    if (expTypeSelect) {
+      let typeId = null;
+      
+      // Try to get ID from expense_types object or directly from exp_type
+      if (expenseData.expense_types?.id) {
+        typeId = expenseData.expense_types.id;
+        console.log('Found type ID from expense_types:', typeId);
+      } else if (expenseData.exp_type) {
+        // Check if it's a number (ID) or string (name)
+        if (!isNaN(expenseData.exp_type) && expenseData.exp_type !== '') {
+          typeId = parseInt(expenseData.exp_type);
+          console.log('Found type ID from exp_type:', typeId);
         }
       }
       
-      // If not found, try case-insensitive match
-      if (!found) {
+      if (typeId) {
+        // Wait a bit to ensure dropdown is populated
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Try to set by ID
+        if (expTypeSelect.querySelector(`option[value="${typeId}"]`)) {
+          expTypeSelect.value = typeId;
+          console.log('Set expType by ID:', typeId);
+          
+          // Load subtypes after setting type
+          await loadExpenseSubtypes(typeId);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } else {
+          console.warn('Type ID not found in dropdown:', typeId);
+        }
+      } else if (expenseData.expense_types?.name || expenseData.exp_type) {
+        // Fallback to name matching
+        const typeName = expenseData.expense_types?.name || expenseData.exp_type;
+        console.log('Trying to match type by name:', typeName);
+        let found = false;
         for (let option of expTypeSelect.options) {
-          if (option.textContent.trim().toLowerCase() === expenseData.exp_type.trim().toLowerCase()) {
+          if (option.value && (option.textContent.trim() === typeName.trim() || 
+              option.textContent.trim().toLowerCase() === typeName.trim().toLowerCase())) {
             expTypeSelect.value = option.value;
+            console.log('Set expType by name:', option.value);
             await loadExpenseSubtypes(option.value);
-            // Wait for subtypes to load
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 300));
+            found = true;
             break;
           }
+        }
+        if (!found) {
+          console.warn('Type name not found in dropdown:', typeName);
         }
       }
     }
     
-    // Set expense subtype by finding matching name
+    // Set expense subtype - try ID first, then name
     const expSubtypeSelect = document.getElementById('expSubtype');
-    if (expenseData.exp_subtype && expSubtypeSelect) {
-      // Try exact match first
-      let found = false;
-      for (let option of expSubtypeSelect.options) {
-        if (option.textContent.trim() === expenseData.exp_subtype.trim()) {
-          expSubtypeSelect.value = option.value;
-          found = true;
-          break;
+    if (expSubtypeSelect) {
+      // Wait a bit more to ensure subtypes are loaded
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      let subtypeId = null;
+      
+      // Try to get ID from expense_subtypes object or directly from exp_subtype
+      if (expenseData.expense_subtypes?.id) {
+        subtypeId = expenseData.expense_subtypes.id;
+        console.log('Found subtype ID from expense_subtypes:', subtypeId);
+      } else if (expenseData.exp_subtype) {
+        // Check if it's a number (ID) or string (name)
+        if (!isNaN(expenseData.exp_subtype) && expenseData.exp_subtype !== '') {
+          subtypeId = parseInt(expenseData.exp_subtype);
+          console.log('Found subtype ID from exp_subtype:', subtypeId);
         }
       }
       
-      // If not found, try case-insensitive match
-      if (!found) {
+      if (subtypeId) {
+        // Try to set by ID
+        if (expSubtypeSelect.querySelector(`option[value="${subtypeId}"]`)) {
+          expSubtypeSelect.value = subtypeId;
+          console.log('Set expSubtype by ID:', subtypeId);
+        } else {
+          console.warn('Subtype ID not found in dropdown:', subtypeId);
+          // Try name matching as fallback
+          const subtypeName = expenseData.expense_subtypes?.name || expenseData.exp_subtype;
+          for (let option of expSubtypeSelect.options) {
+            if (option.value && (option.textContent.trim() === subtypeName.trim() || 
+                option.textContent.trim().toLowerCase() === subtypeName.trim().toLowerCase())) {
+              expSubtypeSelect.value = option.value;
+              console.log('Set expSubtype by name:', option.value);
+              break;
+            }
+          }
+        }
+      } else if (expenseData.expense_subtypes?.name || expenseData.exp_subtype) {
+        // Fallback to name matching
+        const subtypeName = expenseData.expense_subtypes?.name || expenseData.exp_subtype;
+        console.log('Trying to match subtype by name:', subtypeName);
         for (let option of expSubtypeSelect.options) {
-          if (option.textContent.trim().toLowerCase() === expenseData.exp_subtype.trim().toLowerCase()) {
+          if (option.value && (option.textContent.trim() === subtypeName.trim() || 
+              option.textContent.trim().toLowerCase() === subtypeName.trim().toLowerCase())) {
             expSubtypeSelect.value = option.value;
+            console.log('Set expSubtype by name:', option.value);
             break;
           }
         }
       }
     }
     
-    // Set invoice type by finding matching name
+    // Set invoice type - try ID first, then name
     const expInvoiceTypeSelect = document.getElementById('expInvoiceType');
-    if (expenseData.exp_invoice_type && expInvoiceTypeSelect) {
-      // Try exact match first
-      let found = false;
-      for (let option of expInvoiceTypeSelect.options) {
-        if (option.textContent.trim() === expenseData.exp_invoice_type.trim()) {
-          expInvoiceTypeSelect.value = option.value;
-          found = true;
-          break;
+    if (expInvoiceTypeSelect) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      let invoiceTypeId = null;
+      
+      // Try to get ID from invoice_types object or directly from exp_invoice_type
+      if (expenseData.invoice_types?.id) {
+        invoiceTypeId = expenseData.invoice_types.id;
+        console.log('Found invoice type ID from invoice_types:', invoiceTypeId);
+      } else if (expenseData.exp_invoice_type) {
+        // Check if it's a number (ID) or string (name)
+        if (!isNaN(expenseData.exp_invoice_type) && expenseData.exp_invoice_type !== '') {
+          invoiceTypeId = parseInt(expenseData.exp_invoice_type);
+          console.log('Found invoice type ID from exp_invoice_type:', invoiceTypeId);
         }
       }
       
-      // If not found, try case-insensitive match
-      if (!found) {
+      if (invoiceTypeId) {
+        // Try to set by ID
+        if (expInvoiceTypeSelect.querySelector(`option[value="${invoiceTypeId}"]`)) {
+          expInvoiceTypeSelect.value = invoiceTypeId;
+          console.log('Set expInvoiceType by ID:', invoiceTypeId);
+        } else {
+          console.warn('Invoice type ID not found in dropdown:', invoiceTypeId);
+          // Try name matching as fallback
+          const invoiceTypeName = expenseData.invoice_types?.name || expenseData.exp_invoice_type;
+          for (let option of expInvoiceTypeSelect.options) {
+            if (option.value && (option.textContent.trim() === invoiceTypeName.trim() || 
+                option.textContent.trim().toLowerCase() === invoiceTypeName.trim().toLowerCase())) {
+              expInvoiceTypeSelect.value = option.value;
+              console.log('Set expInvoiceType by name:', option.value);
+              break;
+            }
+          }
+        }
+      } else if (expenseData.invoice_types?.name || expenseData.exp_invoice_type) {
+        // Fallback to name matching
+        const invoiceTypeName = expenseData.invoice_types?.name || expenseData.exp_invoice_type;
+        console.log('Trying to match invoice type by name:', invoiceTypeName);
         for (let option of expInvoiceTypeSelect.options) {
-          if (option.textContent.trim().toLowerCase() === expenseData.exp_invoice_type.trim().toLowerCase()) {
+          if (option.value && (option.textContent.trim() === invoiceTypeName.trim() || 
+              option.textContent.trim().toLowerCase() === invoiceTypeName.trim().toLowerCase())) {
             expInvoiceTypeSelect.value = option.value;
+            console.log('Set expInvoiceType by name:', option.value);
             break;
           }
         }
@@ -788,11 +1024,22 @@ async function fillExpenseForm(expenseData) {
     }
     
     // Handle flight selection
-    if (expenseData.exp_flight) {
-      document.getElementById('expFlight').value = expenseData.exp_flight;
+    const expFlightField = document.getElementById('expFlight');
+    if (expFlightField && expenseData.exp_flight) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      const flightId = expenseData.exp_flight;
+      if (expFlightField.querySelector(`option[value="${flightId}"]`)) {
+        expFlightField.value = flightId;
+        console.log('Set expFlight:', flightId);
+      } else {
+        console.warn('Flight ID not found in dropdown:', flightId);
+      }
     }
+    
+    console.log('=== FORM FILLING COMPLETE ===');
   } catch (error) {
-    console.error('Error filling dropdowns:', error);
+    console.error('Error filling form:', error);
   }
 }
 
@@ -1376,7 +1623,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* Table container */
 .table-container {
-  overflow-x: auto !important;
+  overflow-x: hidden !important;
   overflow-y: visible !important;
   width: 100% !important;
 }
@@ -1472,13 +1719,14 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Expenses table */
 .expenses-table {
   width: 100% !important;
+  max-width: 100% !important;
   border-collapse: collapse !important;
   font-size: 0.875rem !important;
   background: white !important;
   border-radius: 0.5rem !important;
   overflow: visible !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
-  table-layout: auto !important;
+  table-layout: fixed !important;
 }
 
 .expenses-table thead {
@@ -1511,6 +1759,8 @@ document.addEventListener('DOMContentLoaded', function() {
   padding: 0.75rem 1rem !important;
   border-bottom: 1px solid hsl(210, 11%, 95%) !important;
   vertical-align: top !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
 }
 
 .expenses-table tbody tr:hover {
@@ -1534,11 +1784,18 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expense-flight {
-  font-size: 0.875rem !important;
+  font-size: 0.75rem !important;
   color: hsl(210, 6%, 21%) !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  line-height: 1.4 !important;
+}
+
+.flight-route {
+  display: block !important;
+  font-size: 0.7rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  margin-top: 0.25rem !important;
 }
 
 /* Group cell styling - pastel background */

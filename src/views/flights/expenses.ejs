@@ -48,6 +48,7 @@
               <th>OVERFLIGHT PERMITS</th>
               <th>LANDING PERMITS</th>
               <th>CATERING CHARGES</th>
+              <th>OTHER CHARGES</th>
             </tr>
           </thead>
           <tbody id="expenses-table-body">
@@ -174,7 +175,7 @@ function populateExpensesTable(groupedFlights) {
     const monthRow = document.createElement('tr');
     monthRow.className = 'month-header';
     monthRow.innerHTML = `
-      <td colspan="12" class="month-header-cell">
+      <td colspan="13" class="month-header-cell">
         <strong>${monthYear}</strong>
       </td>
     `;
@@ -216,6 +217,7 @@ function createFlightRow(flight) {
     <td>${formatExpenseCell(expensesByCategory['Overflight permits'], 'Overflight permits')}</td>
     <td>${formatExpenseCell(expensesByCategory['Landing permits'], 'Landing permits')}</td>
     <td>${formatExpenseCell(expensesByCategory['Catering charges'], 'Catering charges')}</td>
+    <td>${formatExpenseCell(expensesByCategory['Other charges'], 'Other charges')}</td>
   `;
   
   return row;
@@ -333,6 +335,14 @@ function getExpenseCategory(expense) {
     return 'Catering charges';
   }
   
+  // Check for Other charges - only for flight-related expenses
+  if (type.includes('other charges') || type === 'other charges') {
+    // Only include if it's associated with a flight (has exp_flight)
+    if (expense.exp_flight) {
+      return 'Other charges';
+    }
+  }
+  
   // Default mapping based on type
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
@@ -345,9 +355,16 @@ function formatExpenseCell(expenses, category = '') {
   return expenses.map(expense => {
     const amount = convertToUSD(expense.exp_amount, expense.exp_currency);
     const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+    const invoiceId = expense.exp_invoice || expense.invoices?.id;
+    const expenseId = expense.id;
     const station = expense.exp_place || '';
     const fuelQuantity = expense.exp_fuel_quan || '';
     const fuelProvider = expense.exp_fuel_provider || '';
+    
+    // Create link URL if invoice ID and expense ID are available
+    const amountLink = (invoiceId && expenseId) 
+      ? `<a href="/invoices/${invoiceId}?expense=${expenseId}" class="expense-amount-link">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</a>`
+      : `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     
     // For navigation-related expenses, show station
     const showStation = ['Enroute navigation', 'Overflight permits', 'Landing permits'].includes(category);
@@ -362,7 +379,7 @@ function formatExpenseCell(expenses, category = '') {
         <div class="expense-item">
           <div class="expense-fuel-quantity">${fuelQuantity} L</div>
           <div class="expense-fuel-usg">${quantityInUSG.toFixed(2)} USG</div>
-          <div class="expense-fuel-cost-per-usg">$${costPerUSG.toFixed(2)}/USG</div>
+          <div class="expense-fuel-cost-per-usg">${amountLink}/USG</div>
         </div>
       `;
     }
@@ -380,7 +397,7 @@ function formatExpenseCell(expenses, category = '') {
     if (category === 'Fuel cost') {
       return `
         <div class="expense-item">
-          <div class="expense-amount">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="expense-amount">${amountLink}</div>
           <div class="expense-invoice">${invoiceNumber}</div>
         </div>
       `;
@@ -389,7 +406,7 @@ function formatExpenseCell(expenses, category = '') {
     // For fuel cost and other columns, show amount and relevant info
     return `
       <div class="expense-item">
-        <div class="expense-amount">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div class="expense-amount">${amountLink}</div>
         ${showStation && station ? `<div class="expense-station">${station}</div>` : ''}
         <div class="expense-invoice">${invoiceNumber}</div>
       </div>
@@ -522,6 +539,37 @@ function convertToUSD(amount, currency) {
   font-size: 0.7rem !important;
 }
 
+.expense-amount-link {
+  color: inherit !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+}
+
+.expense-amount-link:hover {
+  color: inherit !important;
+  text-decoration: none !important;
+}
+
+.expense-fuel-cost-per-usg {
+  font-size: 0.6rem !important;
+  margin-top: 0.125rem !important;
+  color: hsl(0, 84%, 60%) !important;
+  font-weight: 600 !important;
+}
+
+.expense-fuel-cost-per-usg a {
+  color: inherit !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+}
+
+.expense-fuel-cost-per-usg a:hover {
+  color: inherit !important;
+  text-decoration: none !important;
+}
+
 .expense-station {
   font-size: 0.6rem !important;
   margin-top: 0.125rem !important;
@@ -554,13 +602,6 @@ function convertToUSD(amount, currency) {
   margin-top: 0.125rem !important;
   color: hsl(217, 91%, 60%) !important;
   font-weight: 500 !important;
-}
-
-.expense-fuel-cost-per-usg {
-  font-size: 0.6rem !important;
-  margin-top: 0.125rem !important;
-  color: hsl(0, 84%, 60%) !important;
-  font-weight: 600 !important;
 }
 
 .sortable {

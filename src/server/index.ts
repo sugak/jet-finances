@@ -1561,7 +1561,9 @@ app.get('/api/flights/expenses', authenticateToken, async (_req, res) => {
             exp_place,
             exp_fuel_quan,
             exp_fuel_provider,
+            exp_invoice,
             invoices!exp_invoice (
+              id,
               inv_number
             )
           )
@@ -2520,7 +2522,9 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
             inv_number
           ),
           flights!exp_flight (
-            flt_number
+            flt_number,
+            flt_dep,
+            flt_arr
           )
         `
         )
@@ -2530,6 +2534,74 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
       if (error) {
         console.log('Supabase error fetching invoice expenses:', error.message);
         return res.status(500).json({ error: 'Failed to fetch expenses' });
+      }
+
+      // Enrich expenses with type names
+      if (data && data.length > 0) {
+        // Get unique type IDs
+        const typeIds = [...new Set(data.map(e => e.exp_type).filter(Boolean))];
+        const subtypeIds = [
+          ...new Set(data.map(e => e.exp_subtype).filter(Boolean)),
+        ];
+        const invoiceTypeIds = [
+          ...new Set(data.map(e => e.exp_invoice_type).filter(Boolean)),
+        ];
+
+        // Fetch type names
+        const typeNamesMap = {};
+        if (typeIds.length > 0) {
+          const { data: types } = await supabase
+            .from('expense_types')
+            .select('id, name')
+            .in('id', typeIds);
+          if (types) {
+            types.forEach(t => {
+              typeNamesMap[t.id] = t;
+            });
+          }
+        }
+
+        const subtypeNamesMap = {};
+        if (subtypeIds.length > 0) {
+          const { data: subtypes } = await supabase
+            .from('expense_subtypes')
+            .select('id, name')
+            .in('id', subtypeIds);
+          if (subtypes) {
+            subtypes.forEach(s => {
+              subtypeNamesMap[s.id] = s;
+            });
+          }
+        }
+
+        const invoiceTypeNamesMap = {};
+        if (invoiceTypeIds.length > 0) {
+          const { data: invoiceTypes } = await supabase
+            .from('invoice_types')
+            .select('id, name')
+            .in('id', invoiceTypeIds);
+          if (invoiceTypes) {
+            invoiceTypes.forEach(it => {
+              invoiceTypeNamesMap[it.id] = it;
+            });
+          }
+        }
+
+        // Enrich expenses with type objects
+        const enrichedData = data.map(expense => ({
+          ...expense,
+          expense_types: expense.exp_type
+            ? typeNamesMap[expense.exp_type]
+            : null,
+          expense_subtypes: expense.exp_subtype
+            ? subtypeNamesMap[expense.exp_subtype]
+            : null,
+          invoice_types: expense.exp_invoice_type
+            ? invoiceTypeNamesMap[expense.exp_invoice_type]
+            : null,
+        }));
+
+        return res.json(enrichedData);
       }
 
       return res.json(data || []);
