@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
-    "@types/jsonwebtoken": "^9.0.10",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
     "csurf": "^1.11.0",
@@ -28,7 +27,6 @@
     "express-ejs-layouts": "^2.5.1",
     "express-rate-limit": "^7.3.1",
     "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0"
   },
   "devDependencies": {

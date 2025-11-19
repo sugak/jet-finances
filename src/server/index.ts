@@ -9,7 +9,6 @@ import csrf from 'csurf';
 import rateLimit from 'express-rate-limit';
 import expressLayouts from 'express-ejs-layouts';
 import { createClient } from '@supabase/supabase-js';
-// import jwt from 'jsonwebtoken'; // Not used in current implementation
 
 dotenv.config();
 
