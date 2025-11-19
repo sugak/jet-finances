@@ -2548,7 +2548,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
         ];
 
         // Fetch type names
-        const typeNamesMap = {};
+        const typeNamesMap: { [key: string]: any } = {};
         if (typeIds.length > 0) {
           const { data: types } = await supabase
             .from('expense_types')
@@ -2561,7 +2561,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
           }
         }
 
-        const subtypeNamesMap = {};
+        const subtypeNamesMap: { [key: string]: any } = {};
         if (subtypeIds.length > 0) {
           const { data: subtypes } = await supabase
             .from('expense_subtypes')
@@ -2574,7 +2574,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
           }
         }
 
-        const invoiceTypeNamesMap = {};
+        const invoiceTypeNamesMap: { [key: string]: any } = {};
         if (invoiceTypeIds.length > 0) {
           const { data: invoiceTypes } = await supabase
             .from('invoice_types')
@@ -2588,7 +2588,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
         }
 
         // Enrich expenses with type objects
-        const enrichedData = data.map(expense => ({
+        const enrichedData = data.map((expense: any) => ({
           ...expense,
           expense_types: expense.exp_type
             ? typeNamesMap[expense.exp_type]
@@ -3390,6 +3390,7 @@ app.put('/api/expenses/:id', async (req, res) => {
       exp_comments,
       exp_currency,
       exp_subtype,
+      update_disbursement_fee,
     } = req.body;
 
     // Get type and subtype names from IDs
@@ -3597,9 +3598,210 @@ app.put('/api/expenses/:id', async (req, res) => {
         req
       );
 
+      // If update_disbursement_fee flag is set, find and update related disbursement fee
+      let disbursementFeeUpdated = false;
+      if (update_disbursement_fee && exp_amount) {
+        // Get Disbursement fee type ID
+        const { data: disbursementType } = await supabase
+          .from('expense_types')
+          .select('id')
+          .ilike('name', '%disbursement%')
+          .single();
+
+        if (disbursementType) {
+          // Use updated expense data to find disbursement fee
+          const invoiceId = exp_invoice || currentExpense.exp_invoice;
+          const flightId =
+            exp_flight !== undefined ? exp_flight : currentExpense.exp_flight;
+          const periodStart =
+            expenseData.exp_period_start || currentExpense.exp_period_start;
+          const periodEnd =
+            expenseData.exp_period_end || currentExpense.exp_period_end;
+          const place =
+            exp_place !== undefined ? exp_place : currentExpense.exp_place;
+
+          // Build query to find disbursement fee
+          let query = supabase
+            .from('expenses')
+            .select('id, exp_comments, exp_amount, exp_currency')
+            .eq('exp_invoice', invoiceId)
+            .eq('exp_type', disbursementType.id);
+
+          // Match by flight if exists
+          if (flightId) {
+            query = query.eq('exp_flight', flightId);
+          } else {
+            query = query.is('exp_flight', null);
+          }
+
+          // Match by period if exists
+          if (periodStart && periodEnd) {
+            query = query
+              .eq('exp_period_start', periodStart)
+              .eq('exp_period_end', periodEnd);
+          } else {
+            query = query
+              .is('exp_period_start', null)
+              .is('exp_period_end', null);
+          }
+
+          // Match by place if exists
+          if (place) {
+            query = query.eq('exp_place', place);
+          } else {
+            query = query.is('exp_place', null);
+          }
+
+          const { data: disbursementFees } = await query;
+
+          if (disbursementFees && disbursementFees.length > 0) {
+            // Find exact match by checking comments for old amount and currency
+            let disbursementFeeId = null;
+            const oldAmountStr = parseFloat(
+              currentExpense.exp_amount || 0
+            ).toFixed(2);
+            const oldCurrencyStr = currentExpense.exp_currency || 'AED';
+
+            for (const fee of disbursementFees) {
+              if (fee.exp_comments) {
+                // Check if comment contains old amount and currency from original expense
+                if (
+                  fee.exp_comments.includes(oldAmountStr) &&
+                  fee.exp_comments.includes(oldCurrencyStr)
+                ) {
+                  disbursementFeeId = fee.id;
+                  break;
+                }
+              }
+            }
+
+            // If no exact match found by comment, use first match
+            if (!disbursementFeeId && disbursementFees.length > 0) {
+              disbursementFeeId = disbursementFees[0].id;
+            }
+
+            if (disbursementFeeId) {
+              // Calculate new disbursement fee amount (5% of updated expense amount)
+              const disbursementAmount = parseFloat(exp_amount) * 0.05;
+              const newCurrency =
+                exp_currency || currentExpense.exp_currency || 'AED';
+
+              // Get type and subtype names for comment
+              // Use updated names if provided, otherwise get from current expense
+              let typeNameForComment = expTypeName;
+              let subtypeNameForComment = expSubtypeName;
+
+              if (!typeNameForComment && currentExpense.exp_type) {
+                // Get type name from current expense (it's stored as name in DB)
+                typeNameForComment = currentExpense.exp_type;
+              }
+
+              if (!subtypeNameForComment && currentExpense.exp_subtype) {
+                // Get subtype name from current expense (it's stored as name in DB)
+                subtypeNameForComment = currentExpense.exp_subtype;
+              }
+
+              // Build new comment with updated expense information
+              let comment = typeNameForComment || '';
+              if (
+                subtypeNameForComment &&
+                subtypeNameForComment !== 'Select Subtype'
+              ) {
+                comment += ` - ${subtypeNameForComment}`;
+              }
+              comment += `, ${exp_amount} ${newCurrency}`;
+
+              // Add period or flight info
+              if (periodStart && periodEnd) {
+                // Format period as YYYY-MM - YYYY-MM to match client-side format
+                const startDate = new Date(periodStart);
+                const endDate = new Date(periodEnd);
+                const startFormatted = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+                const endFormatted = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
+                comment += `, ${startFormatted} - ${endFormatted}`;
+              } else if (flightId) {
+                // Get flight info for comment
+                const { data: flightData } = await supabase
+                  .from('flights')
+                  .select('flt_number, flt_dep, flt_arr')
+                  .eq('id', flightId)
+                  .single();
+                if (flightData) {
+                  comment += `, ${flightData.flt_number} - ${flightData.flt_dep} to ${flightData.flt_arr}`;
+                }
+              }
+
+              // Get disbursement subtype and invoice type IDs
+              let disbursementSubtypeId = null;
+              let disbursementInvoiceTypeId = null;
+
+              if (disbursementType.id) {
+                const { data: subtypes } = await supabase
+                  .from('expense_subtypes')
+                  .select('id')
+                  .eq('exp_type', disbursementType.id)
+                  .ilike('name', '%disbursement%')
+                  .limit(1);
+                if (subtypes && subtypes.length > 0) {
+                  disbursementSubtypeId = subtypes[0].id;
+                }
+              }
+
+              const { data: invoiceTypes } = await supabase
+                .from('invoice_types')
+                .select('id')
+                .ilike('name', '%disbursement%')
+                .limit(1);
+              if (invoiceTypes && invoiceTypes.length > 0) {
+                disbursementInvoiceTypeId = invoiceTypes[0].id;
+              }
+
+              // Update disbursement fee expense
+              const disbursementFeeData: any = {
+                exp_amount: disbursementAmount,
+                exp_currency: newCurrency,
+                exp_comments: comment,
+                exp_place: place || null,
+                exp_flight: flightId || null,
+                exp_period_start: periodStart || null,
+                exp_period_end: periodEnd || null,
+              };
+
+              // Only update subtype and invoice type if we found them
+              if (disbursementSubtypeId) {
+                disbursementFeeData.exp_subtype = disbursementSubtypeId;
+              }
+              if (disbursementInvoiceTypeId) {
+                disbursementFeeData.exp_invoice_type =
+                  disbursementInvoiceTypeId;
+              }
+
+              const { error: feeUpdateError } = await supabase
+                .from('expenses')
+                .update(disbursementFeeData)
+                .eq('id', disbursementFeeId);
+
+              if (!feeUpdateError) {
+                disbursementFeeUpdated = true;
+                console.log(
+                  'Disbursement fee updated successfully:',
+                  disbursementFeeId
+                );
+              } else {
+                console.log(
+                  'Error updating disbursement fee:',
+                  feeUpdateError.message
+                );
+              }
+            }
+          }
+        }
+      }
+
       return res.status(200).json({
         message: 'Expense updated successfully',
         data: data[0],
+        disbursementFeeUpdated,
       });
     }
 
@@ -3705,6 +3907,9 @@ app.get('/api/dashboard/stats', async (_req, res) => {
         total_revenue: 5300,
         total_expenses: 20500,
         flights_count: 2,
+        flights_this_year: 1,
+        flights_last_year: 1,
+        flights_change_percent: 0,
         invoices_pending: 1,
       };
     }

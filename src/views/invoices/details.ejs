@@ -87,14 +87,14 @@
           <div class="form-group">
             <label for="expCurrency">Currency</label>
             <select id="expCurrency" name="exp_currency">
-              <option value="AED" selected>AED</option>
-              <option value="USD">USD</option>
+              <option value="AED">AED</option>
+              <option value="USD" selected>USD</option>
               <option value="EUR">EUR</option>
             </select>
           </div>
         </div>
         
-        <div class="form-row">
+        <div class="form-row fuel-group">
           <div class="form-group">
             <label for="expFuelQuan">Fuel Quantity (L)</label>
             <input type="number" id="expFuelQuan" name="exp_fuel_quan" step="0.01" placeholder="0.00">
@@ -133,9 +133,9 @@
         
         <div class="form-row">
           <div class="form-group full-width">
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto; margin: 0;">
-              <span>Include disbursement fee</span>
+            <label class="checkbox-label" style="display: flex !important; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto !important; margin: 0; flex-shrink: 0; vertical-align: middle;">
+              <span style="font-weight: bold; color: #1e3a8a;">Include disbursement fee</span>
             </label>
           </div>
         </div>
@@ -341,6 +341,13 @@ async function loadExpenses() {
     let html = '';
     Object.keys(groupedExpenses).sort().forEach(type => {
       const typeExpenses = groupedExpenses[type];
+      
+      // Sort expenses by created_at date (newest first) - never change this sorting
+      typeExpenses.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA; // Descending order (newest first)
+      });
       
       // Calculate total for this type - convert all expenses to USD and AED
       let typeTotalUSD = 0;
@@ -680,6 +687,12 @@ function openAddExpenseModal() {
     document.getElementById('saveExpenseBtnText').textContent = 'Save';
     document.getElementById('expenseId').value = '';
     
+    // Reset disbursement fee checkbox
+    const checkbox = document.getElementById('includeDisbursementFee');
+    if (checkbox) {
+      checkbox.checked = false;
+    }
+    
     // Load dropdowns when modal opens
     loadExpenseTypes();
     loadInvoiceTypes();
@@ -708,6 +721,9 @@ async function openEditExpenseModal(expenseData) {
     
     // Fill form with existing data after dropdowns are loaded
     await fillExpenseForm(expenseData);
+    
+    // Check if there's a related disbursement fee expense
+    await checkAndSetDisbursementFeeCheckbox(expenseData);
   }
 }
 
@@ -1043,6 +1059,99 @@ async function fillExpenseForm(expenseData) {
   }
 }
 
+// Check if there's a related disbursement fee expense and set checkbox
+async function checkAndSetDisbursementFeeCheckbox(expenseData) {
+  try {
+    const invoiceId = window.location.pathname.split('/').pop();
+    const response = await apiRequest(`/api/invoices/${invoiceId}/expenses`);
+    const expenses = await response.json();
+    
+    if (!expenses || expenses.length === 0) {
+      return;
+    }
+    
+    // Find disbursement fee type
+    const expenseTypesResponse = await fetch('/api/expense-types');
+    const expenseTypes = await expenseTypesResponse.json();
+    const disbursementType = expenseTypes.find(type => 
+      type.name.toLowerCase().includes('disbursement')
+    );
+    
+    if (!disbursementType) {
+      return;
+    }
+    
+    // Find disbursement fee expense that matches this expense
+    const disbursementFee = expenses.find(exp => {
+      // Must be disbursement type
+      // Check both expense_types object and exp_type field (can be ID or name)
+      const expTypeId = exp.expense_types?.id || (typeof exp.exp_type === 'number' ? exp.exp_type : null);
+      const expTypeName = exp.expense_types?.name || (typeof exp.exp_type === 'string' ? exp.exp_type : null);
+      
+      const isDisbursementType = expTypeId === disbursementType.id || 
+                                  (expTypeName && expTypeName.toLowerCase().includes('disbursement'));
+      
+      if (!isDisbursementType) {
+        return false;
+      }
+      
+      // Match by flight if exists
+      if (expenseData.exp_flight) {
+        if (exp.exp_flight !== expenseData.exp_flight) {
+          return false;
+        }
+      } else {
+        if (exp.exp_flight !== null) {
+          return false;
+        }
+      }
+      
+      // Match by period if exists
+      if (expenseData.exp_period_start && expenseData.exp_period_end) {
+        if (exp.exp_period_start !== expenseData.exp_period_start || 
+            exp.exp_period_end !== expenseData.exp_period_end) {
+          return false;
+        }
+      } else {
+        if (exp.exp_period_start !== null || exp.exp_period_end !== null) {
+          return false;
+        }
+      }
+      
+      // Match by place if exists
+      if (expenseData.exp_place) {
+        if (exp.exp_place !== expenseData.exp_place) {
+          return false;
+        }
+      } else {
+        if (exp.exp_place !== null) {
+          return false;
+        }
+      }
+      
+      // Check if comment contains amount and currency from original expense
+      if (exp.exp_comments) {
+        const amountStr = parseFloat(expenseData.exp_amount || 0).toFixed(2);
+        const currencyStr = expenseData.exp_currency || 'AED';
+        if (exp.exp_comments.includes(amountStr) && 
+            exp.exp_comments.includes(currencyStr)) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    // Set checkbox if disbursement fee found
+    const checkbox = document.getElementById('includeDisbursementFee');
+    if (checkbox && disbursementFee) {
+      checkbox.checked = true;
+    }
+  } catch (error) {
+    console.error('Error checking disbursement fee:', error);
+  }
+}
+
 function closeAddExpenseModal() {
   const modal = document.getElementById('addExpenseModal');
   if (modal) {
@@ -1058,7 +1167,7 @@ function closeAddExpenseModal() {
       
       saveBtn.disabled = false;
       if (btnText) btnText.style.display = 'inline';
-      if (spinner) spinner.style.display = 'none';
+      if (spinner) spinner.classList.remove('show');
     }
   }
 }
@@ -1205,18 +1314,24 @@ document.addEventListener('DOMContentLoaded', function() {
       // Show loading state
       saveBtn.disabled = true;
       btnText.style.display = 'none';
-      spinner.style.display = 'inline-block';
+      spinner.classList.add('show');
       
       let response = null;
       try {
         const formData = new FormData(addExpenseForm);
         const data = Object.fromEntries(formData.entries());
         
-        // Check if disbursement fee should be included (only for new expenses)
+        // Check if disbursement fee should be included
         const expenseId = document.getElementById('expenseId').value;
         const isEdit = expenseId && expenseId.trim() !== '';
         const includeDisbursementFee = !isEdit && data.include_disbursement_fee === 'on';
+        const updateDisbursementFee = isEdit && data.include_disbursement_fee === 'on';
         delete data.include_disbursement_fee; // Remove checkbox from data
+        
+        // Add update_disbursement_fee flag if editing and checkbox is checked
+        if (updateDisbursementFee) {
+          data.update_disbursement_fee = true;
+        }
         
         // Get current invoice ID from URL
         const invoiceId = window.location.pathname.split('/').pop();
@@ -1342,7 +1457,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Reset button state and close modal
         saveBtn.disabled = false;
         btnText.style.display = 'inline';
-        spinner.style.display = 'none';
+        spinner.classList.remove('show');
         
         // Close modal after successful submission
         if (response && response.ok) {
@@ -1466,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', function() {
   width: 90% !important;
   max-width: 600px !important;
   max-height: 90vh !important;
-  overflow-y: auto !important;
+  overflow-y: hidden !important;
 }
 
 .modal-header {
@@ -1550,9 +1665,8 @@ document.addEventListener('DOMContentLoaded', function() {
   display: flex !important;
   justify-content: flex-end !important;
   gap: 0.75rem !important;
-  padding: 1.5rem !important;
-  border-top: 1px solid hsl(210, 11%, 90%) !important;
-  margin-top: 1.5rem !important;
+  padding: 1rem 1.5rem 1.5rem 1.5rem !important;
+  margin-top: 0.5rem !important;
 }
 
 .btn-cancel {
@@ -1586,8 +1700,12 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .spinner {
-  display: inline-block !important;
+  display: none !important;
   animation: spin 1s linear infinite !important;
+}
+
+.spinner.show {
+  display: inline-block !important;
 }
 
 @keyframes spin {
@@ -1968,5 +2086,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .delete-expense-btn i {
   font-size: 0.75rem !important;
+}
+
+/* Fuel group background styling */
+.fuel-group {
+  background-color: #faf5f5 !important;
+  padding: 1rem !important;
+  border-radius: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+}
+
+/* Checkbox label styling */
+.checkbox-label {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 0 !important;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto !important;
+  flex-shrink: 0 !important;
 }
 </style>

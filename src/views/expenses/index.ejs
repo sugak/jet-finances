@@ -13,10 +13,6 @@
         <span class="table-subtitle">All operational expenses and cost records</span>
       </div>
       <div class="table-actions">
-        <a href="/expenses/report" class="btn btn-primary" style="margin-right: 0.5rem;">
-          <i class="bi bi-file-earmark-text"></i>
-          Expenses report
-        </a>
         <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addExpenseBtn">
           <i class="bi bi-plus-lg"></i>
@@ -175,13 +171,13 @@
                          <div class="form-group">
                            <label for="expCurrency">Currency</label>
                            <select id="expCurrency" name="exp_currency">
-                             <option value="AED" selected>AED</option>
-                             <option value="USD">USD</option>
+                             <option value="AED">AED</option>
+                             <option value="USD" selected>USD</option>
                              <option value="EUR">EUR</option>
                            </select>
                          </div>
                        </div>
-                       <div class="form-row">
+                       <div class="form-row fuel-group">
                          <div class="form-group">
                            <label for="expFuelQuan">Fuel Quantity (L)</label>
                            <input type="number" id="expFuelQuan" name="exp_fuel_quan" step="0.01" placeholder="0.00">
@@ -230,9 +226,9 @@
         
         <div class="form-row">
           <div class="form-group full-width">
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto; margin: 0;">
-              <span>Include disbursement fee</span>
+            <label class="checkbox-label" style="display: flex !important; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto !important; margin: 0; flex-shrink: 0; vertical-align: middle;">
+              <span style="font-weight: bold; color: #1e3a8a;">Include disbursement fee</span>
             </label>
           </div>
         </div>
@@ -760,7 +756,7 @@ function closeAddExpenseModal() {
       
       saveBtn.disabled = false;
       if (btnText) btnText.style.display = 'inline';
-      if (btnSpinner) btnSpinner.style.display = 'none';
+      if (btnSpinner) btnSpinner.classList.remove('show');
     }
   }
 }
@@ -865,7 +861,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Show spinner
       btnText.style.display = 'none';
-      btnSpinner.style.display = 'inline-block';
+      btnSpinner.classList.add('show');
       saveBtn.disabled = true;
       
       try {
@@ -985,7 +981,7 @@ document.addEventListener('DOMContentLoaded', function() {
       } finally {
         // Hide spinner
         btnText.style.display = 'inline';
-        btnSpinner.style.display = 'none';
+        btnSpinner.classList.remove('show');
         saveBtn.disabled = false;
       }
     });
@@ -1204,7 +1200,7 @@ document.addEventListener('DOMContentLoaded', function() {
   width: 90% !important;
   max-width: 600px !important;
   max-height: 90vh !important;
-  overflow-y: auto !important;
+  overflow-y: hidden !important;
 }
 
 .modal-header {
@@ -1291,9 +1287,8 @@ document.addEventListener('DOMContentLoaded', function() {
   display: flex !important;
   justify-content: flex-end !important;
   gap: 0.75rem !important;
-  margin-top: 2rem !important;
-  padding: 1.5rem !important;
-  border-top: 1px solid hsl(210, 11%, 90%) !important;
+  padding: 1rem 1.5rem 1.5rem 1.5rem !important;
+  margin-top: 0.5rem !important;
 }
 
 .btn {
@@ -1333,7 +1328,12 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .btn-spinner {
+  display: none !important;
   animation: spin 1s linear infinite !important;
+}
+
+.btn-spinner.show {
+  display: inline-block !important;
 }
 
 @keyframes spin {
@@ -1451,5 +1451,25 @@ document.addEventListener('DOMContentLoaded', function() {
     width: 100% !important;
     justify-content: center !important;
   }
+}
+
+/* Fuel group background styling */
+.fuel-group {
+  background-color: #faf5f5 !important;
+  padding: 1rem !important;
+  border-radius: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+}
+
+/* Checkbox label styling */
+.checkbox-label {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 0 !important;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto !important;
+  flex-shrink: 0 !important;
 }
 </style>

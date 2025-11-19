@@ -38,7 +38,7 @@
             </th>
             <th class="sortable" id="date-sort-header" data-sort="date">
               DATE
-              <i class="bi bi-chevron-up sort-icon" id="date-sort-icon"></i>
+              <i class="bi bi-chevron-down sort-icon" id="date-sort-icon"></i>
             </th>
             <th class="sortable">
               NUMBER
@@ -124,7 +124,7 @@
 
 <script>
 // Global variable to track current sort order
-let currentSortOrder = 'oldest'; // 'newest' or 'oldest'
+let currentSortOrder = 'newest'; // 'newest' or 'oldest' - default: newest first
 
 // Load invoices data from API
 async function loadInvoices() {
