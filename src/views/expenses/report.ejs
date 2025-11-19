@@ -3,12 +3,20 @@
   <div>
     <h1 class="page-title" style="font-size: 1.5rem; text-transform: capitalize;">Expenses Report</h1>
   </div>
-  <div style="margin-top: 0.5rem;">
-    <label for="yearFilter" style="margin-right: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%);">Year:</label>
+  <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
+    <label for="yearFilter" style="font-weight: 500; color: hsl(210, 6%, 21%);">Year:</label>
     <select id="yearFilter" style="padding: 0.5rem 1rem; border: 1px solid hsl(210, 11%, 85%); border-radius: 0.375rem; font-size: 0.875rem; background-color: white; cursor: pointer;">
       <option value="current">Current Year</option>
       <option value="all">All Years</option>
     </select>
+    <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%); cursor: pointer;">
+      <input type="checkbox" id="showSubcategories" style="width: 1rem; height: 1rem; cursor: pointer;">
+      View all subcategories
+    </label>
+    <button id="exportExcelBtn" class="btn btn-primary" style="display: none; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem; white-space: nowrap;">
+      <i class="bi bi-file-earmark-spreadsheet"></i>
+      Export to Excel
+    </button>
   </div>
 </div>
 
@@ -315,6 +323,7 @@ function splitExpenseByMonths(expense) {
 let allExpensesData = null;
 let allCategoryGroups = null;
 let expenseDetailsMap = {}; // Map to store expense details: { category_monthKey: [expenses] }
+let showSubcategories = false; // Flag to show subcategories
 
 // Load and process expenses
 async function loadExpensesReport() {
@@ -335,6 +344,12 @@ async function loadExpensesReport() {
     // Hide loading spinner and show content
     document.getElementById('loading-spinner').style.display = 'none';
     document.getElementById('content-container').style.display = 'block';
+    
+    // Show export button
+    const exportBtn = document.getElementById('exportExcelBtn');
+    if (exportBtn) {
+      exportBtn.style.display = 'inline-flex';
+    }
     
     // Update table header position after content is shown
     setTimeout(updateTableHeaderPosition, 100);
@@ -371,11 +386,17 @@ function processExpensesData(expenses) {
       continue;
     }
 
+    // Determine which category to use based on showSubcategories flag
+    const displayCategory = showSubcategories ? getExpenseCategory(expense) : baseCategory;
+    
+    // If getExpenseCategory returned null, use baseCategory
+    const finalCategory = displayCategory || baseCategory;
+
     const isNonFlight = isNonFlightExpense(expense);
     const group = isNonFlight ? categoryGroups.nonFlight : categoryGroups.flight;
 
-    if (!group[baseCategory]) {
-      group[baseCategory] = {};
+    if (!group[finalCategory]) {
+      group[finalCategory] = {};
     }
 
     const months = splitExpenseByMonths(expense);
@@ -385,12 +406,12 @@ function processExpensesData(expenses) {
         expensesByMonth[monthKey] = {};
       }
 
-      if (!group[baseCategory][monthKey]) {
-        group[baseCategory][monthKey] = { USD: 0, AED: 0 };
+      if (!group[finalCategory][monthKey]) {
+        group[finalCategory][monthKey] = { USD: 0, AED: 0 };
       }
 
-      // Store expense details for this cell (using base category for table, but store full category for modal)
-      const detailKey = `${baseCategory}_${monthKey}`;
+      // Store expense details for this cell (using final category for table)
+      const detailKey = `${finalCategory}_${monthKey}`;
       if (!expenseDetailsMap[detailKey]) {
         expenseDetailsMap[detailKey] = [];
       }
@@ -410,7 +431,7 @@ function processExpensesData(expenses) {
       });
       
       console.log(`Stored expense for ${detailKey}:`, {
-        baseCategory,
+        finalCategory,
         monthKey,
         currency,
         monthlyAmount,
@@ -419,27 +440,27 @@ function processExpensesData(expenses) {
 
       // Add amount in original currency and convert to fill both columns
       if (currency === 'USD') {
-        group[baseCategory][monthKey].USD += amount;
+        group[finalCategory][monthKey].USD += amount;
         // Convert USD to AED
         const aedAmount = convertCurrency(amount, 'USD', 'AED');
-        group[baseCategory][monthKey].AED += aedAmount;
+        group[finalCategory][monthKey].AED += aedAmount;
       } else if (currency === 'AED') {
-        group[baseCategory][monthKey].AED += amount;
+        group[finalCategory][monthKey].AED += amount;
         // Convert AED to USD
         const usdAmount = convertCurrency(amount, 'AED', 'USD');
-        group[baseCategory][monthKey].USD += usdAmount;
+        group[finalCategory][monthKey].USD += usdAmount;
       } else if (currency === 'EUR') {
         // Convert EUR to USD and AED
         const usdAmount = convertCurrency(amount, 'EUR', 'USD');
         const aedAmount = convertCurrency(amount, 'EUR', 'AED');
-        group[baseCategory][monthKey].USD += usdAmount;
-        group[baseCategory][monthKey].AED += aedAmount;
+        group[finalCategory][monthKey].USD += usdAmount;
+        group[finalCategory][monthKey].AED += aedAmount;
       } else {
         // Unknown currency, try to convert to USD and AED
         const usdAmount = convertCurrency(amount, currency, 'USD');
         const aedAmount = convertCurrency(amount, currency, 'AED');
-        group[baseCategory][monthKey].USD += usdAmount;
-        group[baseCategory][monthKey].AED += aedAmount;
+        group[finalCategory][monthKey].USD += usdAmount;
+        group[finalCategory][monthKey].AED += aedAmount;
       }
     }
   }
@@ -565,13 +586,15 @@ function renderExpensesReportTable(categoryGroups, months) {
   const categoryHeader = document.createElement('th');
   categoryHeader.textContent = 'Category';
   categoryHeader.style.minWidth = '220px';
-  categoryHeader.style.width = '220px';
+  categoryHeader.style.maxWidth = '350px';
+  categoryHeader.style.width = 'auto';
   categoryHeader.rowSpan = 2;
   categoryHeader.style.position = 'sticky';
   categoryHeader.style.left = '0';
   categoryHeader.style.zIndex = '100';
   categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
   categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+  categoryHeader.style.whiteSpace = 'normal';
   headerRow.appendChild(categoryHeader);
 
   // Add month columns with USD and AED subcolumns
@@ -634,21 +657,34 @@ function renderExpensesReportTable(categoryGroups, months) {
   });
   
   // Sort by custom order
+  // For subcategories, extract base category for sorting
   allCategories.sort((a, b) => {
-    const orderA = getCategorySortOrder(a.category);
-    const orderB = getCategorySortOrder(b.category);
+    // Extract base category (before " - ")
+    const baseCategoryA = a.category.split(' - ')[0];
+    const baseCategoryB = b.category.split(' - ')[0];
+    
+    const orderA = getCategorySortOrder(baseCategoryA);
+    const orderB = getCategorySortOrder(baseCategoryB);
+    
+    // If same base category, sort alphabetically by full category name
+    if (orderA === orderB) {
+      return a.category.localeCompare(b.category);
+    }
+    
     return orderA - orderB;
   });
 
   // Render categories in sorted order
   allCategories.forEach(({ category, source }) => {
     const row = document.createElement('tr');
-    const group = getCategoryGroup(category);
+    // Extract base category for color coding (remove " - subtype" part if present)
+    const baseCategoryForColor = category.split(' - ')[0];
+    const group = getCategoryGroup(baseCategoryForColor);
     const bgColor = getGroupBackgroundColor(group);
     
     const categoryCell = document.createElement('td');
     
-    // Display only base category (no subtype in table)
+    // Display category (with subtype if showSubcategories is enabled)
     categoryCell.textContent = category;
     categoryCell.style.fontWeight = '500';
     
@@ -811,9 +847,17 @@ function showExpenseDetails(category, monthKey, currency) {
   modalTitle.textContent = `${category} - ${monthName} (${currency})`;
   
   // Filter expenses for this category
+  // Category can be either base category or category with subtype
   const filteredExpenses = expenses.filter(({ expense }) => {
-    const baseCategory = getBaseExpenseCategory(expense);
-    return baseCategory === category;
+    if (showSubcategories) {
+      // When showing subcategories, compare with full category (with subtype)
+      const fullCategory = getExpenseCategory(expense);
+      return fullCategory === category;
+    } else {
+      // When showing base categories, compare with base category only
+      const baseCategory = getBaseExpenseCategory(expense);
+      return baseCategory === category;
+    }
   });
   
   // Calculate totals
@@ -998,6 +1042,89 @@ function closeExpenseDetailsModal() {
   }
 }
 
+// Export expenses report to Excel (server-side)
+async function exportToExcel() {
+  const exportBtn = document.getElementById('exportExcelBtn');
+  const originalText = exportBtn ? exportBtn.innerHTML : '';
+  
+  try {
+    // Show loading state
+    if (exportBtn) {
+      exportBtn.disabled = true;
+      exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Exporting...';
+    }
+
+    // Get year filter value
+    const yearFilter = document.getElementById('yearFilter')?.value || 'current';
+    
+    // Make request to server endpoint
+    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+
+    // Get filename from Content-Disposition header or generate one
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = `Expenses_Report_${yearFilter === 'all' ? 'AllYears' : yearFilter}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    if (contentDisposition) {
+      // Try to extract filename from Content-Disposition header
+      // Support both filename="..." and filename*=UTF-8''...
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/i) || 
+                           contentDisposition.match(/filename="?([^";]+)"?/i);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = decodeURIComponent(filenameMatch[1]);
+      }
+    }
+
+    // Ensure filename has .xlsx extension
+    if (!filename.toLowerCase().endsWith('.xlsx')) {
+      filename = filename.replace(/\.xlsx_?$/i, '') + '.xlsx';
+    }
+
+    // Get blob and create download link
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up after a short delay
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }, 100);
+
+    console.log('Excel file exported successfully');
+    
+    // Restore button state
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = originalText;
+    }
+  } catch (error) {
+    console.error('Error exporting to Excel:', error);
+    alert('Error exporting to Excel: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    
+    // Restore button state on error
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = originalText || '<i class="bi bi-file-earmark-spreadsheet"></i> Export to Excel';
+    }
+  }
+}
+
 // Update table header position (similar to flights/expenses.ejs)
 function updateTableHeaderPosition() {
   const header = document.querySelector('.header');
@@ -1041,19 +1168,31 @@ document.addEventListener('DOMContentLoaded', function() {
   const yearFilter = document.getElementById('yearFilter');
   if (yearFilter) {
     yearFilter.addEventListener('change', function() {
-      if (allCategoryGroups) {
-        // Get all months from category groups
-        const allMonthsSet = new Set();
-        Object.values(allCategoryGroups.nonFlight).forEach(category => {
-          Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
-        });
-        Object.values(allCategoryGroups.flight).forEach(category => {
-          Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
-        });
-        const allMonths = Array.from(allMonthsSet).sort();
-        const filteredMonths = filterMonthsByYear(allMonths);
-        renderExpensesReportTable(allCategoryGroups, filteredMonths);
+      if (allExpensesData) {
+        // Reprocess data with current settings
+        processExpensesData(allExpensesData);
       }
+    });
+  }
+
+  // Add subcategories checkbox handler
+  const showSubcategoriesCheckbox = document.getElementById('showSubcategories');
+  if (showSubcategoriesCheckbox) {
+    showSubcategoriesCheckbox.addEventListener('change', function() {
+      showSubcategories = this.checked;
+      if (allExpensesData) {
+        // Reprocess data with new subcategories setting
+        processExpensesData(allExpensesData);
+      }
+    });
+  }
+
+  // Add Excel export button handler
+  const exportExcelBtn = document.getElementById('exportExcelBtn');
+  if (exportExcelBtn) {
+    exportExcelBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      exportToExcel();
     });
   }
 
@@ -1163,11 +1302,14 @@ document.addEventListener('DOMContentLoaded', function() {
 .expenses-report-table td:first-child {
   font-weight: 500 !important;
   min-width: 220px !important;
+  max-width: 350px !important;
   width: auto !important;
   position: sticky !important;
   left: 0 !important;
   z-index: 90 !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
 }
 
 .expenses-report-table tbody tr:hover {

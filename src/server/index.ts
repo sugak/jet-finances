@@ -9,6 +9,7 @@ import csrf from 'csurf';
 import rateLimit from 'express-rate-limit';
 import expressLayouts from 'express-ejs-layouts';
 import { createClient } from '@supabase/supabase-js';
+import * as XLSX from 'xlsx';
 
 dotenv.config();
 
@@ -2504,6 +2505,602 @@ app.get('/api/expenses', async (_req, res) => {
   } catch (error) {
     console.log('Error fetching expenses:', error);
     res.json(mockData.expenses);
+  }
+});
+
+// Export expenses report to Excel
+app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
+  try {
+    const yearFilter = (req.query.year as string) || 'current';
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not available' });
+    }
+
+    // Get expenses data (same as /api/expenses)
+    const { data: expenses, error } = await supabase
+      .from('expenses')
+      .select(
+        `
+        *,
+        invoices!exp_invoice (
+          id,
+          inv_number
+        ),
+        flights!exp_flight (
+          flt_number,
+          flt_date,
+          flt_dep,
+          flt_arr
+        )
+      `
+      )
+      .order('id', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching expenses for export:', error);
+      return res.status(500).json({ error: 'Failed to fetch expenses' });
+    }
+
+    if (!expenses || expenses.length === 0) {
+      return res.status(404).json({ error: 'No expenses found' });
+    }
+
+    // Currency conversion rates (same as client)
+    const CURRENCY_RATES = {
+      AED_TO_USD: 3.6735,
+      AED_TO_EUR: 4.3119,
+    };
+
+    // Expense categories (same as client)
+    const NON_FLIGHT_CATEGORIES = [
+      'CAMO and Management',
+      'Crew',
+      'Disbursement fee',
+      'Insurance charge',
+      'Maintenance',
+      'Subscriptions',
+      'Other charges', // non-flights subtype
+      'FalconCare',
+      'Honeywell',
+    ];
+
+    // Get base expense category (same logic as client)
+    const getBaseExpenseCategory = (expense: any): string | null => {
+      const type = ((expense.exp_type || '') as string).toLowerCase();
+
+      // Check for non-flight categories
+      if (
+        type === 'camo and management' ||
+        (type.includes('camo') && type.includes('management'))
+      ) {
+        return 'CAMO and Management';
+      }
+      if (type === 'crew') {
+        return 'Crew';
+      }
+      if (type === 'disbursement fee' || type.includes('disbursement')) {
+        return 'Disbursement fee';
+      }
+      if (type === 'insurance charge' || type.includes('insurance')) {
+        return 'Insurance charge';
+      }
+      if (type === 'maintenance') {
+        return 'Maintenance';
+      }
+      if (type === 'subscriptions' || type.includes('subscription')) {
+        return 'Subscriptions';
+      }
+      if (
+        type === 'falconcare' ||
+        type.includes('falconcare') ||
+        type.includes('falcon care')
+      ) {
+        return 'FalconCare';
+      }
+      if (type === 'honeywell') {
+        return 'Honeywell';
+      }
+
+      // Check for flight categories
+      if (
+        type === 'ground handling' ||
+        type.includes('ground handling') ||
+        type.includes('groundhandling')
+      ) {
+        return 'Ground handling';
+      }
+      if (type === 'fuel') {
+        return 'Fuel';
+      }
+      if (
+        type === 'navigation charges' ||
+        type.includes('navigation') ||
+        type.includes('enroute')
+      ) {
+        return 'Navigation charges';
+      }
+      if (
+        type === 'overfly charges' ||
+        type.includes('overfly') ||
+        type.includes('overflight')
+      ) {
+        return 'Overfly charges';
+      }
+      if (
+        type === 'catering' ||
+        type.includes('catering') ||
+        type.includes('food')
+      ) {
+        return 'Catering';
+      }
+      if (
+        type === 'flight planning' ||
+        type.includes('flight planning') ||
+        type.includes('flightplanning')
+      ) {
+        return 'Flight planning';
+      }
+
+      // Check for Other charges
+      if (type === 'other charges' || type.includes('other charges')) {
+        return 'Other charges';
+      }
+
+      // Return null if not in any category
+      return null;
+    };
+
+    // Check if expense is non-flight related (same logic as client)
+    const isNonFlightExpense = (expense: any): boolean | null => {
+      const baseCategory = getBaseExpenseCategory(expense);
+
+      // If category is null, expense doesn't belong to any group - skip it
+      if (baseCategory === null) {
+        return null;
+      }
+
+      // Check if base category is in non-flight list
+      return NON_FLIGHT_CATEGORIES.includes(baseCategory);
+    };
+
+    const convertCurrency = (
+      amount: number,
+      fromCurrency: string,
+      toCurrency: string
+    ): number => {
+      if (!amount || !fromCurrency || !toCurrency) return 0;
+      if (fromCurrency === toCurrency) return amount;
+
+      if (fromCurrency === 'EUR') {
+        const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
+        if (toCurrency === 'AED') {
+          return amountInAED;
+        } else if (toCurrency === 'USD') {
+          return amountInAED / CURRENCY_RATES.AED_TO_USD;
+        }
+      }
+
+      if (toCurrency === 'EUR') {
+        let amountInAED = 0;
+        if (fromCurrency === 'USD') {
+          amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+        } else if (fromCurrency === 'AED') {
+          amountInAED = amount;
+        }
+        return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+      }
+
+      let amountInUSD = amount;
+      if (fromCurrency === 'AED') {
+        amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+      }
+
+      if (toCurrency === 'USD') {
+        return amountInUSD;
+      } else if (toCurrency === 'AED') {
+        return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+      }
+
+      return amount;
+    };
+
+    // Process expenses data (same logic as client)
+    const expensesByMonth: {
+      [key: string]: { [category: string]: { USD: number; AED: number } };
+    } = {};
+    const categoryGroups = {
+      nonFlight: {} as {
+        [category: string]: {
+          [monthKey: string]: { USD: number; AED: number };
+        };
+      },
+      flight: {} as {
+        [category: string]: {
+          [monthKey: string]: { USD: number; AED: number };
+        };
+      },
+    };
+    const allMonthsSet = new Set<string>();
+
+    expenses.forEach((expense: any) => {
+      const baseCategory = getBaseExpenseCategory(expense);
+
+      // Skip expenses that don't belong to any category (same as client)
+      if (baseCategory === null) {
+        return;
+      }
+
+      const isNonFlight = isNonFlightExpense(expense);
+      const group = isNonFlight
+        ? categoryGroups.nonFlight
+        : categoryGroups.flight;
+
+      if (!group[baseCategory]) {
+        group[baseCategory] = {};
+      }
+
+      const amount = parseFloat(expense.exp_amount) || 0;
+      const currency = expense.exp_currency || 'USD';
+      const periodStart = expense.exp_period_start;
+      const periodEnd = expense.exp_period_end;
+      const flightId = expense.exp_flight;
+
+      let monthKeys: string[] = [];
+
+      if (flightId && expense.flights && expense.flights.flt_date) {
+        const flightDate = new Date(expense.flights.flt_date);
+        const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
+        monthKeys = [monthKey];
+      } else if (periodStart && periodEnd) {
+        const start = new Date(periodStart);
+        const end = new Date(periodEnd);
+        const startYear = start.getFullYear();
+        const startMonth = start.getMonth();
+        const endYear = end.getFullYear();
+        const endMonth = end.getMonth();
+        const endDay = end.getDate();
+
+        const isSingleMonth =
+          endDay === 1 &&
+          ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+            (endMonth === 0 && endYear === startYear + 1));
+
+        const totalMonths = isSingleMonth
+          ? 1
+          : (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
+
+        let currentYear = startYear;
+        let currentMonth = startMonth;
+
+        for (let i = 0; i < totalMonths; i++) {
+          const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+          monthKeys.push(monthKey);
+          allMonthsSet.add(monthKey);
+
+          currentMonth++;
+          if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+          }
+        }
+      } else {
+        const date = expense.created_at
+          ? new Date(expense.created_at)
+          : new Date();
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthKeys = [monthKey];
+      }
+
+      for (const monthKey of monthKeys) {
+        allMonthsSet.add(monthKey);
+        if (!expensesByMonth[monthKey]) {
+          expensesByMonth[monthKey] = {};
+        }
+
+        if (!group[baseCategory][monthKey]) {
+          group[baseCategory][monthKey] = { USD: 0, AED: 0 };
+        }
+
+        // Calculate monthly amount (same as client)
+        const totalMonths = monthKeys.length || 1;
+        const monthlyAmount = totalMonths > 0 ? amount / totalMonths : amount;
+
+        if (currency === 'USD') {
+          group[baseCategory][monthKey].USD += monthlyAmount;
+          group[baseCategory][monthKey].AED += convertCurrency(
+            monthlyAmount,
+            'USD',
+            'AED'
+          );
+        } else if (currency === 'AED') {
+          group[baseCategory][monthKey].AED += monthlyAmount;
+          group[baseCategory][monthKey].USD += convertCurrency(
+            monthlyAmount,
+            'AED',
+            'USD'
+          );
+        } else if (currency === 'EUR') {
+          group[baseCategory][monthKey].USD += convertCurrency(
+            monthlyAmount,
+            'EUR',
+            'USD'
+          );
+          group[baseCategory][monthKey].AED += convertCurrency(
+            monthlyAmount,
+            'EUR',
+            'AED'
+          );
+        } else {
+          // Unknown currency, try to convert to USD and AED
+          group[baseCategory][monthKey].USD += convertCurrency(
+            monthlyAmount,
+            currency,
+            'USD'
+          );
+          group[baseCategory][monthKey].AED += convertCurrency(
+            monthlyAmount,
+            currency,
+            'AED'
+          );
+        }
+      }
+    });
+
+    // Filter months by year
+    const allMonths = Array.from(allMonthsSet).sort();
+    const currentYear = new Date().getFullYear();
+    let filteredMonths = allMonths;
+
+    if (yearFilter === 'current') {
+      filteredMonths = allMonths.filter(monthKey => {
+        const year = parseInt(monthKey.split('-')[0], 10);
+        return year === currentYear;
+      });
+    }
+
+    if (filteredMonths.length === 0) {
+      return res
+        .status(404)
+        .json({ error: 'No data available for the selected period' });
+    }
+
+    // Prepare Excel data
+    const data: any[][] = [];
+
+    // Header row 1
+    const headerRow1 = ['Category'];
+    filteredMonths.forEach(monthKey => {
+      const parts = monthKey.split('-');
+      const year = parseInt(parts[0] || '0', 10);
+      const month = parseInt(parts[1] || '1', 10);
+      const monthName = new Date(year, month - 1).toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      });
+      headerRow1.push(monthName, '');
+    });
+    data.push(headerRow1);
+
+    // Header row 2
+    const headerRow2 = [''];
+    filteredMonths.forEach(() => {
+      headerRow2.push('USD', 'AED');
+    });
+    data.push(headerRow2);
+
+    // Category groups and sorting order (same as client)
+    const CATEGORY_GROUPS = {
+      group1: [
+        'CAMO and Management',
+        'Flight planning',
+        'Subscriptions',
+        'Maintenance',
+        'Insurance charge',
+        'Crew',
+      ],
+      group2: ['FalconCare', 'Honeywell'],
+      group3: [
+        'Ground handling',
+        'Fuel',
+        'Navigation charges',
+        'Overfly charges',
+        'Catering',
+        'Other charges',
+        'Disbursement fee',
+      ],
+    };
+
+    // Get sort order for a category
+    const getCategorySortOrder = (category: string): number => {
+      const allCategories = [
+        ...CATEGORY_GROUPS.group1,
+        ...CATEGORY_GROUPS.group2,
+        ...CATEGORY_GROUPS.group3,
+      ];
+      const index = allCategories.indexOf(category);
+      return index >= 0 ? index : 999; // Unknown categories go to the end
+    };
+
+    // Combine all categories and sort by custom order (same as client)
+    const allCategories: Array<{
+      category: string;
+      source: 'nonFlight' | 'flight';
+    }> = [];
+
+    // Collect all categories from both groups
+    Object.keys(categoryGroups.nonFlight).forEach(category => {
+      allCategories.push({ category, source: 'nonFlight' });
+    });
+    Object.keys(categoryGroups.flight).forEach(category => {
+      allCategories.push({ category, source: 'flight' });
+    });
+
+    // Sort by custom order
+    allCategories.sort((a, b) => {
+      const orderA = getCategorySortOrder(a.category);
+      const orderB = getCategorySortOrder(b.category);
+      return orderA - orderB;
+    });
+
+    // Add category rows
+    allCategories.forEach(({ category, source }) => {
+      const row = [category];
+      const categoryData =
+        source === 'nonFlight'
+          ? categoryGroups.nonFlight[category]
+          : categoryGroups.flight[category];
+
+      filteredMonths.forEach(monthKey => {
+        const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
+        row.push(monthData.USD, monthData.AED);
+      });
+
+      data.push(row);
+    });
+
+    // Add Total row
+    const totalRow = ['Total'];
+    filteredMonths.forEach(monthKey => {
+      let totalUSD = 0;
+      let totalAED = 0;
+
+      // Sum all categories for this month
+      allCategories.forEach(({ category, source }) => {
+        const categoryData =
+          source === 'nonFlight'
+            ? categoryGroups.nonFlight[category]
+            : categoryGroups.flight[category];
+        const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
+        totalUSD += monthData.USD;
+        totalAED += monthData.AED;
+      });
+
+      totalRow.push(totalUSD, totalAED);
+    });
+    data.push(totalRow);
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    const colWidths = [{ wch: 25 }];
+    filteredMonths.forEach(() => {
+      colWidths.push({ wch: 15 }, { wch: 15 });
+    });
+    ws['!cols'] = colWidths;
+
+    // Apply currency formatting to USD and AED columns
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+    // Format header rows (bold)
+    for (let row = 0; row <= 1; row++) {
+      for (let col = 0; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+        if (!ws[cellAddress].s) ws[cellAddress].s = {};
+        ws[cellAddress].s.font = { bold: true };
+        ws[cellAddress].s.fill = { fgColor: { rgb: 'E5E7EB' } };
+        ws[cellAddress].s.alignment = {
+          horizontal: 'center',
+          vertical: 'center',
+        };
+      }
+    }
+
+    // Format data rows with currency formatting
+    for (let row = 2; row <= range.e.r; row++) {
+      for (let col = 1; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+
+        // Determine if this is USD or AED column
+        // USD columns are odd (1, 3, 5, ...), AED columns are even (2, 4, 6, ...)
+        const isUSD = col % 2 === 1;
+
+        if (typeof ws[cellAddress].v === 'number') {
+          // Apply currency format using 'z' property (number format string)
+          // Format syntax: [Red] for colors, # for digits, 0 for required digits
+          if (isUSD) {
+            // USD format: $#,##0.00
+            ws[cellAddress].z = '$#,##0.00';
+            // Also set in style for compatibility
+            if (!ws[cellAddress].s) ws[cellAddress].s = {};
+            ws[cellAddress].s.numFmt = '$#,##0.00';
+          } else {
+            // AED format: #,##0.00 with thousands separator
+            ws[cellAddress].z = '#,##0.00';
+            // Also set in style for compatibility
+            if (!ws[cellAddress].s) ws[cellAddress].s = {};
+            ws[cellAddress].s.numFmt = '#,##0.00';
+          }
+
+          // Apply styling
+          if (!ws[cellAddress].s) ws[cellAddress].s = {};
+          ws[cellAddress].s.alignment = {
+            horizontal: 'right',
+            vertical: 'center',
+          };
+        }
+      }
+    }
+
+    // Format Total row (bold)
+    const totalRowIndex = data.length - 1;
+    for (let col = 0; col <= range.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: col });
+      if (!ws[cellAddress]) continue;
+
+      // Apply styling
+      if (!ws[cellAddress].s) ws[cellAddress].s = {};
+      ws[cellAddress].s.font = { bold: true };
+      ws[cellAddress].s.fill = { fgColor: { rgb: 'F3F4F6' } };
+
+      // Apply currency formatting to number cells in total row
+      if (col > 0 && typeof ws[cellAddress].v === 'number') {
+        const isUSD = col % 2 === 1;
+        if (isUSD) {
+          ws[cellAddress].z = '$#,##0.00';
+          ws[cellAddress].s.numFmt = '$#,##0.00';
+        } else {
+          ws[cellAddress].z = '#,##0.00';
+          ws[cellAddress].s.numFmt = '#,##0.00';
+        }
+        ws[cellAddress].s.alignment = {
+          horizontal: 'right',
+          vertical: 'center',
+        };
+      }
+    }
+
+    // Add worksheet
+    XLSX.utils.book_append_sheet(wb, ws, 'Expenses Report');
+
+    // Generate filename (ensure proper encoding)
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `Expenses_Report_${yearFilter === 'all' ? 'AllYears' : yearFilter}_${dateStr}.xlsx`;
+
+    // Set headers for file download (use filename* for proper encoding)
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+
+    // Send file with cell styles enabled
+    const buffer = XLSX.write(wb, {
+      type: 'buffer',
+      bookType: 'xlsx',
+      cellStyles: true,
+    });
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error exporting expenses to Excel:', error);
+    res.status(500).json({ error: 'Failed to export expenses to Excel' });
   }
 });
 
