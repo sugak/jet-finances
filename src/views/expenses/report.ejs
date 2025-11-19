@@ -3,7 +3,7 @@
   <div>
     <h1 class="page-title" style="font-size: 1.5rem; text-transform: capitalize;">Expenses Report</h1>
   </div>
-  <div style="margin-top: 1rem;">
+  <div style="margin-top: 0.5rem;">
     <label for="yearFilter" style="margin-right: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%);">Year:</label>
     <select id="yearFilter" style="padding: 0.5rem 1rem; border: 1px solid hsl(210, 11%, 85%); border-radius: 0.375rem; font-size: 0.875rem; background-color: white; cursor: pointer;">
       <option value="current">Current Year</option>
@@ -506,6 +506,38 @@ function updateYearFilterOptions(months) {
   }
 }
 
+// Category groups and sorting order
+const CATEGORY_GROUPS = {
+  group1: ['CAMO and Management', 'Flight planning', 'Subscriptions', 'Maintenance', 'Insurance charge', 'Crew'],
+  group2: ['FalconCare', 'Honeywell'],
+  group3: ['Ground handling', 'Fuel', 'Navigation charges', 'Overfly charges', 'Catering', 'Other charges', 'Disbursement fee']
+};
+
+// Get group number for a category (1, 2, or 3)
+function getCategoryGroup(category) {
+  if (CATEGORY_GROUPS.group1.includes(category)) return 1;
+  if (CATEGORY_GROUPS.group2.includes(category)) return 2;
+  if (CATEGORY_GROUPS.group3.includes(category)) return 3;
+  return 0; // Unknown category
+}
+
+// Get sort order for a category
+function getCategorySortOrder(category) {
+  const allCategories = [...CATEGORY_GROUPS.group1, ...CATEGORY_GROUPS.group2, ...CATEGORY_GROUPS.group3];
+  const index = allCategories.indexOf(category);
+  return index >= 0 ? index : 999; // Unknown categories go to the end
+}
+
+// Get pastel background color for a group
+function getGroupBackgroundColor(group) {
+  switch(group) {
+    case 1: return 'hsl(200, 50%, 96%)'; // Light blue pastel
+    case 2: return 'hsl(280, 40%, 96%)'; // Light purple pastel
+    case 3: return 'hsl(120, 30%, 97%)'; // Light green pastel
+    default: return 'white';
+  }
+}
+
 // Render expenses report table
 function renderExpensesReportTable(categoryGroups, months) {
   // Update year filter options
@@ -537,7 +569,7 @@ function renderExpensesReportTable(categoryGroups, months) {
   categoryHeader.rowSpan = 2;
   categoryHeader.style.position = 'sticky';
   categoryHeader.style.left = '0';
-  categoryHeader.style.zIndex = '70';
+  categoryHeader.style.zIndex = '100';
   categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
   categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
   headerRow.appendChild(categoryHeader);
@@ -572,7 +604,6 @@ function renderExpensesReportTable(categoryGroups, months) {
     usdHeader.style.textAlign = 'center';
     usdHeader.style.minWidth = '120px';
     usdHeader.style.width = '120px';
-    usdHeader.style.position = 'sticky';
     usdHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     // Add border-left for all months except the first
     if (monthIndex > 0) {
@@ -585,18 +616,36 @@ function renderExpensesReportTable(categoryGroups, months) {
     aedHeader.style.textAlign = 'center';
     aedHeader.style.minWidth = '120px';
     aedHeader.style.width = '120px';
-    aedHeader.style.position = 'sticky';
     aedHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     subHeaderRow.appendChild(aedHeader);
   });
 
   thead.appendChild(subHeaderRow);
 
-  // Sort categories alphabetically
-  const sortedNonFlightCategories = Object.keys(categoryGroups.nonFlight).sort();
+  // Combine all categories and sort by custom order
+  const allCategories = [];
+  
+  // Collect all categories from both groups
+  Object.keys(categoryGroups.nonFlight).forEach(category => {
+    allCategories.push({ category, source: 'nonFlight' });
+  });
+  Object.keys(categoryGroups.flight).forEach(category => {
+    allCategories.push({ category, source: 'flight' });
+  });
+  
+  // Sort by custom order
+  allCategories.sort((a, b) => {
+    const orderA = getCategorySortOrder(a.category);
+    const orderB = getCategorySortOrder(b.category);
+    return orderA - orderB;
+  });
 
-  sortedNonFlightCategories.forEach(category => {
+  // Render categories in sorted order
+  allCategories.forEach(({ category, source }) => {
     const row = document.createElement('tr');
+    const group = getCategoryGroup(category);
+    const bgColor = getGroupBackgroundColor(group);
+    
     const categoryCell = document.createElement('td');
     
     // Display only base category (no subtype in table)
@@ -605,19 +654,25 @@ function renderExpensesReportTable(categoryGroups, months) {
     
     categoryCell.style.position = 'sticky';
     categoryCell.style.left = '0';
-    categoryCell.style.zIndex = '50';
-    categoryCell.style.backgroundColor = 'white';
+    categoryCell.style.zIndex = '90';
+    categoryCell.style.backgroundColor = bgColor;
     categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
     row.appendChild(categoryCell);
 
+    // Set row background color
+    row.style.backgroundColor = bgColor;
+
+    const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
+
     months.forEach((monthKey, monthIndex) => {
-      const data = categoryGroups.nonFlight[category][monthKey] || { USD: 0, AED: 0 };
+      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
       
       const usdCell = document.createElement('td');
       usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       usdCell.style.textAlign = 'right';
       usdCell.style.minWidth = '120px';
       usdCell.style.width = '120px';
+      usdCell.style.backgroundColor = bgColor;
       // Add border-left for all months except the first
       if (monthIndex > 0) {
         usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -639,6 +694,7 @@ function renderExpensesReportTable(categoryGroups, months) {
       aedCell.style.textAlign = 'right';
       aedCell.style.minWidth = '120px';
       aedCell.style.width = '120px';
+      aedCell.style.backgroundColor = bgColor;
       if (data.USD > 0 || data.AED > 0) {
         aedCell.style.cursor = 'pointer';
         aedCell.style.color = 'hsl(210, 76%, 36%)';
@@ -655,68 +711,61 @@ function renderExpensesReportTable(categoryGroups, months) {
     tbody.appendChild(row);
   });
 
-  // Sort categories alphabetically
-  const sortedFlightCategories = Object.keys(categoryGroups.flight).sort();
+  // Add Total row
+  const totalRow = document.createElement('tr');
+  totalRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  totalRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  
+  const totalCategoryCell = document.createElement('td');
+  totalCategoryCell.textContent = 'Total';
+  totalCategoryCell.style.fontWeight = '700';
+  totalCategoryCell.style.position = 'sticky';
+  totalCategoryCell.style.left = '0';
+  totalCategoryCell.style.zIndex = '90';
+  totalCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  totalCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+  totalCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  totalRow.appendChild(totalCategoryCell);
 
-  sortedFlightCategories.forEach(category => {
-    const row = document.createElement('tr');
-    const categoryCell = document.createElement('td');
-    
-    // Display only base category (no subtype in table)
-    categoryCell.textContent = category;
-    categoryCell.style.fontWeight = '500';
-    
-    categoryCell.style.position = 'sticky';
-    categoryCell.style.left = '0';
-    categoryCell.style.zIndex = '50';
-    categoryCell.style.backgroundColor = 'white';
-    categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-    row.appendChild(categoryCell);
+  // Calculate totals for each month
+  months.forEach((monthKey, monthIndex) => {
+    let totalUSD = 0;
+    let totalAED = 0;
 
-    months.forEach((monthKey, monthIndex) => {
-      const data = categoryGroups.flight[category][monthKey] || { USD: 0, AED: 0 };
-      
-      const usdCell = document.createElement('td');
-      usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      usdCell.style.textAlign = 'right';
-      usdCell.style.minWidth = '120px';
-      usdCell.style.width = '120px';
-      // Add border-left for all months except the first
-      if (monthIndex > 0) {
-        usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-      }
-      if (data.USD > 0 || data.AED > 0) {
-        usdCell.style.cursor = 'pointer';
-        usdCell.style.color = 'hsl(210, 76%, 36%)';
-        usdCell.title = 'Click to view details';
-        usdCell.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          showExpenseDetails(category, monthKey, 'USD');
-        });
-      }
-      row.appendChild(usdCell);
-
-      const aedCell = document.createElement('td');
-      aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      aedCell.style.textAlign = 'right';
-      aedCell.style.minWidth = '120px';
-      aedCell.style.width = '120px';
-      if (data.USD > 0 || data.AED > 0) {
-        aedCell.style.cursor = 'pointer';
-        aedCell.style.color = 'hsl(210, 76%, 36%)';
-        aedCell.title = 'Click to view details';
-        aedCell.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          showExpenseDetails(category, monthKey, 'AED');
-        });
-      }
-      row.appendChild(aedCell);
+    // Sum all categories for this month
+    allCategories.forEach(({ category, source }) => {
+      const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
+      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
+      totalUSD += data.USD;
+      totalAED += data.AED;
     });
 
-    tbody.appendChild(row);
+    const usdCell = document.createElement('td');
+    usdCell.textContent = totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    usdCell.style.textAlign = 'right';
+    usdCell.style.fontWeight = '700';
+    usdCell.style.minWidth = '120px';
+    usdCell.style.width = '120px';
+    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    // Add border-left for all months except the first
+    if (monthIndex > 0) {
+      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
+    }
+    totalRow.appendChild(usdCell);
+
+    const aedCell = document.createElement('td');
+    aedCell.textContent = totalAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    aedCell.style.textAlign = 'right';
+    aedCell.style.fontWeight = '700';
+    aedCell.style.minWidth = '120px';
+    aedCell.style.width = '120px';
+    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    totalRow.appendChild(aedCell);
   });
+
+  tbody.appendChild(totalRow);
 
   // Update table header position after rendering
   // Use requestAnimationFrame to ensure DOM is fully updated
@@ -963,8 +1012,12 @@ function updateTableHeaderPosition() {
     // Set top for first row headers (months)
     const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
     if (firstRowHeaders.length > 0) {
-      firstRowHeaders.forEach(th => {
+      firstRowHeaders.forEach((th, index) => {
         th.style.top = totalHeight + 'px';
+        // Only Category (first column) should have left: 0
+        if (index === 0) {
+          th.style.left = '0';
+        }
       });
 
       // Set top for second row headers (USD/AED)
@@ -972,7 +1025,7 @@ function updateTableHeaderPosition() {
       if (secondRowHeaders.length > 0) {
         // Calculate first row height after it's rendered
         const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
-        secondRowHeaders.forEach(th => {
+        secondRowHeaders.forEach((th) => {
           th.style.top = (totalHeight + firstRowHeight) + 'px';
         });
       }
@@ -1029,13 +1082,17 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+.page-content {
+  padding-top: 0.5rem !important;
+}
+
 .page-header {
   position: sticky !important;
   top: 4rem !important;
   z-index: 90 !important;
   background-color: hsl(210, 11%, 98%) !important;
-  padding: 1rem 0 !important;
-  margin-bottom: 1rem !important;
+  padding: 0.5rem 0 !important;
+  margin-bottom: 0.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
 }
 
@@ -1064,18 +1121,21 @@ document.addEventListener('DOMContentLoaded', function() {
   min-width: 120px !important;
 }
 
-.expenses-report-table thead th {
+/* Only Category column should be sticky horizontally */
+.expenses-report-table thead th:first-child {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 100 !important;
+  background-color: hsl(210, 11%, 96%) !important;
+  border-right: 2px solid hsl(210, 11%, 85%) !important;
+}
+
+/* All other headers - sticky only vertically */
+.expenses-report-table thead th:not(:first-child) {
   position: sticky !important;
   top: 0 !important;
   z-index: 50 !important;
-}
-
-.expenses-report-table th:first-child {
-  position: sticky !important;
-  left: 0 !important;
-  z-index: 70 !important;
-  background-color: hsl(210, 11%, 96%) !important;
-  border-right: 2px solid hsl(210, 11%, 85%) !important;
 }
 
 .expenses-report-table th:last-child {
@@ -1099,23 +1159,23 @@ document.addEventListener('DOMContentLoaded', function() {
   border-right: none !important;
 }
 
+/* Only Category column should be sticky horizontally */
 .expenses-report-table td:first-child {
   font-weight: 500 !important;
   min-width: 220px !important;
   width: auto !important;
   position: sticky !important;
   left: 0 !important;
-  z-index: 50 !important;
-  background-color: white !important;
+  z-index: 90 !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
 }
 
 .expenses-report-table tbody tr:hover {
-  background-color: hsl(210, 11%, 98%) !important;
+  opacity: 0.9;
 }
 
-.expenses-report-table tbody tr:hover td:first-child {
-  background-color: hsl(210, 11%, 98%) !important;
+.expenses-report-table tbody tr:hover td {
+  opacity: 0.9;
 }
 
 .expenses-report-table .group-header td {

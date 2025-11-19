@@ -3601,10 +3601,10 @@ app.put('/api/expenses/:id', async (req, res) => {
       // If update_disbursement_fee flag is set, find and update related disbursement fee
       let disbursementFeeUpdated = false;
       if (update_disbursement_fee && exp_amount) {
-        // Get Disbursement fee type ID
+        // Get Disbursement fee type (both ID and name)
         const { data: disbursementType } = await supabase
           .from('expense_types')
-          .select('id')
+          .select('id, name')
           .ilike('name', '%disbursement%')
           .single();
 
@@ -3621,11 +3621,12 @@ app.put('/api/expenses/:id', async (req, res) => {
             exp_place !== undefined ? exp_place : currentExpense.exp_place;
 
           // Build query to find disbursement fee
+          // Note: exp_type is stored as name (string) in DB, not ID
           let query = supabase
             .from('expenses')
             .select('id, exp_comments, exp_amount, exp_currency')
             .eq('exp_invoice', invoiceId)
-            .eq('exp_type', disbursementType.id);
+            .eq('exp_type', disbursementType.name);
 
           // Match by flight if exists
           if (flightId) {
@@ -3731,32 +3732,33 @@ app.put('/api/expenses/:id', async (req, res) => {
                 }
               }
 
-              // Get disbursement subtype and invoice type IDs
-              let disbursementSubtypeId = null;
-              let disbursementInvoiceTypeId = null;
+              // Get disbursement subtype and invoice type names (stored as strings in DB)
+              let disbursementSubtypeName = null;
+              let disbursementInvoiceTypeName = null;
 
               if (disbursementType.id) {
                 const { data: subtypes } = await supabase
                   .from('expense_subtypes')
-                  .select('id')
-                  .eq('exp_type', disbursementType.id)
+                  .select('name')
+                  .eq('expense_type_id', disbursementType.id)
                   .ilike('name', '%disbursement%')
                   .limit(1);
                 if (subtypes && subtypes.length > 0) {
-                  disbursementSubtypeId = subtypes[0].id;
+                  disbursementSubtypeName = subtypes[0].name;
                 }
               }
 
               const { data: invoiceTypes } = await supabase
                 .from('invoice_types')
-                .select('id')
+                .select('name')
                 .ilike('name', '%disbursement%')
                 .limit(1);
               if (invoiceTypes && invoiceTypes.length > 0) {
-                disbursementInvoiceTypeId = invoiceTypes[0].id;
+                disbursementInvoiceTypeName = invoiceTypes[0].name;
               }
 
               // Update disbursement fee expense
+              // Note: exp_type, exp_subtype, and exp_invoice_type are stored as names (strings) in DB
               const disbursementFeeData: any = {
                 exp_amount: disbursementAmount,
                 exp_currency: newCurrency,
@@ -3768,12 +3770,12 @@ app.put('/api/expenses/:id', async (req, res) => {
               };
 
               // Only update subtype and invoice type if we found them
-              if (disbursementSubtypeId) {
-                disbursementFeeData.exp_subtype = disbursementSubtypeId;
+              if (disbursementSubtypeName) {
+                disbursementFeeData.exp_subtype = disbursementSubtypeName;
               }
-              if (disbursementInvoiceTypeId) {
+              if (disbursementInvoiceTypeName) {
                 disbursementFeeData.exp_invoice_type =
-                  disbursementInvoiceTypeId;
+                  disbursementInvoiceTypeName;
               }
 
               const { error: feeUpdateError } = await supabase
@@ -3793,6 +3795,112 @@ app.put('/api/expenses/:id', async (req, res) => {
                   feeUpdateError.message
                 );
               }
+            }
+          } else {
+            // Disbursement fee not found - create new one
+            // Calculate disbursement fee amount (5% of expense amount)
+            const disbursementAmount = parseFloat(exp_amount) * 0.05;
+            const newCurrency =
+              exp_currency || currentExpense.exp_currency || 'AED';
+
+            // Get type and subtype names for comment
+            // Use updated names if provided, otherwise get from current expense
+            let typeNameForComment = expTypeName;
+            let subtypeNameForComment = expSubtypeName;
+
+            if (!typeNameForComment && currentExpense.exp_type) {
+              // Get type name from current expense (it's stored as name in DB)
+              typeNameForComment = currentExpense.exp_type;
+            }
+
+            if (!subtypeNameForComment && currentExpense.exp_subtype) {
+              // Get subtype name from current expense (it's stored as name in DB)
+              subtypeNameForComment = currentExpense.exp_subtype;
+            }
+
+            // Build comment with updated expense information
+            let comment = typeNameForComment || '';
+            if (
+              subtypeNameForComment &&
+              subtypeNameForComment !== 'Select Subtype'
+            ) {
+              comment += ` - ${subtypeNameForComment}`;
+            }
+            comment += `, ${exp_amount} ${newCurrency}`;
+
+            // Add period or flight info
+            if (periodStart && periodEnd) {
+              // Format period as YYYY-MM - YYYY-MM to match client-side format
+              const startDate = new Date(periodStart);
+              const endDate = new Date(periodEnd);
+              const startFormatted = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+              const endFormatted = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
+              comment += `, ${startFormatted} - ${endFormatted}`;
+            } else if (flightId) {
+              // Get flight info for comment
+              const { data: flightData } = await supabase
+                .from('flights')
+                .select('flt_number, flt_dep, flt_arr')
+                .eq('id', flightId)
+                .single();
+              if (flightData) {
+                comment += `, ${flightData.flt_number} - ${flightData.flt_dep} to ${flightData.flt_arr}`;
+              }
+            }
+
+            // Get disbursement subtype and invoice type names (stored as strings in DB)
+            let disbursementSubtypeName = null;
+            let disbursementInvoiceTypeName = null;
+
+            if (disbursementType.id) {
+              const { data: subtypes } = await supabase
+                .from('expense_subtypes')
+                .select('name')
+                .eq('expense_type_id', disbursementType.id)
+                .ilike('name', '%disbursement%')
+                .limit(1);
+              if (subtypes && subtypes.length > 0) {
+                disbursementSubtypeName = subtypes[0].name;
+              }
+            }
+
+            const { data: invoiceTypes } = await supabase
+              .from('invoice_types')
+              .select('name')
+              .ilike('name', '%disbursement%')
+              .limit(1);
+            if (invoiceTypes && invoiceTypes.length > 0) {
+              disbursementInvoiceTypeName = invoiceTypes[0].name;
+            }
+
+            // Create disbursement fee expense
+            // Note: exp_type, exp_subtype, and exp_invoice_type are stored as names (strings) in DB
+            const disbursementFeeData: any = {
+              exp_type: disbursementType.name,
+              exp_subtype: disbursementSubtypeName,
+              exp_invoice_type: disbursementInvoiceTypeName,
+              exp_amount: disbursementAmount.toFixed(2),
+              exp_currency: newCurrency,
+              exp_invoice: invoiceId,
+              exp_flight: flightId || null,
+              exp_period_start: periodStart || null,
+              exp_period_end: periodEnd || null,
+              exp_place: place || null,
+              exp_comments: comment,
+            };
+
+            const { error: feeCreateError } = await supabase
+              .from('expenses')
+              .insert(disbursementFeeData);
+
+            if (!feeCreateError) {
+              disbursementFeeUpdated = true;
+              console.log('Disbursement fee created successfully');
+            } else {
+              console.log(
+                'Error creating disbursement fee:',
+                feeCreateError.message
+              );
             }
           }
         }

@@ -63,13 +63,13 @@
         <span class="table-subtitle">All scheduled and completed flights</span>
       </div>
       <div class="table-actions">
-        <a href="/expenses/report" class="btn btn-primary" style="margin-right: 0.5rem;">
+        <a href="/expenses/report" class="btn btn-primary flights-action-btn" style="margin-right: 0.5rem;">
           <i class="bi bi-file-earmark-text"></i>
-          Expenses report
+          Full report
         </a>
-        <a href="/flights/expenses" class="btn btn-primary" style="margin-right: 0.5rem;">
+        <a href="/flights/expenses" class="btn btn-primary flights-action-btn" style="margin-right: 0.5rem;">
           <i class="bi bi-airplane"></i>
-          Check flight expenses
+          Flight expenses
         </a>
         <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addFlightBtn">
@@ -1021,5 +1021,18 @@ document.addEventListener('DOMContentLoaded', function() {
 .comments-empty {
   font-weight: normal !important;
   color: hsl(210, 6%, 60%) !important;
+}
+
+/* Light blue button styles */
+.flights-action-btn {
+  background-color: hsl(200, 75%, 60%) !important;
+  border-color: hsl(200, 75%, 60%) !important;
+  color: white !important;
+}
+
+.flights-action-btn:hover:not(:disabled) {
+  background-color: hsl(200, 75%, 55%) !important;
+  border-color: hsl(200, 75%, 55%) !important;
+  color: white !important;
 }
 </style>

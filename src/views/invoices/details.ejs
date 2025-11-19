@@ -186,9 +186,29 @@ function toggleSection(sectionId) {
   }
 }
 
+// Save expanded sections state
+function saveExpandedSections() {
+  const expandedSections = new Set();
+  const container = document.getElementById('expenses-container');
+  if (container) {
+    const sectionHeaders = container.querySelectorAll('.section-header');
+    sectionHeaders.forEach(header => {
+      const sectionId = header.getAttribute('data-section-id');
+      const content = document.getElementById(`content-${sectionId}`);
+      if (content && content.style.display !== 'none') {
+        expandedSections.add(sectionId);
+      }
+    });
+  }
+  return expandedSections;
+}
+
 // Load expenses for this invoice
-async function loadExpenses() {
+async function loadExpenses(preserveExpandedState = false) {
   try {
+    // Save expanded sections before reloading
+    const expandedSections = preserveExpandedState ? saveExpandedSections() : new Set();
+    
     const invoiceId = window.location.pathname.split('/').pop();
     const response = await apiRequest(`/api/invoices/${invoiceId}/expenses`);
     const expenses = await response.json();
@@ -367,6 +387,78 @@ async function loadExpenses() {
       });
       
       const sectionId = type.replace(/[^a-zA-Z0-9]/g, '_');
+      const isFuelCharges = type === 'Fuel Charges';
+      const isSubscriptionCharges = type === 'Subscription Charges';
+      const categoriesWithoutPeriod = ['Overflight Permit Charges', 'Handling charges', 'Handling & Landing charges'];
+      const hasNoPeriod = categoriesWithoutPeriod.includes(type);
+      
+      // Build table header based on category
+      let tableHeader = '';
+      if (isFuelCharges) {
+        // For Fuel Charges: Type, Subtype, Amount, Place, Fuel Quantity, Fuel Provider, Flight, Comments, Actions
+        tableHeader = `
+          <thead>
+            <tr>
+              <th class="group-header">Type</th>
+              <th class="group-header">Subtype</th>
+              <th>Amount</th>
+              <th>Place</th>
+              <th>Fuel Quantity</th>
+              <th>Fuel Provider</th>
+              <th>Flight</th>
+              <th>Comments</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+        `;
+      } else if (isSubscriptionCharges) {
+        // For Subscription Charges: Type, Subtype, Description, Amount, Period, Comments, Actions
+        tableHeader = `
+          <thead>
+            <tr>
+              <th class="group-header">Type</th>
+              <th class="group-header">Subtype</th>
+              <th class="group-header">Description</th>
+              <th>Amount</th>
+              <th>Period</th>
+              <th>Comments</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+        `;
+      } else if (hasNoPeriod) {
+        // For categories without Period: Type, Subtype, Description, Amount, Place, Flight, Actions
+        tableHeader = `
+          <thead>
+            <tr>
+              <th class="group-header">Type</th>
+              <th class="group-header">Subtype</th>
+              <th class="group-header">Description</th>
+              <th>Amount</th>
+              <th>Place</th>
+              <th>Flight</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+        `;
+      } else {
+        // For other categories: Type, Subtype, Description, Amount, Place, Period, Flight, Actions
+        tableHeader = `
+          <thead>
+            <tr>
+              <th class="group-header">Type</th>
+              <th class="group-header">Subtype</th>
+              <th class="group-header">Description</th>
+              <th>Amount</th>
+              <th>Place</th>
+              <th>Period</th>
+              <th>Flight</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+        `;
+      }
+      
       html += `
         <div class="expense-section">
           <div class="section-header" data-section-id="${sectionId}">
@@ -379,20 +471,7 @@ async function loadExpenses() {
           </div>
           <div class="table-container" id="content-${sectionId}" style="display: none;">
             <table class="expenses-table">
-              <thead>
-                <tr>
-                  <th class="group-header">Type</th>
-                  <th class="group-header">Subtype</th>
-                  <th class="group-header">Description</th>
-                  <th>Amount</th>
-                  <th>Place</th>
-                  <th>Period</th>
-                  <th>Fuel Quantity</th>
-                  <th>Fuel Provider</th>
-                  <th>Flight</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+              ${tableHeader}
               <tbody>
       `;
       
@@ -443,57 +522,191 @@ async function loadExpenses() {
           }
         }
         
-        html += `
-          <tr data-expense-id="${expense.id}">
-            <td class="group-cell">
-              <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
-            </td>
-            <td class="group-cell">
-              <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
-            </td>
-            <td class="group-cell">
-              <div class="expense-description">${comments}</div>
-            </td>
-            <td>
-              <div class="expense-amount">${amount}</div>
-            </td>
-            <td>
-              <div class="expense-place">${place}</div>
-            </td>
-            <td>
-              <div class="expense-period">${period}</div>
-            </td>
-            <td>
-              <div class="expense-fuel-qty">${fuelQty}</div>
-            </td>
-            <td>
-              <div class="expense-fuel-provider">${fuelProvider}</div>
-            </td>
-            <td>
-              <div class="expense-flight">
-                ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
-                ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
-                  ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
-                  : ''}
-              </div>
-            </td>
-            <td>
-              <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
-                        data-expense-id="${expense.id}"
-                        data-expense-data='${JSON.stringify(expense)}'
-                        title="Edit expense">
-                  <i class="bi bi-pencil"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
-                        data-expense-id="${expense.id}"
-                        title="Delete expense">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `;
+        // Build table row based on category
+        let tableRow = '';
+        if (isFuelCharges) {
+          // For Fuel Charges: Type, Subtype, Amount, Place, Fuel Quantity, Fuel Provider, Flight, Comments, Actions
+          tableRow = `
+            <tr data-expense-id="${expense.id}">
+              <td class="group-cell">
+                <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
+              </td>
+              <td>
+                <div class="expense-amount">${amount}</div>
+              </td>
+              <td>
+                <div class="expense-place">${place}</div>
+              </td>
+              <td>
+                <div class="expense-fuel-qty">${fuelQty}</div>
+              </td>
+              <td>
+                <div class="expense-fuel-provider">${fuelProvider}</div>
+              </td>
+              <td>
+                <div class="expense-flight">
+                  ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
+                  ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
+                    ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
+                    : ''}
+                </div>
+              </td>
+              <td>
+                <div class="expense-description">${comments}</div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          data-expense-data='${JSON.stringify(expense)}'
+                          title="Edit expense">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          title="Delete expense">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        } else if (isSubscriptionCharges) {
+          // For Subscription Charges: Type, Subtype, Description, Amount, Period, Comments, Actions
+          tableRow = `
+            <tr data-expense-id="${expense.id}">
+              <td class="group-cell">
+                <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-description">-</div>
+              </td>
+              <td>
+                <div class="expense-amount">${amount}</div>
+              </td>
+              <td>
+                <div class="expense-period">${period}</div>
+              </td>
+              <td>
+                <div class="expense-description">${comments}</div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          data-expense-data='${JSON.stringify(expense)}'
+                          title="Edit expense">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          title="Delete expense">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        } else if (hasNoPeriod) {
+          // For categories without Period: Type, Subtype, Description, Amount, Place, Flight, Actions
+          tableRow = `
+            <tr data-expense-id="${expense.id}">
+              <td class="group-cell">
+                <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-description">${comments}</div>
+              </td>
+              <td>
+                <div class="expense-amount">${amount}</div>
+              </td>
+              <td>
+                <div class="expense-place">${place}</div>
+              </td>
+              <td>
+                <div class="expense-flight">
+                  ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
+                  ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
+                    ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
+                    : ''}
+                </div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          data-expense-data='${JSON.stringify(expense)}'
+                          title="Edit expense">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          title="Delete expense">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        } else {
+          // For other categories: Type, Subtype, Description, Amount, Place, Period, Flight, Actions
+          tableRow = `
+            <tr data-expense-id="${expense.id}">
+              <td class="group-cell">
+                <div class="expense-type">${expense.expense_types?.name || expense.exp_type || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-subtype">${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</div>
+              </td>
+              <td class="group-cell">
+                <div class="expense-description">${comments}</div>
+              </td>
+              <td>
+                <div class="expense-amount">${amount}</div>
+              </td>
+              <td>
+                <div class="expense-place">${place}</div>
+              </td>
+              <td>
+                <div class="expense-period">${period}</div>
+              </td>
+              <td>
+                <div class="expense-flight">
+                  ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
+                  ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
+                    ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
+                    : ''}
+                </div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          data-expense-data='${JSON.stringify(expense)}'
+                          title="Edit expense">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
+                          data-expense-id="${expense.id}"
+                          title="Delete expense">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }
+        
+        html += tableRow;
       });
       
       html += `
@@ -505,6 +718,19 @@ async function loadExpenses() {
     });
     
     container.innerHTML = html;
+    
+    // Restore expanded sections state if needed
+    if (preserveExpandedState && expandedSections.size > 0) {
+      expandedSections.forEach(sectionId => {
+        const content = document.getElementById(`content-${sectionId}`);
+        const toggle = document.getElementById(`toggle-${sectionId}`);
+        if (content && toggle) {
+          content.style.display = 'block';
+          toggle.classList.remove('bi-chevron-right');
+          toggle.classList.add('bi-chevron-down');
+        }
+      });
+    }
     
     // Add event listeners for section headers
     const sectionHeaders = container.querySelectorAll('.section-header');
@@ -1193,7 +1419,8 @@ async function deleteExpense(expenseId) {
     
     if (response.ok) {
       // Reload expenses after successful deletion
-      loadExpenses();
+      // Preserve expanded sections state when reloading after delete
+      loadExpenses(true);
       console.log('Expense deleted successfully');
       if (result.disbursementFeeDeleted) {
         console.log('Associated disbursement fee was also deleted');
@@ -1448,7 +1675,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Success - reload expenses (modal will be closed in finally block)
-        loadExpenses(); // Reload the expenses list
+        // Preserve expanded sections state when reloading after edit
+        loadExpenses(true); // Reload the expenses list
       } catch (error) {
         console.error('Error submitting expense:', error);
         const action = document.getElementById('expenseId').value ? 'updating' : 'adding';
