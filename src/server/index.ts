@@ -2951,36 +2951,37 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
           ? categoryGroups.nonFlight[category]
           : categoryGroups.flight[category];
 
-     filteredMonths.forEach(monthKey => {
-  const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
-  row.push(String(monthData.USD), String(monthData.AED));
-});
+      filteredMonths.forEach(monthKey => {
+        const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
+        row.push(String(monthData.USD), String(monthData.AED));
+      });
 
-data.push(row);
+      data.push(row);
+    });
 
-// Add Total row
-const totalRow = ['Total'];
+    // Add Total row
+    const totalRow = ['Total'];
 
-filteredMonths.forEach(monthKey => {
-  let totalUSD = 0;
-  let totalAED = 0;
+    filteredMonths.forEach(monthKey => {
+      let totalUSD = 0;
+      let totalAED = 0;
 
-  // Sum all categories for this month
-  allCategories.forEach(({ category, source }) => {
-    const categoryData =
-      source === 'nonFlight'
-        ? categoryGroups.nonFlight[category]
-        : categoryGroups.flight[category];
+      // Sum all categories for this month
+      allCategories.forEach(({ category, source }) => {
+        const categoryData =
+          source === 'nonFlight'
+            ? categoryGroups.nonFlight[category]
+            : categoryGroups.flight[category];
 
-    const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
-    totalUSD += monthData.USD;
-    totalAED += monthData.AED;
-  });
+        const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
+        totalUSD += monthData.USD;
+        totalAED += monthData.AED;
+      });
 
-  totalRow.push(String(totalUSD), String(totalAED));
-});
+      totalRow.push(String(totalUSD), String(totalAED));
+    });
 
-data.push(totalRow);
+    data.push(totalRow);
 
 
     // Create workbook
