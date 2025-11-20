@@ -2951,10 +2951,10 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
           ? categoryGroups.nonFlight[category]
           : categoryGroups.flight[category];
 
-      filteredMonths.forEach(monthKey => {
+      for (const monthKey of filteredMonths) {
         const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
         row.push(String(monthData.USD), String(monthData.AED));
-      });
+      }
 
       data.push(row);
     });
@@ -2962,12 +2962,12 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
     // Add Total row
     const totalRow = ['Total'];
 
-    filteredMonths.forEach(monthKey => {
+    for (const monthKey of filteredMonths) {
       let totalUSD = 0;
       let totalAED = 0;
 
       // Sum all categories for this month
-      allCategories.forEach(({ category, source }) => {
+      for (const { category, source } of allCategories) {
         const categoryData =
           source === 'nonFlight'
             ? categoryGroups.nonFlight[category]
@@ -2976,10 +2976,10 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         const monthData = categoryData[monthKey] || { USD: 0, AED: 0 };
         totalUSD += monthData.USD;
         totalAED += monthData.AED;
-      });
+      }
 
       totalRow.push(String(totalUSD), String(totalAED));
-    });
+    }
 
     data.push(totalRow);
 
