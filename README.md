@@ -4,36 +4,38 @@
 
 ## 📁 Структура проекта
 
-
 jet-finances/
-├── 📁 src/                    # Исходный код
-│   ├── 📁 server/            # Серверная часть (TypeScript)
-│   │   └── index.ts          # Главный файл сервера
-│   └── 📁 views/             # Шаблоны EJS
-│       ├── layout.ejs        # Основной layout
-│       ├── 📁 auth/          # Страницы аутентификации
-│       ├── 📁 dashboard/     # Главная страница
-│       ├── 📁 flights/       # Управление рейсами
-│       ├── 📁 expenses/      # Управление расходами
-│       ├── 📁 invoices/      # Управление счетами
-│       ├── 📁 reports/       # Отчеты
-│       ├── 📁 settings/      # Настройки
-│       └── 📁 logs/          # Логи системы
-├── 📁 public/                # Статические файлы
-│   ├── 📁 css/              # Стили
-│   ├── 📁 js/               # JavaScript файлы
-│   └── 📁 images/           # Изображения
-├── 📁 docs/                 # Документация
-│   ├── README.md            # Основная документация
-│   ├── AUTH_SETUP.md        # Настройка аутентификации
-│   ├── SUPABASE_SETUP.md    # Настройка Supabase
-│   └── ...                  # Другие документы
-├── 📁 scripts/              # Скрипты и SQL файлы
-│   ├── setup_auth_database.sql
-│   ├── create_users_and_roles.js
-│   └── ...                  # Другие скрипты
-├── 📁 dist/                 # Скомпилированный код
-├── package.json             # Зависимости проекта
-├── tsconfig.json           # Конфигурация TypeScript
-└── README.md               # Этот файл
+├── 📁 src/ # Исходный код
+│ ├── 📁 server/ # Серверная часть (TypeScript)
+│ │ └── index.ts # Главный файл сервера
+│ └── 📁 views/ # Шаблоны EJS
+│ ├── layout.ejs # Основной layout
+│ ├── 📁 auth/ # Страницы аутентификации
+│ ├── 📁 dashboard/ # Главная страница
+│ ├── 📁 flights/ # Управление рейсами
+│ ├── 📁 expenses/ # Управление расходами
+│ ├── 📁 invoices/ # Управление счетами
+│ ├── 📁 reports/ # Отчеты
+│ ├── 📁 settings/ # Настройки
+│ └── 📁 logs/ # Логи системы
+├── 📁 public/ # Статические файлы
+│ ├── 📁 css/ # Стили
+│ ├── 📁 js/ # JavaScript файлы
+│ └── 📁 images/ # Изображения
+├── 📁 docs/ # Документация
+│ ├── README.md # Основная документация
+│ ├── AUTH_SETUP.md # Настройка аутентификации
+│ ├── SUPABASE_SETUP.md # Настройка Supabase
+│ └── ... # Другие документы
+├── 📁 scripts/ # Скрипты и SQL файлы
+│ ├── setup_auth_database.sql
+│ ├── create_users_and_roles.js
+│ └── ... # Другие скрипты
+├── 📁 dist/ # Скомпилированный код
+├── package.json # Зависимости проекта
+├── tsconfig.json # Конфигурация TypeScript
+└── README.md # Этот файл
+
+```
+
 ```
