@@ -2498,6 +2498,36 @@ app.get('/api/expenses', async (_req, res) => {
         return res.json(mockData.expenses);
       }
 
+      // Enrich expenses with invoice type names
+      if (data && data.length > 0) {
+        const invoiceTypeIds = [
+          ...new Set(data.map((e: any) => e.exp_invoice_type).filter(Boolean)),
+        ];
+
+        const invoiceTypeNamesMap: { [key: string]: any } = {};
+        if (invoiceTypeIds.length > 0) {
+          const { data: invoiceTypes } = await supabase
+            .from('invoice_types')
+            .select('id, name')
+            .in('id', invoiceTypeIds);
+          if (invoiceTypes) {
+            invoiceTypes.forEach((it: any) => {
+              invoiceTypeNamesMap[it.id] = it;
+            });
+          }
+        }
+
+        // Enrich expenses with invoice type objects
+        const enrichedData = data.map((expense: any) => ({
+          ...expense,
+          invoice_types: expense.exp_invoice_type
+            ? invoiceTypeNamesMap[expense.exp_invoice_type]
+            : null,
+        }));
+
+        return res.json(enrichedData);
+      }
+
       return res.json(data || []);
     }
 

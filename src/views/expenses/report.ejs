@@ -338,8 +338,8 @@ async function loadExpensesReport() {
     // Store all expenses
     allExpensesData = expenses;
 
-    // Process expenses
-    processExpensesData(expenses);
+    // Process expenses (now async)
+    await processExpensesData(expenses);
 
     // Hide loading spinner and show content
     document.getElementById('loading-spinner').style.display = 'none';
@@ -366,10 +366,9 @@ async function loadExpensesReport() {
 }
 
 // Process expenses data
-function processExpensesData(expenses) {
+async function processExpensesData(expenses) {
   // Reset expense details map
   expenseDetailsMap = {};
-  console.log('Processing expenses, resetting expenseDetailsMap');
   
   // Process expenses - filter only those in specified groups
   const expensesByMonth = {};
@@ -377,8 +376,84 @@ function processExpensesData(expenses) {
     nonFlight: {},
     flight: {}
   };
-
+  
+  // Income items (Credit note and Charter profit)
+  const incomeItems = {
+    creditNote: {},
+    charterProfit: {}
+  };
+  
+  // Process expenses - separate income items from regular expenses using exp_category
   for (const expense of expenses) {
+    // Check if this is an income item using exp_category field
+    const expCategory = expense.exp_category || 'expense';
+    
+    if (expCategory === 'income_credit_note' || expCategory === 'income_charter_profit') {
+      // Process as income item
+      const incomeType = expCategory === 'income_credit_note' ? 'creditNote' : 'charterProfit';
+      const months = splitExpenseByMonths(expense);
+      
+        // Log income items for debugging
+        const monthKeys = months.map(m => m.monthKey);
+        console.log(`[Income] ${incomeType}:`, JSON.stringify({
+          invoice: expense.invoices?.inv_number,
+          category: expCategory,
+          amount: expense.exp_amount,
+          currency: expense.exp_currency,
+          period: expense.exp_period_start ? `${expense.exp_period_start} - ${expense.exp_period_end}` : expense.flights?.flt_date || 'N/A',
+          months: monthKeys
+        }, null, 2));
+      
+      for (const { monthKey, amount, currency } of months) {
+        if (!expensesByMonth[monthKey]) {
+          expensesByMonth[monthKey] = {};
+        }
+        
+        if (!incomeItems[incomeType][monthKey]) {
+          incomeItems[incomeType][monthKey] = { USD: 0, AED: 0 };
+        }
+        
+        // Store expense details
+        const detailKey = `${incomeType}_${monthKey}`;
+        if (!expenseDetailsMap[detailKey]) {
+          expenseDetailsMap[detailKey] = [];
+        }
+        const totalMonths = months.length || 1;
+        const originalTotalAmount = parseFloat(expense.exp_amount) || 0;
+        const monthlyAmount = totalMonths > 0 ? originalTotalAmount / totalMonths : originalTotalAmount;
+        
+        expenseDetailsMap[detailKey].push({
+          expense: expense,
+          amount: originalTotalAmount,
+          currency: currency,
+          monthlyAmount: monthlyAmount,
+          totalMonths: totalMonths
+        });
+        
+        // Add amount in original currency and convert to fill both columns
+        if (currency === 'USD') {
+          incomeItems[incomeType][monthKey].USD += amount;
+          const aedAmount = convertCurrency(amount, 'USD', 'AED');
+          incomeItems[incomeType][monthKey].AED += aedAmount;
+        } else if (currency === 'AED') {
+          incomeItems[incomeType][monthKey].AED += amount;
+          const usdAmount = convertCurrency(amount, 'AED', 'USD');
+          incomeItems[incomeType][monthKey].USD += usdAmount;
+        } else if (currency === 'EUR') {
+          const usdAmount = convertCurrency(amount, 'EUR', 'USD');
+          const aedAmount = convertCurrency(amount, 'EUR', 'AED');
+          incomeItems[incomeType][monthKey].USD += usdAmount;
+          incomeItems[incomeType][monthKey].AED += aedAmount;
+        } else {
+          const usdAmount = convertCurrency(amount, currency, 'USD');
+          const aedAmount = convertCurrency(amount, currency, 'AED');
+          incomeItems[incomeType][monthKey].USD += usdAmount;
+          incomeItems[incomeType][monthKey].AED += aedAmount;
+        }
+      }
+      continue; // Skip regular expense processing for income items
+    }
+    
     const baseCategory = getBaseExpenseCategory(expense);
     
     // Skip expenses that don't belong to any category
@@ -430,14 +505,6 @@ function processExpensesData(expenses) {
         totalMonths: totalMonths // Total number of months the expense spans
       });
       
-      console.log(`Stored expense for ${detailKey}:`, {
-        finalCategory,
-        monthKey,
-        currency,
-        monthlyAmount,
-        totalMonths
-      });
-
       // Add amount in original currency and convert to fill both columns
       if (currency === 'USD') {
         group[finalCategory][monthKey].USD += amount;
@@ -467,16 +534,30 @@ function processExpensesData(expenses) {
 
   // Store processed data
   allCategoryGroups = categoryGroups;
+  window.incomeItems = incomeItems; // Store income items globally for rendering
 
-  // Get all months and filter by year
-  const allMonths = Object.keys(expensesByMonth).sort();
+  // Get all months from expenses and income items, then filter by year
+  const allMonthsSet = new Set(Object.keys(expensesByMonth));
+  
+  // Add months from income items
+  Object.keys(incomeItems.creditNote).forEach(monthKey => allMonthsSet.add(monthKey));
+  Object.keys(incomeItems.charterProfit).forEach(monthKey => allMonthsSet.add(monthKey));
+  
+  const allMonths = Array.from(allMonthsSet).sort();
   const filteredMonths = filterMonthsByYear(allMonths);
-
-  console.log('Expense details map after processing:', expenseDetailsMap);
-  console.log('Total keys in expenseDetailsMap:', Object.keys(expenseDetailsMap).length);
+  
+  // Log income items summary with details
+  const creditNoteMonths = Object.keys(incomeItems.creditNote);
+  const charterProfitMonths = Object.keys(incomeItems.charterProfit);
+  console.log('[Income Summary]', JSON.stringify({
+    creditNoteMonths: creditNoteMonths,
+    charterProfitMonths: charterProfitMonths,
+    creditNoteData: incomeItems.creditNote,
+    charterProfitData: incomeItems.charterProfit
+  }, null, 2));
 
   // Render table
-  renderExpensesReportTable(categoryGroups, filteredMonths);
+  renderExpensesReportTable(categoryGroups, filteredMonths, incomeItems);
 }
 
 // Filter months by selected year
@@ -560,10 +641,11 @@ function getGroupBackgroundColor(group) {
 }
 
 // Render expenses report table
-function renderExpensesReportTable(categoryGroups, months) {
+function renderExpensesReportTable(categoryGroups, months, incomeItems = { creditNote: {}, charterProfit: {} }) {
+  
   // Update year filter options
   if (allExpensesData && allCategoryGroups) {
-    // Get all months from category groups
+    // Get all months from category groups and income items
     const allMonthsSet = new Set();
     Object.values(allCategoryGroups.nonFlight).forEach(category => {
       Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
@@ -571,6 +653,13 @@ function renderExpensesReportTable(categoryGroups, months) {
     Object.values(allCategoryGroups.flight).forEach(category => {
       Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
     });
+    // Add months from income items
+    if (incomeItems.creditNote) {
+      Object.keys(incomeItems.creditNote).forEach(monthKey => allMonthsSet.add(monthKey));
+    }
+    if (incomeItems.charterProfit) {
+      Object.keys(incomeItems.charterProfit).forEach(monthKey => allMonthsSet.add(monthKey));
+    }
     const allMonths = Array.from(allMonthsSet).sort();
     updateYearFilterOptions(allMonths);
   }
@@ -589,9 +678,6 @@ function renderExpensesReportTable(categoryGroups, months) {
   categoryHeader.style.maxWidth = '350px';
   categoryHeader.style.width = 'auto';
   categoryHeader.rowSpan = 2;
-  categoryHeader.style.position = 'sticky';
-  categoryHeader.style.left = '0';
-  categoryHeader.style.zIndex = '100';
   categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
   categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
   categoryHeader.style.whiteSpace = 'normal';
@@ -608,6 +694,7 @@ function renderExpensesReportTable(categoryGroups, months) {
     monthHeader.style.textAlign = 'center';
     monthHeader.style.minWidth = '240px';
     monthHeader.style.color = 'hsl(210, 6%, 46%)';
+    monthHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     // Add border-left for all months except the first
     if (index > 0) {
       monthHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -747,6 +834,51 @@ function renderExpensesReportTable(categoryGroups, months) {
     tbody.appendChild(row);
   });
 
+  // Add Credit note row (before Total)
+  const creditNoteRow = document.createElement('tr');
+  creditNoteRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  creditNoteRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  
+  const creditNoteCategoryCell = document.createElement('td');
+  creditNoteCategoryCell.textContent = 'Credit note';
+  creditNoteCategoryCell.style.fontWeight = '600';
+  creditNoteCategoryCell.style.position = 'sticky';
+  creditNoteCategoryCell.style.left = '0';
+  creditNoteCategoryCell.style.zIndex = '90';
+  creditNoteCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  creditNoteCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+  creditNoteCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  creditNoteRow.appendChild(creditNoteCategoryCell);
+
+  months.forEach((monthKey, monthIndex) => {
+    const data = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
+    
+    const usdCell = document.createElement('td');
+    usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    usdCell.style.textAlign = 'right';
+    usdCell.style.fontWeight = '600';
+    usdCell.style.minWidth = '120px';
+    usdCell.style.width = '120px';
+    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    if (monthIndex > 0) {
+      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
+    }
+    creditNoteRow.appendChild(usdCell);
+
+    const aedCell = document.createElement('td');
+    aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    aedCell.style.textAlign = 'right';
+    aedCell.style.fontWeight = '600';
+    aedCell.style.minWidth = '120px';
+    aedCell.style.width = '120px';
+    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    creditNoteRow.appendChild(aedCell);
+  });
+
+  tbody.appendChild(creditNoteRow);
+
   // Add Total row
   const totalRow = document.createElement('tr');
   totalRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
@@ -803,11 +935,118 @@ function renderExpensesReportTable(categoryGroups, months) {
 
   tbody.appendChild(totalRow);
 
-  // Update table header position after rendering
-  // Use requestAnimationFrame to ensure DOM is fully updated
-  requestAnimationFrame(() => {
-    setTimeout(updateTableHeaderPosition, 50);
+  // Add Charter profit row (after Total)
+  const charterProfitRow = document.createElement('tr');
+  charterProfitRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  charterProfitRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  
+  const charterProfitCategoryCell = document.createElement('td');
+  charterProfitCategoryCell.textContent = 'Charter profit';
+  charterProfitCategoryCell.style.fontWeight = '600';
+  charterProfitCategoryCell.style.position = 'sticky';
+  charterProfitCategoryCell.style.left = '0';
+  charterProfitCategoryCell.style.zIndex = '90';
+  charterProfitCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  charterProfitCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+  charterProfitCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  charterProfitRow.appendChild(charterProfitCategoryCell);
+
+  months.forEach((monthKey, monthIndex) => {
+    const data = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
+    
+    const usdCell = document.createElement('td');
+    usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    usdCell.style.textAlign = 'right';
+    usdCell.style.fontWeight = '600';
+    usdCell.style.minWidth = '120px';
+    usdCell.style.width = '120px';
+    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    if (monthIndex > 0) {
+      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
+    }
+    charterProfitRow.appendChild(usdCell);
+
+    const aedCell = document.createElement('td');
+    aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    aedCell.style.textAlign = 'right';
+    aedCell.style.fontWeight = '600';
+    aedCell.style.minWidth = '120px';
+    aedCell.style.width = '120px';
+    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    charterProfitRow.appendChild(aedCell);
   });
+
+  tbody.appendChild(charterProfitRow);
+
+  // Add Total profit row (after Charter profit)
+  const totalProfitRow = document.createElement('tr');
+  totalProfitRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  totalProfitRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  
+  const totalProfitCategoryCell = document.createElement('td');
+  totalProfitCategoryCell.textContent = 'Total profit';
+  totalProfitCategoryCell.style.fontWeight = '700';
+  totalProfitCategoryCell.style.position = 'sticky';
+  totalProfitCategoryCell.style.left = '0';
+  totalProfitCategoryCell.style.zIndex = '90';
+  totalProfitCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+  totalProfitCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+  totalProfitCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+  totalProfitRow.appendChild(totalProfitCategoryCell);
+
+  months.forEach((monthKey, monthIndex) => {
+    // Calculate total expenses for this month
+    let totalExpensesUSD = 0;
+    let totalExpensesAED = 0;
+    allCategories.forEach(({ category, source }) => {
+      const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
+      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
+      totalExpensesUSD += data.USD;
+      totalExpensesAED += data.AED;
+    });
+
+    // Get Charter profit for this month
+    const charterProfitData = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
+    
+    // Total profit = Charter profit - Total expenses
+    const totalProfitUSD = charterProfitData.USD - totalExpensesUSD;
+    const totalProfitAED = charterProfitData.AED - totalExpensesAED;
+    
+    const usdCell = document.createElement('td');
+    usdCell.textContent = totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    usdCell.style.textAlign = 'right';
+    usdCell.style.fontWeight = '700';
+    usdCell.style.minWidth = '120px';
+    usdCell.style.width = '120px';
+    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    if (monthIndex > 0) {
+      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
+    }
+    totalProfitRow.appendChild(usdCell);
+
+    const aedCell = document.createElement('td');
+    aedCell.textContent = totalProfitAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    aedCell.style.textAlign = 'right';
+    aedCell.style.fontWeight = '700';
+    aedCell.style.minWidth = '120px';
+    aedCell.style.width = '120px';
+    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
+    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    totalProfitRow.appendChild(aedCell);
+  });
+
+  tbody.appendChild(totalProfitRow);
+
+  // Update table header position after rendering
+  // Use multiple timeouts to ensure DOM is fully updated and heights are calculated
+  setTimeout(() => {
+    updateTableHeaderPosition();
+    // Call again after a short delay to ensure correct positioning
+    setTimeout(updateTableHeaderPosition, 100);
+  }, 50);
 }
 
 // Show expense details modal
@@ -1131,32 +1370,57 @@ function updateTableHeaderPosition() {
   const pageHeader = document.querySelector('.page-header');
   const table = document.querySelector('.expenses-report-table');
 
-  if (header && pageHeader && table) {
-    const headerHeight = header.offsetHeight || 0;
-    const pageHeaderHeight = pageHeader.offsetHeight || 0;
-    const totalHeight = headerHeight + pageHeaderHeight;
+  if (!header || !pageHeader || !table) {
+    return;
+  }
 
-    // Set top for first row headers (months)
-    const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
-    if (firstRowHeaders.length > 0) {
-      firstRowHeaders.forEach((th, index) => {
-        th.style.top = totalHeight + 'px';
-        // Only Category (first column) should have left: 0
-        if (index === 0) {
-          th.style.left = '0';
-        }
-      });
+  // Calculate total height of fixed headers above table
+  const headerHeight = header.offsetHeight || 0;
+  const pageHeaderHeight = pageHeader.offsetHeight || 0;
+  const totalHeight = headerHeight + pageHeaderHeight;
 
-      // Set top for second row headers (USD/AED)
-      const secondRowHeaders = table.querySelectorAll('thead tr:last-child th');
-      if (secondRowHeaders.length > 0) {
-        // Calculate first row height after it's rendered
-        const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
-        secondRowHeaders.forEach((th) => {
-          th.style.top = (totalHeight + firstRowHeight) + 'px';
-        });
-      }
+  // Get all header rows
+  const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
+  const secondRowHeaders = table.querySelectorAll('thead tr:last-child th');
+  
+  if (firstRowHeaders.length === 0) {
+    return;
+  }
+
+  // Get first row height - force layout calculation
+  const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
+  
+  // Only log once to avoid spam
+  if (!window.headerPositionLogged) {
+    console.log('[Header Position]', {
+      headerHeight,
+      pageHeaderHeight,
+      totalHeight,
+      firstRowHeight,
+      firstRowTop: totalHeight,
+      secondRowTop: totalHeight + firstRowHeight
+    });
+    window.headerPositionLogged = true;
+  }
+  
+  // Set top for first row headers (months and category)
+  firstRowHeaders.forEach((th, index) => {
+    th.style.top = totalHeight + 'px';
+    // Only Category (first column) should have left: 0
+    if (index === 0) {
+      th.style.left = '0';
+      th.style.zIndex = '102';
+    } else {
+      th.style.zIndex = '101';
     }
+  });
+
+  // Set top for second row headers (USD/AED)
+  if (secondRowHeaders.length > 0) {
+    secondRowHeaders.forEach((th) => {
+      th.style.top = (totalHeight + firstRowHeight) + 'px';
+      th.style.zIndex = '101';
+    });
   }
 }
 
@@ -1167,10 +1431,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // Add year filter change handler
   const yearFilter = document.getElementById('yearFilter');
   if (yearFilter) {
-    yearFilter.addEventListener('change', function() {
+    yearFilter.addEventListener('change', async function() {
       if (allExpensesData) {
         // Reprocess data with current settings
-        processExpensesData(allExpensesData);
+        await processExpensesData(allExpensesData);
       }
     });
   }
@@ -1178,11 +1442,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Add subcategories checkbox handler
   const showSubcategoriesCheckbox = document.getElementById('showSubcategories');
   if (showSubcategoriesCheckbox) {
-    showSubcategoriesCheckbox.addEventListener('change', function() {
+    showSubcategoriesCheckbox.addEventListener('change', async function() {
       showSubcategories = this.checked;
       if (allExpensesData) {
         // Reprocess data with new subcategories setting
-        processExpensesData(allExpensesData);
+        await processExpensesData(allExpensesData);
       }
     });
   }
@@ -1246,6 +1510,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .expenses-report-table thead {
   background-color: hsl(210, 11%, 96%) !important;
+  position: relative !important;
 }
 
 .expenses-report-table th {
@@ -1260,21 +1525,23 @@ document.addEventListener('DOMContentLoaded', function() {
   min-width: 120px !important;
 }
 
-/* Only Category column should be sticky horizontally */
-.expenses-report-table thead th:first-child {
+/* Sticky headers - top will be set by JavaScript */
+.expenses-report-table thead th {
   position: sticky !important;
-  top: 0 !important;
-  left: 0 !important;
-  z-index: 100 !important;
   background-color: hsl(210, 11%, 96%) !important;
+  top: 0 !important; /* Default, will be overridden by JavaScript */
+}
+
+/* Category column - sticky both horizontally and vertically */
+.expenses-report-table thead th:first-child {
+  left: 0 !important;
+  z-index: 102 !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
 }
 
 /* All other headers - sticky only vertically */
 .expenses-report-table thead th:not(:first-child) {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 50 !important;
+  z-index: 101 !important;
 }
 
 .expenses-report-table th:last-child {
