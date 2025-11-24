@@ -383,26 +383,44 @@ async function processExpensesData(expenses) {
     charterProfit: {}
   };
   
-  // Process expenses - separate income items from regular expenses using exp_category
+  // Process expenses - separate income items from regular expenses
+  // Check both exp_category and exp_invoice_type for income items
   for (const expense of expenses) {
-    // Check if this is an income item using exp_category field
+    // Check if this is an income item
+    // First check exp_category (if set)
     const expCategory = expense.exp_category || 'expense';
     
-    if (expCategory === 'income_credit_note' || expCategory === 'income_charter_profit') {
+    // Also check exp_invoice_type (can be string or object with name)
+    const invoiceTypeName = expense.invoice_types?.name || expense.exp_invoice_type || '';
+    const invoiceTypeNameLower = (typeof invoiceTypeName === 'string' ? invoiceTypeName : '').toLowerCase().trim();
+    
+    const isCreditNote = (
+      expCategory === 'income_credit_note' ||
+      invoiceTypeNameLower.includes('credit') && invoiceTypeNameLower.includes('note')
+    );
+    
+    const isCharterProfit = (
+      expCategory === 'income_charter_profit' ||
+      (invoiceTypeNameLower.includes('charter') && invoiceTypeNameLower.includes('profit'))
+    );
+    
+    if (isCreditNote || isCharterProfit) {
       // Process as income item
-      const incomeType = expCategory === 'income_credit_note' ? 'creditNote' : 'charterProfit';
+      const incomeType = isCreditNote ? 'creditNote' : 'charterProfit';
       const months = splitExpenseByMonths(expense);
       
-        // Log income items for debugging
-        const monthKeys = months.map(m => m.monthKey);
-        console.log(`[Income] ${incomeType}:`, JSON.stringify({
-          invoice: expense.invoices?.inv_number,
-          category: expCategory,
-          amount: expense.exp_amount,
-          currency: expense.exp_currency,
-          period: expense.exp_period_start ? `${expense.exp_period_start} - ${expense.exp_period_end}` : expense.flights?.flt_date || 'N/A',
-          months: monthKeys
-        }, null, 2));
+      // Log income items for debugging
+      const monthKeys = months.map(m => m.monthKey);
+      console.log(`[Income] ${incomeType}:`, JSON.stringify({
+        invoice: expense.invoices?.inv_number,
+        exp_category: expCategory,
+        exp_invoice_type: expense.exp_invoice_type,
+        invoice_type_name: invoiceTypeName,
+        amount: expense.exp_amount,
+        currency: expense.exp_currency,
+        period: expense.exp_period_start ? `${expense.exp_period_start} - ${expense.exp_period_end}` : expense.flights?.flt_date || 'N/A',
+        months: monthKeys
+      }, null, 2));
       
       for (const { monthKey, amount, currency } of months) {
         if (!expensesByMonth[monthKey]) {
@@ -452,8 +470,10 @@ async function processExpensesData(expenses) {
         }
       }
       continue; // Skip regular expense processing for income items
+      // Income items (Credit note, Charter profit) are NOT included in Total expenses
     }
     
+    // Process regular expenses (NOT income items)
     const baseCategory = getBaseExpenseCategory(expense);
     
     // Skip expenses that don't belong to any category
@@ -896,17 +916,41 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   totalRow.appendChild(totalCategoryCell);
 
   // Calculate totals for each month
+  // Total = Sum of all regular expenses - Credit note
   months.forEach((monthKey, monthIndex) => {
     let totalUSD = 0;
     let totalAED = 0;
 
-    // Sum all categories for this month
+    // Sum all categories for this month (only regular expenses)
     allCategories.forEach(({ category, source }) => {
       const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
       const data = categoryData[monthKey] || { USD: 0, AED: 0 };
       totalUSD += data.USD;
       totalAED += data.AED;
     });
+    
+    // Subtract Credit note from Total (Credit note reduces expenses)
+    const creditNoteData = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
+    totalUSD -= creditNoteData.USD;
+    totalAED -= creditNoteData.AED;
+    
+    // Debug: log totals for verification (only for first month to avoid spam)
+    if (monthIndex === 0) {
+      const charterProfitData = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
+      console.log(`[Total Calculation] ${monthKey}:`, {
+        totalExpensesBeforeCreditNote: {
+          USD: totalUSD + creditNoteData.USD,
+          AED: totalAED + creditNoteData.AED
+        },
+        creditNote: creditNoteData,
+        totalExpensesAfterCreditNote: { USD: totalUSD, AED: totalAED },
+        charterProfit: charterProfitData,
+        totalProfit: {
+          USD: charterProfitData.USD - totalUSD,
+          AED: charterProfitData.AED - totalAED
+        }
+      });
+    }
 
     const usdCell = document.createElement('td');
     usdCell.textContent = totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -997,7 +1041,7 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   totalProfitRow.appendChild(totalProfitCategoryCell);
 
   months.forEach((monthKey, monthIndex) => {
-    // Calculate total expenses for this month
+    // Calculate total expenses for this month (same as Total row calculation)
     let totalExpensesUSD = 0;
     let totalExpensesAED = 0;
     allCategories.forEach(({ category, source }) => {
@@ -1006,13 +1050,27 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
       totalExpensesUSD += data.USD;
       totalExpensesAED += data.AED;
     });
+    
+    // Subtract Credit note from total expenses (same as Total row)
+    const creditNoteData = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
+    totalExpensesUSD -= creditNoteData.USD;
+    totalExpensesAED -= creditNoteData.AED;
 
     // Get Charter profit for this month
     const charterProfitData = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
     
-    // Total profit = Charter profit - Total expenses
+    // Total profit = Charter profit - Total expenses (where Total already accounts for Credit note)
     const totalProfitUSD = charterProfitData.USD - totalExpensesUSD;
     const totalProfitAED = charterProfitData.AED - totalExpensesAED;
+    
+    // Debug: log total profit calculation (only for first month to avoid spam)
+    if (monthIndex === 0) {
+      console.log(`[Total Profit Calculation] ${monthKey}:`, {
+        totalExpenses: { USD: totalExpensesUSD, AED: totalExpensesAED },
+        charterProfit: charterProfitData,
+        totalProfit: { USD: totalProfitUSD, AED: totalProfitAED }
+      });
+    }
     
     const usdCell = document.createElement('td');
     usdCell.textContent = totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

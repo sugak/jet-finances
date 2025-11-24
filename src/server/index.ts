@@ -805,7 +805,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: error.message });
     }
 
-    if (data.user) {
+    if (data.user && data.session) {
       // Set session cookies with proper production settings
       const cookieOptions = {
         maxAge: 24 * 60 * 60 * 1000, // 1 day
@@ -835,7 +835,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    return res.status(401).json({ error: 'Login failed' });
+    return res.status(401).json({ error: 'Login failed: invalid session' });
   } catch (error) {
     console.error('Server login error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -4985,8 +4985,18 @@ app.use((_req, res) => {
 
 // Ошибки
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error('Error handler:', err);
+
+  // Для API эндпоинтов возвращаем JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+
+  // Для остальных запросов возвращаем HTML
   res.status(500).render('dashboard/index', { title: 'Server Error' });
 });
 

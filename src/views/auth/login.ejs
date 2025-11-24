@@ -298,7 +298,19 @@
             })
           });
           
-          const result = await response.json();
+          // Проверяем Content-Type перед парсингом JSON
+          const contentType = response.headers.get('content-type');
+          let result;
+          
+          if (contentType && contentType.includes('application/json')) {
+            result = await response.json();
+          } else {
+            // Если ответ не JSON, читаем как текст
+            const text = await response.text();
+            console.error('Non-JSON response:', text);
+            throw new Error('Server returned an invalid response. Please try again.');
+          }
+          
           console.log('Login response:', result);
           
           if (!response.ok) {
@@ -311,7 +323,11 @@
           }
         } catch (error) {
           console.error('Login error:', error);
-          showError(error.message || 'Login failed. Please try again.');
+          if (error instanceof SyntaxError) {
+            showError('Server returned an invalid response. Please try again.');
+          } else {
+            showError(error.message || 'Login failed. Please try again.');
+          }
         } finally {
           setLoading(false);
         }
