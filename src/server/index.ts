@@ -984,7 +984,7 @@ app.get('/flights', authenticateSession, (_req, res) => {
 });
 
 app.get('/flights/expenses', authenticateSession, (_req, res) => {
-  res.render('flights/expenses', { title: 'Flight Expenses' });
+  res.render('flights/expenses', { title: 'Flight expenses breakdown' });
 });
 
 app.get(

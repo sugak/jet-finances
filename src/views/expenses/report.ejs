@@ -1,9 +1,5 @@
 <!-- Page Header -->
-<div class="page-header">
-  <div>
-    <h1 class="page-title" style="font-size: 1.5rem; text-transform: capitalize;">Expenses Report</h1>
-  </div>
-  <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
+<div class="page-header" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
     <label for="yearFilter" style="font-weight: 500; color: hsl(210, 6%, 21%);">Year:</label>
     <select id="yearFilter" style="padding: 0.5rem 1rem; border: 1px solid hsl(210, 11%, 85%); border-radius: 0.375rem; font-size: 0.875rem; background-color: white; cursor: pointer;">
       <option value="current">Current Year</option>
@@ -21,7 +17,6 @@
       <i class="bi bi-file-earmark-spreadsheet"></i>
       Export to Excel
     </button>
-  </div>
 </div>
 
 <!-- Loading Spinner -->
@@ -807,6 +802,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
   categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
   categoryHeader.style.whiteSpace = 'normal';
+  categoryHeader.style.position = 'sticky';
+  categoryHeader.style.left = '0';
+  categoryHeader.style.zIndex = '102';
   headerRow.appendChild(categoryHeader);
 
   // Add month columns with USD and AED subcolumns
@@ -821,6 +819,8 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     monthHeader.style.minWidth = '240px';
     monthHeader.style.color = 'hsl(210, 6%, 46%)';
     monthHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
+    monthHeader.style.position = 'relative';
+    monthHeader.style.zIndex = '100';
     // Add border-left for all months except the first
     if (index > 0) {
       monthHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -837,10 +837,16 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   months.forEach((monthKey, monthIndex) => {
     const usdHeader = document.createElement('th');
     usdHeader.textContent = 'USD';
-    usdHeader.style.textAlign = 'center';
+    usdHeader.style.textAlign = 'right';
     usdHeader.style.minWidth = '120px';
     usdHeader.style.width = '120px';
     usdHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
+    usdHeader.style.position = 'relative';
+    usdHeader.style.zIndex = '99';
+    usdHeader.style.fontWeight = '400';
+    usdHeader.style.fontSize = '0.7rem';
+    usdHeader.style.padding = '0.15rem 0.75rem';
+    usdHeader.style.lineHeight = '1.2';
     // Add border-left for all months except the first
     if (monthIndex > 0) {
       usdHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -849,10 +855,16 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
 
     const aedHeader = document.createElement('th');
     aedHeader.textContent = 'AED';
-    aedHeader.style.textAlign = 'center';
+    aedHeader.style.textAlign = 'right';
     aedHeader.style.minWidth = '120px';
     aedHeader.style.width = '120px';
     aedHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
+    aedHeader.style.position = 'relative';
+    aedHeader.style.zIndex = '99';
+    aedHeader.style.fontWeight = '400';
+    aedHeader.style.fontSize = '0.7rem';
+    aedHeader.style.padding = '0.15rem 0.75rem';
+    aedHeader.style.lineHeight = '1.2';
     subHeaderRow.appendChild(aedHeader);
   });
 
@@ -888,12 +900,17 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   });
 
   // Render categories in sorted order
-  allCategories.forEach(({ category, source }) => {
+  let previousGroup = null;
+  allCategories.forEach(({ category, source }, index) => {
     const row = document.createElement('tr');
     // Extract base category for color coding (remove " - subtype" part if present)
     const baseCategoryForColor = category.split(' - ')[0];
     const group = getCategoryGroup(baseCategoryForColor);
     const bgColor = getGroupBackgroundColor(group);
+    
+    // Check if group changed (separate categories by color groups)
+    const groupChanged = previousGroup !== null && previousGroup !== group;
+    previousGroup = group;
     
     const categoryCell = document.createElement('td');
     
@@ -906,10 +923,19 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     categoryCell.style.zIndex = '90';
     categoryCell.style.backgroundColor = bgColor;
     categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
+    // Add border-top to category cell if group changed
+    if (groupChanged) {
+      categoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    }
     row.appendChild(categoryCell);
 
     // Set row background color
     row.style.backgroundColor = bgColor;
+    
+    // Add border-top to all cells in row if group changed
+    if (groupChanged) {
+      row.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+    }
 
     const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
 
@@ -922,6 +948,10 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
       usdCell.style.minWidth = '120px';
       usdCell.style.width = '120px';
       usdCell.style.backgroundColor = bgColor;
+      // Add border-top if group changed
+      if (groupChanged) {
+        usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+      }
       // Add border-left for all months except the first
       if (monthIndex > 0) {
         usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
@@ -944,6 +974,10 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
       aedCell.style.minWidth = '120px';
       aedCell.style.width = '120px';
       aedCell.style.backgroundColor = bgColor;
+      // Add border-top if group changed
+      if (groupChanged) {
+        aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
+      }
       if (data.USD > 0 || data.AED > 0) {
         aedCell.style.cursor = 'pointer';
         aedCell.style.color = 'hsl(210, 76%, 36%)';
@@ -1621,8 +1655,18 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-.page-content {
-  padding-top: 0.5rem !important;
+/* Override page-content padding from layout - use more specific selector */
+.main-content main.page-content {
+  padding-top: 0 !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
+/* Remove all spacing from page-content first child */
+.main-content main.page-content > *:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .page-header {
@@ -1630,10 +1674,12 @@ document.addEventListener('DOMContentLoaded', function() {
   top: 4rem !important;
   z-index: 90 !important;
   background-color: hsl(210, 11%, 98%) !important;
-  padding: 0.5rem 0 !important;
+  padding: 0.25rem 0 !important;
   margin-bottom: 0.5rem !important;
+  margin-top: 0 !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
 }
+
 
 .expenses-report-table {
   width: 100% !important;
@@ -1647,6 +1693,14 @@ document.addEventListener('DOMContentLoaded', function() {
 .expenses-report-table thead {
   background-color: hsl(210, 11%, 96%) !important;
   position: relative !important;
+}
+
+/* Make second header row (USD/AED) smaller */
+.expenses-report-table thead tr:nth-child(2) th {
+  padding: 0.15rem 0.75rem !important;
+  font-size: 0.7rem !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
 }
 
 .expenses-report-table th {
@@ -1672,6 +1726,13 @@ document.addEventListener('DOMContentLoaded', function() {
   left: 0 !important;
   z-index: 102 !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
+  background-color: hsl(210, 11%, 96%) !important;
+}
+
+/* Ensure all other header cells have lower z-index and don't overlap Category */
+.expenses-report-table thead th:not(:first-child) {
+  position: relative !important;
+  z-index: 99 !important;
 }
 
 .expenses-report-table th:last-child {
@@ -1707,6 +1768,7 @@ document.addEventListener('DOMContentLoaded', function() {
   border-right: 2px solid hsl(210, 11%, 85%) !important;
   white-space: normal !important;
   word-wrap: break-word !important;
+  background-color: inherit !important;
 }
 
 .expenses-report-table tbody tr:hover {
