@@ -9,6 +9,10 @@
       <input type="checkbox" id="showSubcategories" style="width: 1rem; height: 1rem; cursor: pointer;">
       View all subcategories
     </label>
+    <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%); cursor: pointer;">
+      <input type="checkbox" id="reportForATS" style="width: 1rem; height: 1rem; cursor: pointer;">
+      Report for ATS
+    </label>
     <button id="exportExcelBtn" class="btn btn-primary" style="display: none; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem; white-space: nowrap;">
       <i class="bi bi-file-earmark-spreadsheet"></i>
       Export to Excel
@@ -319,6 +323,7 @@ let allExpensesData = null;
 let allCategoryGroups = null;
 let expenseDetailsMap = {}; // Map to store expense details: { category_monthKey: [expenses] }
 let showSubcategories = false; // Flag to show subcategories
+let reportForATS = false; // Flag for ATS report filter
 
 // Load and process expenses
 async function loadExpensesReport() {
@@ -360,10 +365,111 @@ async function loadExpensesReport() {
   }
 }
 
+// Check if expense period starts before October 2025
+function isPeriodBeforeOctober2025(expense) {
+  if (!expense.exp_period_start) {
+    return false; // If no period, don't filter it out
+  }
+  const periodStart = new Date(expense.exp_period_start);
+  const october2025 = new Date('2025-10-01');
+  return periodStart < october2025;
+}
+
+// Check if expense is a Disbursement fee
+function isDisbursementFee(expense) {
+  const baseCategory = getBaseExpenseCategory(expense);
+  return baseCategory === 'Disbursement fee';
+}
+
+// Find related Disbursement fee expenses for a given expense
+function findRelatedDisbursementFees(expense, allExpenses) {
+  const disbursementFees = [];
+  
+  for (const exp of allExpenses) {
+    if (!isDisbursementFee(exp)) {
+      continue;
+    }
+    
+    // Match by invoice
+    if (expense.exp_invoice && exp.exp_invoice !== expense.exp_invoice) {
+      continue;
+    }
+    if (!expense.exp_invoice && exp.exp_invoice) {
+      continue;
+    }
+    
+    // Match by flight if exists
+    if (expense.exp_flight) {
+      if (exp.exp_flight !== expense.exp_flight) {
+        continue;
+      }
+    } else {
+      if (exp.exp_flight !== null) {
+        continue;
+      }
+    }
+    
+    // Match by period if exists
+    if (expense.exp_period_start && expense.exp_period_end) {
+      if (exp.exp_period_start !== expense.exp_period_start || 
+          exp.exp_period_end !== expense.exp_period_end) {
+        continue;
+      }
+    } else {
+      if (exp.exp_period_start !== null || exp.exp_period_end !== null) {
+        continue;
+      }
+    }
+    
+    // Match by place if exists
+    if (expense.exp_place) {
+      if (exp.exp_place !== expense.exp_place) {
+        continue;
+      }
+    } else {
+      if (exp.exp_place !== null) {
+        continue;
+      }
+    }
+    
+    // This disbursement fee matches the expense
+    disbursementFees.push(exp);
+  }
+  
+  return disbursementFees;
+}
+
 // Process expenses data
 async function processExpensesData(expenses) {
   // Reset expense details map
   expenseDetailsMap = {};
+  
+  // If reportForATS is enabled, filter out expenses with period starting before October 2025
+  // and their related Disbursement fees
+  let filteredExpenses = expenses;
+  if (reportForATS) {
+    const excludedExpenseIds = new Set();
+    
+    // First pass: identify expenses to exclude
+    for (const expense of expenses) {
+      if (isPeriodBeforeOctober2025(expense)) {
+        excludedExpenseIds.add(expense.id);
+      }
+    }
+    
+    // Second pass: identify related Disbursement fees to exclude
+    for (const expense of expenses) {
+      if (excludedExpenseIds.has(expense.id)) {
+        const relatedFees = findRelatedDisbursementFees(expense, expenses);
+        for (const fee of relatedFees) {
+          excludedExpenseIds.add(fee.id);
+        }
+      }
+    }
+    
+    // Filter out excluded expenses
+    filteredExpenses = expenses.filter(exp => !excludedExpenseIds.has(exp.id));
+  }
   
   // Process expenses - filter only those in specified groups
   const expensesByMonth = {};
@@ -380,7 +486,7 @@ async function processExpensesData(expenses) {
   
   // Process expenses - separate income items from regular expenses
   // Check both exp_category and exp_invoice_type for income items
-  for (const expense of expenses) {
+  for (const expense of filteredExpenses) {
     // Check if this is an income item
     // First check exp_category (if set)
     const expCategory = expense.exp_category || 'expense';
@@ -1391,8 +1497,11 @@ async function exportToExcel() {
     // Get subcategories checkbox state
     const showSubcategories = document.getElementById('showSubcategories')?.checked || false;
     
+    // Get reportForATS checkbox state
+    const reportForATS = document.getElementById('reportForATS')?.checked || false;
+    
     // Make request to server endpoint
-    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${showSubcategories}`, {
+    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${showSubcategories}&reportForATS=${reportForATS}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -1541,6 +1650,18 @@ document.addEventListener('DOMContentLoaded', function() {
       showSubcategories = this.checked;
       if (allExpensesData) {
         // Reprocess data with new subcategories setting
+        await processExpensesData(allExpensesData);
+      }
+    });
+  }
+
+  // Add reportForATS checkbox handler
+  const reportForATSCheckbox = document.getElementById('reportForATS');
+  if (reportForATSCheckbox) {
+    reportForATSCheckbox.addEventListener('change', async function() {
+      reportForATS = this.checked;
+      if (allExpensesData) {
+        // Reprocess data with new ATS filter setting
         await processExpensesData(allExpensesData);
       }
     });
