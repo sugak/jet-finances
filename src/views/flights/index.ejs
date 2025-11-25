@@ -131,7 +131,7 @@
 
 <!-- Schedule Modal -->
 <div id="scheduleModal" class="modal-overlay" style="display: none;">
-  <div class="modal-container" style="max-width: 600px;">
+  <div class="modal-container" style="max-width: 90vw; width: 1200px;">
     <div class="modal-header">
       <h3>Flight Schedule</h3>
       <button class="modal-close" id="closeScheduleModalBtn">
@@ -145,7 +145,7 @@
           Copy to clipboard
         </button>
       </div>
-      <textarea id="scheduleText" readonly style="width: 100%; min-height: 300px; padding: 1rem; border: 1px solid hsl(210, 11%, 90%); border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem; resize: vertical; background-color: hsl(210, 11%, 98%);"></textarea>
+      <textarea id="scheduleText" readonly style="width: 100%; min-height: 300px; padding: 1rem; border: 1px solid hsl(210, 11%, 90%); border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem; resize: vertical; background-color: hsl(210, 11%, 98%); white-space: nowrap; overflow-x: auto;"></textarea>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-cancel" id="closeScheduleBtn">
@@ -663,6 +663,15 @@ function getSchedule() {
     return dateA - dateB;
   });
   
+  // Format time helper function
+  const formatTime = timeString => {
+    if (!timeString) {
+      return '00:00';
+    }
+    const [hours, minutes] = timeString.split(':');
+    return `${hours}:${minutes}`;
+  };
+
   // Format schedule text
   const scheduleLines = selectedFlights.map(flight => {
     const date = new Date(flight.flt_date);
@@ -673,10 +682,12 @@ function getSchedule() {
     const formattedDate = `${day}-${month}-${year}`;
     
     const route = `${flight.flt_dep || ''} - ${flight.flt_arr || ''}`;
-    return `${formattedDate} ${flight.flt_number || ''} ${route}`;
+    const flightTime = formatTime(flight.flt_time);
+    const blockTime = formatTime(flight.flt_block);
+    return `${formattedDate} ${flight.flt_number || ''} ${route} ${flightTime}/${blockTime}`;
   });
   
-  const scheduleText = scheduleLines.join('\n');
+  const scheduleText = '(date, flight number, route, flight time/block time)\n' + scheduleLines.join('\n');
   
   console.log('Schedule text:', scheduleText);
   

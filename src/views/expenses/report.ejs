@@ -1425,64 +1425,11 @@ async function exportToExcel() {
   }
 }
 
-// Update table header position (similar to flights/expenses.ejs)
+// Update table header position - no longer needed for vertical sticky, but keeping function for potential future use
 function updateTableHeaderPosition() {
-  const header = document.querySelector('.header');
-  const pageHeader = document.querySelector('.page-header');
-  const table = document.querySelector('.expenses-report-table');
-
-  if (!header || !pageHeader || !table) {
-    return;
-  }
-
-  // Calculate total height of fixed headers above table
-  const headerHeight = header.offsetHeight || 0;
-  const pageHeaderHeight = pageHeader.offsetHeight || 0;
-  const totalHeight = headerHeight + pageHeaderHeight;
-
-  // Get all header rows
-  const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
-  const secondRowHeaders = table.querySelectorAll('thead tr:last-child th');
-  
-  if (firstRowHeaders.length === 0) {
-    return;
-  }
-
-  // Get first row height - force layout calculation
-  const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
-  
-  // Only log once to avoid spam
-  if (!window.headerPositionLogged) {
-    console.log('[Header Position]', {
-      headerHeight,
-      pageHeaderHeight,
-      totalHeight,
-      firstRowHeight,
-      firstRowTop: totalHeight,
-      secondRowTop: totalHeight + firstRowHeight
-    });
-    window.headerPositionLogged = true;
-  }
-  
-  // Set top for first row headers (months and category)
-  firstRowHeaders.forEach((th, index) => {
-    th.style.top = totalHeight + 'px';
-    // Only Category (first column) should have left: 0
-    if (index === 0) {
-      th.style.left = '0';
-      th.style.zIndex = '102';
-    } else {
-      th.style.zIndex = '101';
-    }
-  });
-
-  // Set top for second row headers (USD/AED)
-  if (secondRowHeaders.length > 0) {
-    secondRowHeaders.forEach((th) => {
-      th.style.top = (totalHeight + firstRowHeight) + 'px';
-      th.style.zIndex = '101';
-    });
-  }
+  // Headers are no longer sticky vertically, so this function is not needed
+  // But keeping it to avoid breaking any code that calls it
+  return;
 }
 
 // Load data when page loads
@@ -1586,23 +1533,17 @@ document.addEventListener('DOMContentLoaded', function() {
   min-width: 120px !important;
 }
 
-/* Sticky headers - top will be set by JavaScript */
+/* Headers - no vertical sticky, only horizontal sticky for category column */
 .expenses-report-table thead th {
-  position: sticky !important;
   background-color: hsl(210, 11%, 96%) !important;
-  top: 0 !important; /* Default, will be overridden by JavaScript */
 }
 
-/* Category column - sticky both horizontally and vertically */
+/* Category column - sticky only horizontally for horizontal scrolling */
 .expenses-report-table thead th:first-child {
+  position: sticky !important;
   left: 0 !important;
   z-index: 102 !important;
   border-right: 2px solid hsl(210, 11%, 85%) !important;
-}
-
-/* All other headers - sticky only vertically */
-.expenses-report-table thead th:not(:first-child) {
-  z-index: 101 !important;
 }
 
 .expenses-report-table th:last-child {
@@ -1655,8 +1596,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .table-wrapper {
   overflow-x: auto !important;
-  overflow-y: auto !important;
-  max-height: 70vh !important;
+  overflow-y: visible !important;
   width: 100% !important;
 }
 
