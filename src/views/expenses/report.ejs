@@ -1354,8 +1354,11 @@ async function exportToExcel() {
     // Get year filter value
     const yearFilter = document.getElementById('yearFilter')?.value || 'current';
     
+    // Get subcategories checkbox state
+    const showSubcategories = document.getElementById('showSubcategories')?.checked || false;
+    
     // Make request to server endpoint
-    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}`, {
+    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${showSubcategories}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
