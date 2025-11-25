@@ -1356,13 +1356,20 @@ function showExpenseDetails(category, monthKey, currency) {
         const endDate = new Date(expense.exp_period_end);
         
         // Check if this is a single month period
+        // This happens when user enters the same month for start and end (e.g., both "2024-01")
+        // System automatically sets end as 1st day of next month (e.g., "2024-02-01")
         const startMonth = startDate.getMonth();
         const startYear = startDate.getFullYear();
         const endMonth = endDate.getMonth();
         const endYear = endDate.getFullYear();
+        const endDay = endDate.getDate();
         
-        // If period is within the same month, show only one month
-        const isSingleMonth = (startYear === endYear && startMonth === endMonth);
+        // Check if end date is the first day of the next month (indicating single month period)
+        const isSingleMonth = (
+          endDay === 1 && 
+          ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+           (endMonth === 0 && endYear === startYear + 1))
+        );
         
         const startDateFormatted = startDate.toLocaleDateString('en-US', { 
           month: 'short', 
