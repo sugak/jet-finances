@@ -2553,6 +2553,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
   try {
     const yearFilter = (req.query.year as string) || 'current';
     const showSubcategories = req.query.showSubcategories === 'true';
+    const reportForATS = req.query.reportForATS === 'true';
 
     if (!supabase) {
       return res.status(500).json({ error: 'Database not available' });
@@ -2748,6 +2749,116 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       return NON_FLIGHT_CATEGORIES.includes(baseCategory);
     };
 
+    // Check if expense period starts before October 2025
+    const isPeriodBeforeOctober2025 = (expense: any): boolean => {
+      if (!expense.exp_period_start) {
+        return false; // If no period, don't filter it out
+      }
+      const periodStart = new Date(expense.exp_period_start);
+      const october2025 = new Date('2025-10-01');
+      return periodStart < october2025;
+    };
+
+    // Check if expense is a Disbursement fee
+    const isDisbursementFee = (expense: any): boolean => {
+      const baseCategory = getBaseExpenseCategory(expense);
+      return baseCategory === 'Disbursement fee';
+    };
+
+    // Find related Disbursement fee expenses for a given expense
+    const findRelatedDisbursementFees = (
+      expense: any,
+      allExpenses: any[]
+    ): any[] => {
+      const disbursementFees: any[] = [];
+
+      for (const exp of allExpenses) {
+        if (!isDisbursementFee(exp)) {
+          continue;
+        }
+
+        // Match by invoice
+        if (expense.exp_invoice && exp.exp_invoice !== expense.exp_invoice) {
+          continue;
+        }
+        if (!expense.exp_invoice && exp.exp_invoice) {
+          continue;
+        }
+
+        // Match by flight if exists
+        if (expense.exp_flight) {
+          if (exp.exp_flight !== expense.exp_flight) {
+            continue;
+          }
+        } else {
+          if (exp.exp_flight !== null) {
+            continue;
+          }
+        }
+
+        // Match by period if exists
+        if (expense.exp_period_start && expense.exp_period_end) {
+          if (
+            exp.exp_period_start !== expense.exp_period_start ||
+            exp.exp_period_end !== expense.exp_period_end
+          ) {
+            continue;
+          }
+        } else {
+          if (exp.exp_period_start !== null || exp.exp_period_end !== null) {
+            continue;
+          }
+        }
+
+        // Match by place if exists
+        if (expense.exp_place) {
+          if (exp.exp_place !== expense.exp_place) {
+            continue;
+          }
+        } else {
+          if (exp.exp_place !== null) {
+            continue;
+          }
+        }
+
+        // This disbursement fee matches the expense
+        disbursementFees.push(exp);
+      }
+
+      return disbursementFees;
+    };
+
+    // Apply ATS filter if enabled
+    let filteredExpenses = enrichedExpenses;
+    if (reportForATS) {
+      const excludedExpenseIds = new Set<number>();
+
+      // First pass: identify expenses to exclude
+      for (const expense of enrichedExpenses) {
+        if (isPeriodBeforeOctober2025(expense)) {
+          excludedExpenseIds.add(expense.id);
+        }
+      }
+
+      // Second pass: identify related Disbursement fees to exclude
+      for (const expense of enrichedExpenses) {
+        if (excludedExpenseIds.has(expense.id)) {
+          const relatedFees = findRelatedDisbursementFees(
+            expense,
+            enrichedExpenses
+          );
+          for (const fee of relatedFees) {
+            excludedExpenseIds.add(fee.id);
+          }
+        }
+      }
+
+      // Filter out excluded expenses
+      filteredExpenses = enrichedExpenses.filter(
+        (exp: any) => !excludedExpenseIds.has(exp.id)
+      );
+    }
+
     const convertCurrency = (
       amount: number,
       fromCurrency: string,
@@ -2878,7 +2989,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       return [{ monthKey, amount, currency }];
     };
 
-    enrichedExpenses.forEach((expense: any) => {
+    filteredExpenses.forEach((expense: any) => {
       // Check if this is an income item (Credit note or Charter profit)
       const expCategory = expense.exp_category || 'expense';
       const invoiceTypeName =
