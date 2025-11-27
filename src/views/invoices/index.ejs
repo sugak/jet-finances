@@ -50,6 +50,7 @@
               SECTIONS
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
+            <th>DISCREPANCIES</th>
             <th>STATUS</th>
             <th>ACTIONS</th>
           </tr>
@@ -186,7 +187,7 @@ async function loadInvoices() {
         year: 'numeric' 
       });
       monthRow.innerHTML = `
-        <td colspan="7" class="month-separator">
+        <td colspan="8" class="month-separator">
           <div class="month-divider">
             <span class="month-label">${monthName}</span>
           </div>
@@ -230,6 +231,14 @@ async function loadInvoices() {
         <td>
           <div class="sections-info">
             <div class="sections-main">${invoice.inv_tags}</div>
+          </div>
+        </td>
+        <td>
+          <div class="discrepancies-info">
+            ${invoice.discrepancies_count && invoice.discrepancies_count > 0
+              ? `<div class="discrepancies-count">${invoice.discrepancies_count}</div>`
+              : '<div class="discrepancies-empty">—</div>'
+            }
           </div>
         </td>
         <td>
@@ -304,7 +313,7 @@ async function loadInvoices() {
     const tbody = document.getElementById('invoices-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="8" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load invoices. Please try again.
         </td>
@@ -845,6 +854,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .status-btn.completed:hover {
   background-color: hsl(142, 45%, 75%) !important;
+}
+
+/* Discrepancies styles */
+.discrepancies-info {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.discrepancies-count {
+  font-weight: 700 !important;
+  color: hsl(0, 84%, 60%) !important;
+  font-size: 0.875rem !important;
+}
+
+.discrepancies-empty {
+  color: hsl(210, 6%, 60%) !important;
+  font-size: 0.875rem !important;
 }
 
 /* Month separator styles */

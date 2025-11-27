@@ -51,6 +51,27 @@
       </div>
     </div>
   </div>
+
+  <div class="finance-card animation-delay-200">
+    <div class="finance-card-content">
+      <div class="finance-card-icon finance-card-icon--red">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Discrepancies</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value" id="discrepancies-active-value">0</span>
+        </div>
+        <div style="font-size: 0.75rem; color: hsl(210, 6%, 46%); margin-top: 0.25rem;">
+          <span id="discrepancies-closed-value">0</span> closed
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Flights Table -->
@@ -306,6 +327,17 @@ async function loadStats() {
       const activeInvoicesEl = document.getElementById('active-invoices-value');
       if (activeInvoicesEl) {
         activeInvoicesEl.textContent = stats.invoices_pending || 0;
+      }
+
+      // Update Discrepancies
+      const discrepanciesActiveEl = document.getElementById('discrepancies-active-value');
+      if (discrepanciesActiveEl) {
+        discrepanciesActiveEl.textContent = stats.discrepancies_active || 0;
+      }
+
+      const discrepanciesClosedEl = document.getElementById('discrepancies-closed-value');
+      if (discrepanciesClosedEl) {
+        discrepanciesClosedEl.textContent = stats.discrepancies_closed || 0;
       }
     }
   } catch (error) {
