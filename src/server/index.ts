@@ -941,6 +941,10 @@ app.get('/invoices', authenticateSession, (_req, res) => {
   res.render('invoices/index', { title: 'Invoices' });
 });
 
+app.get('/discrepancies', authenticateSession, (_req, res) => {
+  res.render('discrepancies/index', { title: 'Discrepancies' });
+});
+
 app.get('/invoices/:id', authenticateSession, async (req, res) => {
   try {
     const invoiceId = req.params.id;
@@ -1805,6 +1809,36 @@ app.get('/api/invoices', async (_req, res) => {
       if (error) {
         console.log('Supabase error, using mock data:', error.message);
         return res.json(mockData.invoices);
+      }
+
+      // Get discrepancies count for each invoice
+      if (data && data.length > 0) {
+        const invoiceIds = data.map(inv => inv.id);
+
+        // Fetch all discrepancies for these invoices
+        const { data: discrepancies, error: discrepanciesError } =
+          await supabase
+            .from('discrepancies')
+            .select('invoice_id, status')
+            .in('invoice_id', invoiceIds);
+
+        if (!discrepanciesError && discrepancies) {
+          // Count active discrepancies (Created or Raised) for each invoice
+          const discrepanciesCount: { [key: string]: number } = {};
+
+          discrepancies.forEach(d => {
+            if (d.status === 'Created' || d.status === 'Raised') {
+              const invoiceId = d.invoice_id;
+              discrepanciesCount[invoiceId] =
+                (discrepanciesCount[invoiceId] || 0) + 1;
+            }
+          });
+
+          // Add discrepancies count to each invoice
+          data.forEach(invoice => {
+            invoice.discrepancies_count = discrepanciesCount[invoice.id] || 0;
+          });
+        }
       }
 
       return res.json(data || []);
@@ -3989,6 +4023,374 @@ app.put('/api/invoices/:id/status', async (req, res) => {
   }
 });
 
+// ========== DISCREPANCIES API ROUTES ==========
+
+// GET endpoint to fetch all discrepancies
+app.get('/api/discrepancies', async (_req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('discrepancies')
+        .select(
+          `
+          *,
+          invoices!invoice_id (
+            id,
+            inv_number,
+            inv_date
+          )
+        `
+        )
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Supabase error fetching discrepancies:', error.message);
+        return res.status(500).json({ error: 'Failed to fetch discrepancies' });
+      }
+
+      return res.json(data || []);
+    }
+
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error fetching discrepancies:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET endpoint to fetch single discrepancy
+app.get('/api/discrepancies/:id', async (req, res) => {
+  try {
+    const discrepancyId = req.params.id;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('discrepancies')
+        .select(
+          `
+          *,
+          invoices!invoice_id (
+            id,
+            inv_number,
+            inv_date
+          )
+        `
+        )
+        .eq('id', discrepancyId)
+        .single();
+
+      if (error || !data) {
+        return res.status(404).json({ error: 'Discrepancy not found' });
+      }
+
+      return res.json(data);
+    }
+
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.error('Error fetching discrepancy:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST endpoint to add new discrepancy
+app.post('/api/discrepancies', async (req, res) => {
+  try {
+    const {
+      created_at,
+      invoice_id,
+      description,
+      status,
+      solution,
+      claimed_amount,
+      claimed_currency,
+    } = req.body;
+
+    // Validate required fields
+    if (!created_at || !invoice_id || !description) {
+      return res.status(400).json({
+        error:
+          'All required fields must be provided: created_at, invoice_id, description',
+      });
+    }
+
+    // Validate status
+    const validStatuses = [
+      'Created',
+      'Raised',
+      'Resolved',
+      'Declined',
+      'Closed',
+    ];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      });
+    }
+
+    // Validate currency if amount is provided
+    const validCurrencies = ['AED', 'USD', 'EUR'];
+    if (
+      claimed_amount &&
+      claimed_currency &&
+      !validCurrencies.includes(claimed_currency)
+    ) {
+      return res.status(400).json({
+        error: `Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
+      });
+    }
+
+    // Validate amount if provided
+    if (
+      claimed_amount !== undefined &&
+      claimed_amount !== null &&
+      claimed_amount !== ''
+    ) {
+      const amount = parseFloat(claimed_amount);
+      if (isNaN(amount) || amount < 0) {
+        return res.status(400).json({
+          error: 'Claimed amount must be a non-negative number',
+        });
+      }
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase.from('discrepancies').insert([
+        {
+          created_at,
+          invoice_id,
+          description,
+          status: status || 'Created',
+          solution: solution || null,
+          claimed_amount: claimed_amount ? parseFloat(claimed_amount) : null,
+          claimed_currency: claimed_currency || null,
+        },
+      ]).select(`
+          *,
+          invoices!invoice_id (
+            id,
+            inv_number,
+            inv_date
+          )
+        `);
+
+      if (error) {
+        console.log('Supabase error adding discrepancy:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to add discrepancy to database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'CREATE',
+        'discrepancies',
+        data[0].id,
+        null,
+        data[0],
+        'system',
+        req
+      );
+
+      return res.status(201).json({
+        message: 'Discrepancy added successfully',
+        data: data[0],
+      });
+    }
+
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error adding discrepancy:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT endpoint to update existing discrepancy
+app.put('/api/discrepancies/:id', async (req, res) => {
+  try {
+    const discrepancyId = req.params.id;
+    const {
+      created_at,
+      invoice_id,
+      description,
+      status,
+      solution,
+      claimed_amount,
+      claimed_currency,
+    } = req.body;
+
+    // Validate required fields
+    if (!created_at || !invoice_id || !description) {
+      return res.status(400).json({
+        error:
+          'All required fields must be provided: created_at, invoice_id, description',
+      });
+    }
+
+    // Validate status
+    const validStatuses = [
+      'Created',
+      'Raised',
+      'Resolved',
+      'Declined',
+      'Closed',
+    ];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      });
+    }
+
+    // Validate currency if amount is provided
+    const validCurrencies = ['AED', 'USD', 'EUR'];
+    if (
+      claimed_amount &&
+      claimed_currency &&
+      !validCurrencies.includes(claimed_currency)
+    ) {
+      return res.status(400).json({
+        error: `Invalid currency. Must be one of: ${validCurrencies.join(', ')}`,
+      });
+    }
+
+    // Validate amount if provided
+    if (
+      claimed_amount !== undefined &&
+      claimed_amount !== null &&
+      claimed_amount !== ''
+    ) {
+      const amount = parseFloat(claimed_amount);
+      if (isNaN(amount) || amount < 0) {
+        return res.status(400).json({
+          error: 'Claimed amount must be a non-negative number',
+        });
+      }
+    }
+
+    if (supabase) {
+      // Get current discrepancy data for logging
+      const { data: currentDiscrepancy, error: fetchError } = await supabase
+        .from('discrepancies')
+        .select('*')
+        .eq('id', discrepancyId)
+        .single();
+
+      if (fetchError) {
+        console.log('Supabase error fetching discrepancy:', fetchError.message);
+        return res.status(404).json({ error: 'Discrepancy not found' });
+      }
+
+      const { data, error } = await supabase
+        .from('discrepancies')
+        .update({
+          created_at,
+          invoice_id,
+          description,
+          status: status || 'Created',
+          solution: solution || null,
+          claimed_amount: claimed_amount ? parseFloat(claimed_amount) : null,
+          claimed_currency: claimed_currency || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', discrepancyId).select(`
+          *,
+          invoices!invoice_id (
+            id,
+            inv_number,
+            inv_date
+          )
+        `);
+
+      if (error) {
+        console.log('Supabase error updating discrepancy:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to update discrepancy in database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'UPDATE',
+        'discrepancies',
+        discrepancyId,
+        currentDiscrepancy,
+        data[0],
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Discrepancy updated successfully',
+        data: data[0],
+      });
+    }
+
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error updating discrepancy:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE endpoint to remove discrepancy
+app.delete('/api/discrepancies/:id', async (req, res) => {
+  try {
+    const discrepancyId = req.params.id;
+
+    if (!discrepancyId) {
+      return res.status(400).json({
+        error: 'Discrepancy ID is required',
+      });
+    }
+
+    if (supabase) {
+      // First get the discrepancy data for logging
+      const { data: discrepancy, error: fetchError } = await supabase
+        .from('discrepancies')
+        .select('*')
+        .eq('id', discrepancyId)
+        .single();
+
+      if (fetchError) {
+        console.log('Supabase error fetching discrepancy:', fetchError.message);
+        return res.status(404).json({ error: 'Discrepancy not found' });
+      }
+
+      const { error } = await supabase
+        .from('discrepancies')
+        .delete()
+        .eq('id', discrepancyId);
+
+      if (error) {
+        console.log('Supabase error deleting discrepancy:', error.message);
+        return res
+          .status(500)
+          .json({ error: 'Failed to delete discrepancy from database' });
+      }
+
+      // Log the activity
+      await logActivity(
+        'DELETE',
+        'discrepancies',
+        discrepancyId,
+        discrepancy,
+        null,
+        'system',
+        req
+      );
+
+      return res.status(200).json({
+        message: 'Discrepancy deleted successfully',
+      });
+    }
+
+    return res.status(503).json({ error: 'Database not available' });
+  } catch (error) {
+    console.log('Error deleting discrepancy:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE endpoint to remove flight
 app.delete('/api/flights/:id', async (req, res) => {
   try {
@@ -5081,17 +5483,24 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       flights_last_year: 0,
       flights_change_percent: 0,
       invoices_pending: 0,
+      discrepancies_active: 0,
+      discrepancies_closed: 0,
     };
 
     if (supabase) {
       try {
         // Получаем статистику из базы данных
-        const [flightsResult, invoicesResult, expensesResult] =
-          await Promise.all([
-            supabase.from('flights').select('*'),
-            supabase.from('invoices').select('*'),
-            supabase.from('expenses').select('amount'),
-          ]);
+        const [
+          flightsResult,
+          invoicesResult,
+          expensesResult,
+          discrepanciesResult,
+        ] = await Promise.all([
+          supabase.from('flights').select('*'),
+          supabase.from('invoices').select('*'),
+          supabase.from('expenses').select('amount'),
+          supabase.from('discrepancies').select('status'),
+        ]);
 
         if (!flightsResult.error) {
           const flights = flightsResult.data || [];
@@ -5142,6 +5551,18 @@ app.get('/api/dashboard/stats', async (_req, res) => {
               0
             ) || 0;
         }
+
+        if (!discrepanciesResult.error) {
+          const discrepancies = discrepanciesResult.data || [];
+          // Count active discrepancies (Created and Raised)
+          stats.discrepancies_active =
+            discrepancies.filter(
+              d => d.status === 'Created' || d.status === 'Raised'
+            ).length || 0;
+          // Count closed discrepancies
+          stats.discrepancies_closed =
+            discrepancies.filter(d => d.status === 'Closed').length || 0;
+        }
       } catch (dbError) {
         console.log('Database error, using mock stats:', dbError);
         // Используем mock данные
@@ -5153,6 +5574,8 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           flights_last_year: 1,
           flights_change_percent: 0,
           invoices_pending: 1,
+          discrepancies_active: 0,
+          discrepancies_closed: 0,
         };
       }
     } else {
