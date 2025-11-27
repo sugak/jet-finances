@@ -1,6 +1,9 @@
 # Use Node.js 18 LTS
 FROM node:18-alpine
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 # Set working directory
 WORKDIR /app
 
@@ -16,6 +19,9 @@ COPY . .
 
 # Build the application
 RUN npm run build
+
+# Verify build output exists
+RUN ls -la dist/server/index.js || (echo "Build failed: dist/server/index.js not found" && exit 1)
 
 # Remove devDependencies after build
 RUN npm prune --production
