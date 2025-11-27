@@ -5588,6 +5588,8 @@ app.get('/api/dashboard/stats', async (_req, res) => {
         flights_last_year: 1,
         flights_change_percent: 0,
         invoices_pending: 1,
+        discrepancies_active: 0,
+        discrepancies_closed: 0,
       };
     }
 
@@ -5598,7 +5600,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       total_revenue: 5300,
       total_expenses: 20500,
       flights_count: 2,
+      flights_this_year: 0,
+      flights_last_year: 0,
+      flights_change_percent: 0,
       invoices_pending: 1,
+      discrepancies_active: 0,
+      discrepancies_closed: 0,
     });
   }
 });
