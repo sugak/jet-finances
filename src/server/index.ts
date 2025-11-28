@@ -4141,31 +4141,52 @@ app.post('/api/discrepancies', async (req, res) => {
     }
 
     // Validate amount if provided
+    let parsedAmount = null;
     if (
       claimed_amount !== undefined &&
       claimed_amount !== null &&
       claimed_amount !== ''
     ) {
-      const amount = parseFloat(claimed_amount);
-      if (isNaN(amount) || amount < 0) {
+      parsedAmount = parseFloat(claimed_amount);
+      if (isNaN(parsedAmount) || parsedAmount < 0) {
         return res.status(400).json({
           error: 'Claimed amount must be a non-negative number',
         });
       }
     }
 
+    // Normalize currency - set to null if empty string or not provided
+    const normalizedCurrency =
+      claimed_currency && claimed_currency.trim() !== ''
+        ? claimed_currency
+        : null;
+
     if (supabase) {
-      const { data, error } = await supabase.from('discrepancies').insert([
-        {
-          created_at,
-          invoice_id,
-          description,
-          status: status || 'Created',
-          solution: solution || null,
-          claimed_amount: claimed_amount ? parseFloat(claimed_amount) : null,
-          claimed_currency: claimed_currency || null,
-        },
-      ]).select(`
+      const insertData: any = {
+        created_at,
+        invoice_id,
+        description,
+        status: status || 'Created',
+        solution: solution && solution.trim() !== '' ? solution : null,
+      };
+
+      // Only add claimed_amount and claimed_currency if they have values
+      if (parsedAmount !== null) {
+        insertData.claimed_amount = parsedAmount;
+        insertData.claimed_currency = normalizedCurrency;
+      } else {
+        insertData.claimed_amount = null;
+        insertData.claimed_currency = null;
+      }
+
+      console.log(
+        'Inserting discrepancy with data:',
+        JSON.stringify(insertData, null, 2)
+      );
+
+      const { data, error } = await supabase
+        .from('discrepancies')
+        .insert([insertData]).select(`
           *,
           invoices!invoice_id (
             id,
@@ -4175,10 +4196,12 @@ app.post('/api/discrepancies', async (req, res) => {
         `);
 
       if (error) {
-        console.log('Supabase error adding discrepancy:', error.message);
-        return res
-          .status(500)
-          .json({ error: 'Failed to add discrepancy to database' });
+        console.log('Supabase error adding discrepancy:', error);
+        console.log('Error details:', JSON.stringify(error, null, 2));
+        return res.status(500).json({
+          error: 'Failed to add discrepancy to database',
+          details: error.message || 'Unknown error',
+        });
       }
 
       // Log the activity
@@ -4254,18 +4277,25 @@ app.put('/api/discrepancies/:id', async (req, res) => {
     }
 
     // Validate amount if provided
+    let parsedAmount = null;
     if (
       claimed_amount !== undefined &&
       claimed_amount !== null &&
       claimed_amount !== ''
     ) {
-      const amount = parseFloat(claimed_amount);
-      if (isNaN(amount) || amount < 0) {
+      parsedAmount = parseFloat(claimed_amount);
+      if (isNaN(parsedAmount) || parsedAmount < 0) {
         return res.status(400).json({
           error: 'Claimed amount must be a non-negative number',
         });
       }
     }
+
+    // Normalize currency - set to null if empty string or not provided
+    const normalizedCurrency =
+      claimed_currency && claimed_currency.trim() !== ''
+        ? claimed_currency
+        : null;
 
     if (supabase) {
       // Get current discrepancy data for logging
@@ -4280,18 +4310,32 @@ app.put('/api/discrepancies/:id', async (req, res) => {
         return res.status(404).json({ error: 'Discrepancy not found' });
       }
 
+      const updateData: any = {
+        created_at,
+        invoice_id,
+        description,
+        status: status || 'Created',
+        solution: solution && solution.trim() !== '' ? solution : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only add claimed_amount and claimed_currency if they have values
+      if (parsedAmount !== null) {
+        updateData.claimed_amount = parsedAmount;
+        updateData.claimed_currency = normalizedCurrency;
+      } else {
+        updateData.claimed_amount = null;
+        updateData.claimed_currency = null;
+      }
+
+      console.log(
+        'Updating discrepancy with data:',
+        JSON.stringify(updateData, null, 2)
+      );
+
       const { data, error } = await supabase
         .from('discrepancies')
-        .update({
-          created_at,
-          invoice_id,
-          description,
-          status: status || 'Created',
-          solution: solution || null,
-          claimed_amount: claimed_amount ? parseFloat(claimed_amount) : null,
-          claimed_currency: claimed_currency || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', discrepancyId).select(`
           *,
           invoices!invoice_id (
@@ -4302,10 +4346,12 @@ app.put('/api/discrepancies/:id', async (req, res) => {
         `);
 
       if (error) {
-        console.log('Supabase error updating discrepancy:', error.message);
-        return res
-          .status(500)
-          .json({ error: 'Failed to update discrepancy in database' });
+        console.log('Supabase error updating discrepancy:', error);
+        console.log('Error details:', JSON.stringify(error, null, 2));
+        return res.status(500).json({
+          error: 'Failed to update discrepancy in database',
+          details: error.message || 'Unknown error',
+        });
       }
 
       // Log the activity
