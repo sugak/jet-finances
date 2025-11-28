@@ -518,6 +518,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         delete discrepancyData.discrepancyId;
         
+        // Normalize empty strings to null for optional fields
+        if (!discrepancyData.claimed_amount || discrepancyData.claimed_amount.trim() === '') {
+          discrepancyData.claimed_amount = null;
+        }
+        if (!discrepancyData.claimed_currency || discrepancyData.claimed_currency.trim() === '') {
+          discrepancyData.claimed_currency = null;
+        }
+        if (!discrepancyData.solution || discrepancyData.solution.trim() === '') {
+          discrepancyData.solution = null;
+        }
+        
         const url = isEdit ? `/api/discrepancies/${discrepancyId}` : '/api/discrepancies';
         const method = isEdit ? 'PUT' : 'POST';
         
