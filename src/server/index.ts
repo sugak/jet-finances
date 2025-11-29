@@ -1228,9 +1228,10 @@ app.get('/api/test-logs-table', async (req, res) => {
 });
 
 // Logs route
-app.get('/logs', async (req, res) => {
+app.get('/logs', authenticateSession, async (req, res) => {
   try {
     if (!supabase) {
+      console.error('❌ Logs route: Supabase not available');
       return res.status(500).render('logs/index', {
         title: 'Logs',
         logs: [],
@@ -1240,6 +1241,7 @@ app.get('/logs', async (req, res) => {
       });
     }
 
+    console.log('📋 Loading logs page...');
     const { data: monthsRaw, error: monthsError } = await supabase
       .from('activity_logs')
       .select('created_at')
@@ -1247,7 +1249,10 @@ app.get('/logs', async (req, res) => {
       .limit(5000);
 
     if (monthsError) {
-      console.error('Error fetching log periods:', monthsError);
+      console.error('❌ Error fetching log periods:', monthsError);
+      console.error('Error code:', monthsError.code);
+      console.error('Error message:', monthsError.message);
+      console.error('Error details:', JSON.stringify(monthsError, null, 2));
     }
 
     const months: { key: string; label: string }[] = [];
@@ -1373,11 +1378,14 @@ app.get('/logs', async (req, res) => {
         const { data: logsData, error: logsError } = await query;
 
         if (logsError) {
-          console.error('Error loading logs:', logsError);
-          console.error('Error details:', logsError);
+          console.error('❌ Error loading logs:', logsError);
+          console.error('Error code:', logsError.code);
+          console.error('Error message:', logsError.message);
+          console.error('Error details:', JSON.stringify(logsError, null, 2));
+          // Не прерываем выполнение, просто оставляем logs пустым
         } else {
           console.log(
-            `Loaded ${logsData?.length || 0} logs for period ${selectedPeriod}`
+            `✅ Loaded ${logsData?.length || 0} logs for period ${selectedPeriod}`
           );
         }
 
@@ -1385,22 +1393,47 @@ app.get('/logs', async (req, res) => {
       }
     }
 
-    res.render('logs/index', {
-      title: 'Logs',
-      logs,
-      error: null,
-      months,
-      selectedPeriod,
-    });
-  } catch (error) {
-    console.error('Error loading logs page:', error);
-    res.status(500).render('logs/index', {
-      title: 'Logs',
-      logs: [],
-      error: 'Error loading logs',
-      months: [],
-      selectedPeriod: null,
-    });
+    console.log('📋 Rendering logs page with', logs.length, 'logs');
+    try {
+      res.render('logs/index', {
+        title: 'Logs',
+        logs,
+        error: null,
+        months,
+        selectedPeriod,
+      });
+    } catch (renderError) {
+      console.error('❌ Error rendering logs template:', renderError);
+      throw renderError; // Пробрасываем ошибку в catch блок
+    }
+  } catch (error: any) {
+    console.error('❌ Error loading logs page:', error);
+    console.error('Error name:', error?.name);
+    console.error('Error message:', error?.message);
+    console.error('Error stack:', error?.stack);
+
+    // Пытаемся отрендерить страницу с ошибкой
+    try {
+      res.status(500).render('logs/index', {
+        title: 'Logs',
+        logs: [],
+        error: error?.message || 'Error loading logs',
+        months: [],
+        selectedPeriod: null,
+      });
+    } catch (renderError) {
+      // Если даже рендеринг ошибки не работает, возвращаем простой ответ
+      console.error('❌ Critical: Cannot render error page:', renderError);
+      res.status(500).send(`
+        <html>
+          <head><title>Server Error</title></head>
+          <body>
+            <h1>Server Error</h1>
+            <p>Error loading logs: ${error?.message || 'Unknown error'}</p>
+          </body>
+        </html>
+      `);
+    }
   }
 });
 
