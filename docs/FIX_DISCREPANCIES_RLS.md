@@ -7,11 +7,17 @@ Failed to add discrepancy: Failed to add discrepancy to database: new row violat
 ```
 
 ## Причина
-Row Level Security (RLS) был включен для таблицы `discrepancies`, но таблицы `flights` и `invoices` работают без RLS. Для консистентности и простоты, RLS должен быть отключен для `discrepancies`, как и для других таблиц.
+Row Level Security (RLS) политики для таблицы `discrepancies` не настроены правильно. Таблица `flights` имеет следующие RLS политики:
+- Authenticated users can read flights (SELECT)
+- Superadmin can insert flights (INSERT)
+- Superadmin can update flights (UPDATE)
+- Superadmin can delete flights (DELETE)
+
+Таблица `discrepancies` должна иметь аналогичные политики.
 
 ## Решение
 
-### Отключить RLS для таблицы discrepancies
+### Создать RLS политики для таблицы discrepancies
 
 Выполните SQL скрипт `scripts/fix_discrepancies_rls.sql` в Supabase SQL Editor:
 
@@ -19,28 +25,29 @@ Row Level Security (RLS) был включен для таблицы `discrepanc
 2. Перейдите в SQL Editor
 3. Скопируйте и выполните содержимое `scripts/fix_discrepancies_rls.sql`
 
-Этот скрипт:
-- Удалит все существующие RLS политики
-- Отключит RLS для таблицы `discrepancies`
-- Сделает таблицу `discrepancies` такой же, как `flights` и `invoices` (без RLS)
+Этот скрипт создаст следующие политики:
+- **Authenticated users can read discrepancies** - все аутентифицированные пользователи могут читать
+- **Superadmin can insert discrepancies** - только superadmin может добавлять
+- **Superadmin can update discrepancies** - только superadmin может обновлять
+- **Superadmin can delete discrepancies** - только superadmin может удалять
+- **Service role can manage discrepancies** - сервер с SERVICE_ROLE_KEY может выполнять все операции
 
-## Альтернативное решение (если нужно оставить RLS)
+## Важно
 
-Если вы хотите оставить RLS включенным, убедитесь, что:
-1. На Railway установлена переменная `SUPABASE_SERVICE_ROLE_KEY` (не `SUPABASE_ANON_KEY`)
-2. Service Role Key автоматически обходит RLS
+1. **На Railway должна быть установлена переменная `SUPABASE_SERVICE_ROLE_KEY`** (не `SUPABASE_ANON_KEY`)
+2. Service Role Key использует политику "Service role can manage discrepancies" для обхода проверок
+3. Политики для superadmin проверяют роль через таблицу `users`
 
 ## Проверка
 
 После применения исправлений:
 1. Попробуйте добавить новое возражение на Railway
 2. Ошибка RLS больше не должна возникать
-3. Таблица `discrepancies` будет работать так же, как `flights` и `invoices`
+3. Таблица `discrepancies` будет работать так же, как `flights` (с RLS, но с правильными политиками)
 
-## Важные замечания
+## Структура политик (как в flights)
 
-- Таблицы `flights` и `invoices` работают без RLS
-- Для консистентности, `discrepancies` также должна работать без RLS
-- Сервер использует `SUPABASE_SERVICE_ROLE_KEY`, который имеет полный доступ к базе данных
-- RLS полезен для клиентских приложений, но не нужен для серверных операций с service role key
+- **SELECT**: Все authenticated пользователи
+- **INSERT/UPDATE/DELETE**: Только superadmin (проверка через таблицу users)
+- **ALL для service_role**: Полный доступ для сервера
 
