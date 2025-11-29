@@ -4185,6 +4185,10 @@ app.post('/api/discrepancies', async (req, res) => {
         'Inserting discrepancy with data:',
         JSON.stringify(insertData, null, 2)
       );
+      console.log(
+        'Using Supabase key type:',
+        process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Service Role' : 'Anon'
+      );
 
       const { data, error } = await supabase
         .from('discrepancies')
@@ -4213,6 +4217,10 @@ app.post('/api/discrepancies', async (req, res) => {
         } else if (error.code === '23514') {
           errorMessage =
             'Validation error: Invalid data format or constraint violation';
+        } else if (error.message?.includes('row-level security')) {
+          errorMessage =
+            'RLS Policy Error: Make sure SUPABASE_SERVICE_ROLE_KEY is set on Railway. ' +
+            'Run the fix_discrepancies_rls.sql script to update RLS policies.';
         }
 
         return res.status(500).json({
