@@ -378,6 +378,31 @@ async function logActivity(
       case 'invoice_types':
         recordDetails = `Invoice Type: ${data.name || 'N/A'}`;
         break;
+      case 'discrepancies': {
+        // Try to get invoice number from related data or use invoice_id
+        let invoiceInfo = 'N/A';
+        if (
+          data.invoices &&
+          typeof data.invoices === 'object' &&
+          !Array.isArray(data.invoices)
+        ) {
+          invoiceInfo = data.invoices.inv_number || 'N/A';
+        } else if (data.invoice_id) {
+          invoiceInfo = `Invoice ID: ${data.invoice_id}`;
+        }
+        const description = data.description
+          ? data.description.length > 50
+            ? data.description.substring(0, 50) + '...'
+            : data.description
+          : 'N/A';
+        const status = data.status || 'N/A';
+        const amount =
+          data.claimed_amount && data.claimed_currency
+            ? `${data.claimed_currency} ${data.claimed_amount}`
+            : '';
+        recordDetails = `Discrepancy: ${description} (Status: ${status}${amount ? `, ${amount}` : ''}, Invoice: ${invoiceInfo})`;
+        break;
+      }
       default:
         recordDetails = `Record ID: ${recordId || 'N/A'}`;
     }
@@ -4496,16 +4521,23 @@ app.delete('/api/discrepancies/:id', async (req, res) => {
           .json({ error: 'Failed to delete discrepancy from database' });
       }
 
-      // Log the activity
-      await logActivity(
-        'DELETE',
-        'discrepancies',
-        discrepancyId,
-        discrepancy,
-        null,
-        'system',
-        req
-      );
+      // Log the activity (don't let logging errors break the flow)
+      try {
+        await logActivity(
+          'DELETE',
+          'discrepancies',
+          discrepancyId,
+          discrepancy,
+          null,
+          'system',
+          req
+        );
+      } catch (logError) {
+        console.warn(
+          '⚠️ Failed to log activity (discrepancy was still deleted):',
+          logError
+        );
+      }
 
       return res.status(200).json({
         message: 'Discrepancy deleted successfully',
