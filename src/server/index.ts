@@ -206,10 +206,16 @@ async function authenticateSession(
     }
 
     if (!supabase) {
-      return res.status(500).render('error', {
-        title: 'Error',
-        error: 'Database not available',
-      });
+      console.error('❌ authenticateSession: Supabase not available');
+      // Используем безопасный рендеринг или простой ответ
+      try {
+        return res.status(500).render('dashboard/index', {
+          title: 'Error',
+          error: 'Database not available',
+        });
+      } catch {
+        return res.status(500).send('Database not available');
+      }
     }
 
     // Verify session token
@@ -1232,13 +1238,18 @@ app.get('/logs', authenticateSession, async (req, res) => {
   try {
     if (!supabase) {
       console.error('❌ Logs route: Supabase not available');
-      return res.status(500).render('logs/index', {
-        title: 'Logs',
-        logs: [],
-        error: 'Database not available',
-        months: [],
-        selectedPeriod: null,
-      });
+      try {
+        return res.status(500).render('logs/index', {
+          title: 'Logs',
+          logs: [],
+          error: 'Database not available',
+          months: [],
+          selectedPeriod: null,
+        });
+      } catch (renderError) {
+        console.error('❌ Cannot render logs page:', renderError);
+        return res.status(500).send('Database not available');
+      }
     }
 
     console.log('📋 Loading logs page...');
@@ -1394,6 +1405,8 @@ app.get('/logs', authenticateSession, async (req, res) => {
     }
 
     console.log('📋 Rendering logs page with', logs.length, 'logs');
+
+    // Безопасный рендеринг с обработкой ошибок
     try {
       res.render('logs/index', {
         title: 'Logs',
@@ -1402,9 +1415,41 @@ app.get('/logs', authenticateSession, async (req, res) => {
         months,
         selectedPeriod,
       });
-    } catch (renderError) {
+    } catch (renderError: any) {
       console.error('❌ Error rendering logs template:', renderError);
-      throw renderError; // Пробрасываем ошибку в catch блок
+      console.error('Render error name:', renderError?.name);
+      console.error('Render error message:', renderError?.message);
+      console.error('Render error stack:', renderError?.stack);
+
+      // Пытаемся отрендерить страницу с ошибкой
+      try {
+        return res.status(500).render('logs/index', {
+          title: 'Logs',
+          logs: [],
+          error:
+            'Error rendering page: ' +
+            (renderError?.message || 'Unknown error'),
+          months: [],
+          selectedPeriod: null,
+        });
+      } catch (fallbackError) {
+        // Если даже рендеринг ошибки не работает, возвращаем простой HTML
+        console.error('❌ Critical: Cannot render error page:', fallbackError);
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Server Error</title>
+              <meta charset="utf-8">
+            </head>
+            <body>
+              <h1>Server Error</h1>
+              <p>Error loading logs: ${renderError?.message || 'Unknown error'}</p>
+              <p>Please check server logs for more details.</p>
+            </body>
+          </html>
+        `);
+      }
     }
   } catch (error: any) {
     console.error('❌ Error loading logs page:', error);
@@ -1414,7 +1459,7 @@ app.get('/logs', authenticateSession, async (req, res) => {
 
     // Пытаемся отрендерить страницу с ошибкой
     try {
-      res.status(500).render('logs/index', {
+      return res.status(500).render('logs/index', {
         title: 'Logs',
         logs: [],
         error: error?.message || 'Error loading logs',
@@ -1422,14 +1467,19 @@ app.get('/logs', authenticateSession, async (req, res) => {
         selectedPeriod: null,
       });
     } catch (renderError) {
-      // Если даже рендеринг ошибки не работает, возвращаем простой ответ
+      // Если даже рендеринг ошибки не работает, возвращаем простой HTML
       console.error('❌ Critical: Cannot render error page:', renderError);
-      res.status(500).send(`
+      return res.status(500).send(`
+        <!DOCTYPE html>
         <html>
-          <head><title>Server Error</title></head>
+          <head>
+            <title>Server Error</title>
+            <meta charset="utf-8">
+          </head>
           <body>
             <h1>Server Error</h1>
             <p>Error loading logs: ${error?.message || 'Unknown error'}</p>
+            <p>Please check server logs for more details.</p>
           </body>
         </html>
       `);
@@ -6126,7 +6176,17 @@ app.use((_req, res) => {
 // Ошибки
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  console.error('Error handler:', err);
+  console.error('❌ Global error handler triggered:', err);
+  console.error('Request path:', req.path);
+  console.error('Error name:', err?.name);
+  console.error('Error message:', err?.message);
+  console.error('Error stack:', err?.stack);
+
+  // Проверяем, был ли уже отправлен ответ
+  if (res.headersSent) {
+    console.error('⚠️ Response already sent, cannot send error response');
+    return;
+  }
 
   // Для API эндпоинтов возвращаем JSON
   if (req.path.startsWith('/api/')) {
@@ -6136,8 +6196,55 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     });
   }
 
+  // Для /logs используем специальную обработку
+  if (req.path === '/logs') {
+    console.error('❌ Error in /logs route, attempting safe error rendering');
+    try {
+      return res.status(500).render('logs/index', {
+        title: 'Logs',
+        logs: [],
+        error: err instanceof Error ? err.message : 'Error loading logs',
+        months: [],
+        selectedPeriod: null,
+      });
+    } catch (renderError) {
+      console.error('❌ Cannot render logs error page:', renderError);
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Server Error</title>
+            <meta charset="utf-8">
+          </head>
+          <body>
+            <h1>Server Error</h1>
+            <p>Error in logs route: ${err instanceof Error ? err.message : 'Unknown error'}</p>
+            <p>Please check server logs for more details.</p>
+          </body>
+        </html>
+      `);
+    }
+  }
+
   // Для остальных запросов возвращаем HTML
-  res.status(500).render('dashboard/index', { title: 'Server Error' });
+  try {
+    res.status(500).render('dashboard/index', { title: 'Server Error' });
+  } catch (renderError) {
+    console.error('❌ Cannot render error page:', renderError);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Server Error</title>
+          <meta charset="utf-8">
+        </head>
+        <body>
+          <h1>Server Error</h1>
+          <p>${err instanceof Error ? err.message : 'Unknown error'}</p>
+        </body>
+      </html>
+    `);
+  }
 });
 
 // ---------- Start ----------
