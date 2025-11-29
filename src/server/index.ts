@@ -787,7 +787,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(500).json({ error: 'Database not available' });
     }
 
-    const { email, password } = req.body;
+    const { email, password, remember } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
@@ -807,8 +807,10 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (data.user && data.session) {
       // Set session cookies with proper production settings
+      // If "remember me" is checked, set cookie to 30 days, otherwise 1 day
+      const maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
       const cookieOptions = {
-        maxAge: 24 * 60 * 60 * 1000, // 1 day
+        maxAge: maxAge,
         httpOnly: false, // Allow JavaScript to read the token
         secure: process.env.NODE_ENV === 'production',
         sameSite: (process.env.NODE_ENV === 'production'
@@ -4196,24 +4198,54 @@ app.post('/api/discrepancies', async (req, res) => {
         `);
 
       if (error) {
-        console.log('Supabase error adding discrepancy:', error);
-        console.log('Error details:', JSON.stringify(error, null, 2));
+        console.error('❌ Supabase error adding discrepancy:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        console.error('Error code:', error.code);
+        console.error('Error hint:', error.hint);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to add discrepancy to database';
+        if (error.code === '23503') {
+          errorMessage =
+            'Invalid invoice_id: The specified invoice does not exist';
+        } else if (error.code === '23505') {
+          errorMessage = 'Duplicate entry: This discrepancy already exists';
+        } else if (error.code === '23514') {
+          errorMessage =
+            'Validation error: Invalid data format or constraint violation';
+        }
+
         return res.status(500).json({
-          error: 'Failed to add discrepancy to database',
+          error: errorMessage,
           details: error.message || 'Unknown error',
+          code: error.code || null,
         });
       }
 
-      // Log the activity
-      await logActivity(
-        'CREATE',
-        'discrepancies',
-        data[0].id,
-        null,
-        data[0],
-        'system',
-        req
-      );
+      if (!data || !data[0]) {
+        console.error('❌ No data returned after insert');
+        return res.status(500).json({
+          error: 'Failed to add discrepancy: No data returned',
+        });
+      }
+
+      // Log the activity (don't let logging errors break the flow)
+      try {
+        await logActivity(
+          'CREATE',
+          'discrepancies',
+          data[0].id,
+          null,
+          data[0],
+          'system',
+          req
+        );
+      } catch (logError) {
+        console.warn(
+          '⚠️ Failed to log activity (discrepancy was still created):',
+          logError
+        );
+      }
 
       return res.status(201).json({
         message: 'Discrepancy added successfully',
@@ -4222,9 +4254,15 @@ app.post('/api/discrepancies', async (req, res) => {
     }
 
     return res.status(503).json({ error: 'Database not available' });
-  } catch (error) {
-    console.log('Error adding discrepancy:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    console.error('❌ Error adding discrepancy:', error);
+    console.error('Error stack:', error?.stack);
+    console.error('Error name:', error?.name);
+    return res.status(500).json({
+      error: 'Internal server error',
+      details:
+        process.env.NODE_ENV === 'development' ? error?.message : undefined,
+    });
   }
 });
 
@@ -4346,24 +4384,54 @@ app.put('/api/discrepancies/:id', async (req, res) => {
         `);
 
       if (error) {
-        console.log('Supabase error updating discrepancy:', error);
-        console.log('Error details:', JSON.stringify(error, null, 2));
+        console.error('❌ Supabase error updating discrepancy:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        console.error('Error code:', error.code);
+        console.error('Error hint:', error.hint);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to update discrepancy in database';
+        if (error.code === '23503') {
+          errorMessage =
+            'Invalid invoice_id: The specified invoice does not exist';
+        } else if (error.code === '23505') {
+          errorMessage = 'Duplicate entry: This discrepancy already exists';
+        } else if (error.code === '23514') {
+          errorMessage =
+            'Validation error: Invalid data format or constraint violation';
+        }
+
         return res.status(500).json({
-          error: 'Failed to update discrepancy in database',
+          error: errorMessage,
           details: error.message || 'Unknown error',
+          code: error.code || null,
         });
       }
 
-      // Log the activity
-      await logActivity(
-        'UPDATE',
-        'discrepancies',
-        discrepancyId,
-        currentDiscrepancy,
-        data[0],
-        'system',
-        req
-      );
+      if (!data || !data[0]) {
+        console.error('❌ No data returned after update');
+        return res.status(500).json({
+          error: 'Failed to update discrepancy: No data returned',
+        });
+      }
+
+      // Log the activity (don't let logging errors break the flow)
+      try {
+        await logActivity(
+          'UPDATE',
+          'discrepancies',
+          discrepancyId,
+          currentDiscrepancy,
+          data[0],
+          'system',
+          req
+        );
+      } catch (logError) {
+        console.warn(
+          '⚠️ Failed to log activity (discrepancy was still updated):',
+          logError
+        );
+      }
 
       return res.status(200).json({
         message: 'Discrepancy updated successfully',
@@ -4372,9 +4440,15 @@ app.put('/api/discrepancies/:id', async (req, res) => {
     }
 
     return res.status(503).json({ error: 'Database not available' });
-  } catch (error) {
-    console.log('Error updating discrepancy:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    console.error('❌ Error updating discrepancy:', error);
+    console.error('Error stack:', error?.stack);
+    console.error('Error name:', error?.name);
+    return res.status(500).json({
+      error: 'Internal server error',
+      details:
+        process.env.NODE_ENV === 'development' ? error?.message : undefined,
+    });
   }
 });
 
