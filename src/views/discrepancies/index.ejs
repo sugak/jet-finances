@@ -546,14 +546,31 @@ document.addEventListener('DOMContentLoaded', function() {
           const action = isEdit ? 'updated' : 'added';
           console.log(`Discrepancy ${action} successfully`);
         } else {
-          const errorData = await response.json();
-          const action = isEdit ? 'update' : 'add';
-          throw new Error(errorData.error || `Failed to ${action} discrepancy`);
+          // Try to parse error response
+          let errorMessage = `Failed to ${isEdit ? 'update' : 'add'} discrepancy`;
+          try {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorData.details || errorMessage;
+              if (errorData.details && errorData.details !== errorData.error) {
+                errorMessage += `: ${errorData.details}`;
+              }
+            } else {
+              const text = await response.text();
+              errorMessage = text || errorMessage;
+            }
+          } catch (parseError) {
+            console.error('Error parsing error response:', parseError);
+            errorMessage = `Server error (${response.status}): ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
         }
       } catch (error) {
         console.error('Error processing discrepancy:', error);
         const action = document.getElementById('discrepancyId').value ? 'update' : 'add';
-        alert(`Failed to ${action} discrepancy: ` + error.message);
+        const errorMsg = error.message || `Failed to ${action} discrepancy`;
+        alert(`Failed to ${action} discrepancy: ${errorMsg}`);
       } finally {
         btnText.style.display = 'inline-block';
         btnSpinner.style.display = 'none';
