@@ -1,0 +1,514 @@
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+  </div>
+</div>
+
+<!-- Logs Content -->
+<div class="logs-container">
+  <div class="logs-section">
+    <div class="section-header">
+      <h2>Системная активность</h2>
+      <p class="section-description">Журнал изменений и операций</p>
+    </div>
+    <div class="filters-bar">
+      <form class="filters-form" method="get">
+        <label for="periodSelect">Период</label>
+        <select
+          id="periodSelect"
+          name="period"
+          onchange="this.form.submit()"
+          <%= months && months.length ? '' : 'disabled' %>
+        >
+          <% if (months && months.length) { %>
+            <% months.forEach(month => { %>
+              <option value="<%= month.key %>" <%= selectedPeriod === month.key ? 'selected' : '' %>>
+                <%= month.label %>
+              </option>
+            <% }) %>
+          <% } else { %>
+            <option>Нет доступных периодов</option>
+          <% } %>
+        </select>
+      </form>
+    </div>
+    
+    <% if (error) { %>
+      <div class="error-state">
+        <div class="error-icon">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <h3>Error Loading Logs</h3>
+        <p><%= error %></p>
+      </div>
+    <% } else if (!logs || logs.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon">
+          <i class="bi bi-journal-text"></i>
+        </div>
+        <h3>Нет записей за выбранный период</h3>
+        <p>Выберите другой месяц, чтобы посмотреть журнал.</p>
+        <div class="info-box">
+          <h4>Что фиксируется:</h4>
+          <ul>
+            <li>✅ Операции создания записей</li>
+            <li>✅ Операции обновления данных</li>
+            <li>✅ Операции удаления</li>
+            <li>✅ Пользователи и отметки времени</li>
+            <li>✅ IP-адреса и user agent</li>
+            <li>✅ Старые и новые значения</li>
+            <li>✅ Детали записей (рейсы, счета, расходы и т. д.)</li>
+          </ul>
+          <div class="setup-instructions">
+            <h4>📋 Настройка таблицы логов:</h4>
+            <p><strong>Шаг 1:</strong> Откройте Supabase → SQL Editor</p>
+            <p><strong>Шаг 2:</strong> Выполните команду:</p>
+            <pre><code>ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS record_details TEXT;</code></pre>
+            <p><strong>Шаг 3:</strong> Добавьте индекс для ускорения:</p>
+            <pre><code>CREATE INDEX IF NOT EXISTS idx_activity_logs_record_details ON activity_logs(record_details);</code></pre>
+            <p><strong>Шаг 4:</strong> Обновите страницу, чтобы увидеть данные.</p>
+          </div>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="logs-table-container">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Table</th>
+              <th>Record Details</th>
+              <th>Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% logs.forEach(log => { %>
+              <tr>
+                <td class="timestamp">
+                  <div class="timestamp-main">
+                    <%= new Date(log.created_at).toLocaleDateString() %>
+                  </div>
+                  <div class="timestamp-details">
+                    <%= new Date(log.created_at).toLocaleTimeString() %>
+                  </div>
+                </td>
+                <td class="user">
+                  <div class="user-badge">
+                    <%= log.user_id || 'system' %>
+                  </div>
+                </td>
+                <td class="action">
+                  <span class="action-badge action-<%= log.action.toLowerCase() %>">
+                    <%= log.action %>
+                  </span>
+                </td>
+                <td class="table-name">
+                  <code><%= log.table_name %></code>
+                </td>
+                <td class="record-details">
+                  <% if (log.record_details) { %>
+                    <span class="record-info"><%= log.record_details %></span>
+                  <% } else if (log.record_id) { %>
+                    <code><%= log.record_id.substring(0, 8) %>...</code>
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+                <td class="details">
+                  <% if (log.new_data || log.old_data) { %>
+                    <button class="btn-details" onclick="toggleDetails('<%= log.id %>')">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                    <div class="details-content" id="details-<%= log.id %>" style="display: none;">
+                      <% if (log.old_data) { %>
+                        <div class="data-section">
+                          <strong>Old Data:</strong>
+                          <pre><%= JSON.stringify(log.old_data, null, 2) %></pre>
+                        </div>
+                      <% } %>
+                      <% if (log.new_data) { %>
+                        <div class="data-section">
+                          <strong>New Data:</strong>
+                          <pre><%= JSON.stringify(log.new_data, null, 2) %></pre>
+                        </div>
+                      <% } %>
+                    </div>
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<script>
+function toggleDetails(logId) {
+  const details = document.getElementById('details-' + logId);
+  if (details.style.display === 'none') {
+    details.style.display = 'block';
+  } else {
+    details.style.display = 'none';
+  }
+}
+</script>
+
+<style>
+/* Logs page styles */
+.logs-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.logs-section {
+  margin-bottom: 2rem;
+}
+
+.section-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+}
+
+.filters-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.filters-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.filters-form label {
+  font-size: 0.875rem;
+  color: hsl(210, 6%, 46%);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filters-form select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid hsl(210, 11%, 85%);
+  background-color: white;
+  color: hsl(210, 6%, 21%);
+  font-size: 0.875rem;
+  min-width: 200px;
+}
+
+.filters-form select:disabled {
+  color: hsl(210, 6%, 60%);
+  background-color: hsl(210, 11%, 96%);
+}
+
+.section-header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+}
+
+.section-description {
+  margin: 0;
+  color: hsl(210, 6%, 46%);
+  font-size: 0.875rem;
+}
+
+/* Table styles */
+.logs-table-container {
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  border: 1px solid hsl(210, 11%, 90%);
+  overflow: hidden;
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.logs-table thead {
+  background-color: hsl(210, 11%, 96%);
+}
+
+.logs-table th {
+  padding: 1rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.logs-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+  vertical-align: top;
+}
+
+.logs-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%);
+}
+
+/* Cell styles */
+.timestamp {
+  min-width: 120px;
+}
+
+.timestamp-main {
+  font-weight: 500;
+  color: hsl(210, 6%, 21%);
+  font-size: 0.875rem;
+}
+
+.timestamp-details {
+  font-size: 0.75rem;
+  color: hsl(210, 6%, 46%);
+}
+
+.user-badge {
+  background-color: hsl(142, 76%, 96%);
+  color: hsl(142, 76%, 36%);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.action-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-create {
+  background-color: hsl(142, 76%, 96%);
+  color: hsl(142, 76%, 36%);
+}
+
+.action-update {
+  background-color: hsl(45, 93%, 96%);
+  color: hsl(45, 93%, 36%);
+}
+
+.action-delete {
+  background-color: hsl(0, 84%, 96%);
+  color: hsl(0, 84%, 60%);
+}
+
+.table-name code {
+  background-color: hsl(210, 11%, 96%);
+  color: hsl(210, 6%, 21%);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.record-details {
+  min-width: 200px;
+}
+
+.record-info {
+  font-size: 0.875rem;
+  color: hsl(210, 6%, 21%);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.record-details code {
+  background-color: hsl(210, 11%, 96%);
+  color: hsl(210, 6%, 21%);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.btn-details {
+  background: none;
+  border: none;
+  color: hsl(210, 6%, 46%);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.btn-details:hover {
+  background-color: hsl(210, 11%, 96%);
+  color: hsl(210, 6%, 21%);
+}
+
+.details-content {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: hsl(210, 11%, 98%);
+  border-radius: 0.375rem;
+  border: 1px solid hsl(210, 11%, 90%);
+}
+
+.data-section {
+  margin-bottom: 0.75rem;
+}
+
+.data-section:last-child {
+  margin-bottom: 0;
+}
+
+.data-section strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  color: hsl(210, 6%, 21%);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-section pre {
+  margin: 0;
+  padding: 0.5rem;
+  background-color: white;
+  border: 1px solid hsl(210, 11%, 90%);
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: hsl(210, 6%, 21%);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Empty and error states */
+.empty-state,
+.error-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: hsl(210, 6%, 46%);
+}
+
+.empty-icon,
+.error-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  color: hsl(210, 6%, 60%);
+}
+
+.empty-state h3,
+.error-state h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+}
+
+.empty-state p,
+.error-state p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.text-muted {
+  color: hsl(210, 6%, 60%);
+}
+
+.info-box {
+  background-color: hsl(142, 76%, 96%);
+  border: 1px solid hsl(142, 76%, 90%);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.info-box h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: hsl(142, 76%, 36%);
+}
+
+.info-box ul {
+  margin: 0 0 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.info-box li {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: hsl(210, 6%, 21%);
+}
+
+.info-box p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(210, 6%, 21%);
+}
+
+.setup-instructions {
+  background-color: hsl(45, 93%, 96%);
+  border: 1px solid hsl(45, 93%, 90%);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.setup-instructions h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(45, 93%, 36%);
+}
+
+.setup-instructions p {
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+  color: hsl(210, 6%, 21%);
+}
+
+.setup-instructions pre {
+  background-color: white;
+  border: 1px solid hsl(45, 93%, 90%);
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  font-size: 0.75rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: hsl(210, 6%, 21%);
+  overflow-x: auto;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .logs-table-container {
+    overflow-x: auto;
+  }
+  
+  .logs-table {
+    min-width: 800px;
+  }
+  
+  .logs-table th,
+  .logs-table td {
+    padding: 0.5rem;
+  }
+}
+</style>
