@@ -1589,11 +1589,91 @@ const mockData = {
 app.get('/api/flights', authenticateToken, async (_req, res) => {
   try {
     if (supabase) {
-      const { data, error } = await supabase.from('flights').select('*');
+      // Try to get flights with expenses
+      let { data, error } = await supabase.from('flights').select(`
+        *,
+        expenses!exp_flight (
+          exp_type
+        )
+      `);
 
+      // If query with expenses fails, try without expenses
       if (error) {
-        console.log('Supabase error, using mock data:', error.message);
-        return res.json(sortFlightsLogically(mockData.flights));
+        console.log(
+          'Supabase error fetching flights with expenses, trying without:',
+          error.message
+        );
+        const flightsResult = await supabase.from('flights').select('*');
+        if (flightsResult.error) {
+          console.log(
+            'Supabase error, using mock data:',
+            flightsResult.error.message
+          );
+          return res.json(sortFlightsLogically(mockData.flights));
+        }
+        data = flightsResult.data;
+        // Add empty expenses array to each flight
+        if (data) {
+          data = data.map((flight: any) => ({ ...flight, expenses: [] }));
+        }
+      }
+
+      // Enrich expenses with type names if exp_type is an ID
+      if (data && data.length > 0) {
+        try {
+          // Get all unique expense type IDs
+          const expenseTypeIds = new Set<number>();
+          data.forEach((flight: any) => {
+            if (flight.expenses && Array.isArray(flight.expenses)) {
+              flight.expenses.forEach((expense: any) => {
+                if (expense.exp_type && typeof expense.exp_type === 'number') {
+                  expenseTypeIds.add(expense.exp_type);
+                }
+              });
+            }
+          });
+
+          // Fetch expense type names if we have IDs
+          const expenseTypeMap: { [key: number]: string } = {};
+          if (expenseTypeIds.size > 0) {
+            const { data: expenseTypes, error: typesError } = await supabase
+              .from('expense_types')
+              .select('id, name')
+              .in('id', Array.from(expenseTypeIds));
+
+            if (!typesError && expenseTypes) {
+              expenseTypes.forEach((et: any) => {
+                expenseTypeMap[et.id] = et.name;
+              });
+            }
+          }
+
+          // Enrich flights with expense type names
+          const enrichedData = data.map((flight: any) => {
+            if (flight.expenses && Array.isArray(flight.expenses)) {
+              flight.expenses = flight.expenses.map((expense: any) => {
+                // If exp_type is a number (ID), look up the name
+                if (
+                  typeof expense.exp_type === 'number' &&
+                  expenseTypeMap[expense.exp_type]
+                ) {
+                  return { exp_type: expenseTypeMap[expense.exp_type] };
+                }
+                // If exp_type is already a string, use it directly
+                return { exp_type: expense.exp_type };
+              });
+            }
+            return flight;
+          });
+          return res.json(sortFlightsLogically(enrichedData || []));
+        } catch (enrichError) {
+          // If enrichment fails, return data as-is
+          console.log(
+            'Error enriching expense types, returning data as-is:',
+            enrichError
+          );
+          return res.json(sortFlightsLogically(data || []));
+        }
       }
 
       return res.json(sortFlightsLogically(data || []));
@@ -5678,6 +5758,13 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       invoices_pending: 0,
       discrepancies_active: 0,
       discrepancies_closed: 0,
+      // Новые метрики для страницы Flights
+      completed_flights_this_year: 0,
+      completed_flights_last_year: 0,
+      completed_flights_change_percent: 0,
+      processed_invoices_this_year: 0,
+      discrepancies_open: 0,
+      discrepancies_total: 0,
     };
 
     if (supabase) {
@@ -5695,14 +5782,14 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           supabase.from('discrepancies').select('status'),
         ]);
 
+        const currentYear = new Date().getFullYear();
+        const previousYear = currentYear - 1;
+
         if (!flightsResult.error) {
           const flights = flightsResult.data || [];
           stats.flights_count = flights.length;
 
-          // Подсчитываем рейсы по годам
-          const currentYear = new Date().getFullYear();
-          const previousYear = currentYear - 1;
-
+          // Подсчитываем рейсы по годам (старая логика для обратной совместимости)
           stats.flights_this_year =
             flights.filter(flight => {
               if (!flight.flt_date) return false;
@@ -5727,14 +5814,50 @@ app.get('/api/dashboard/stats', async (_req, res) => {
             stats.flights_change_percent =
               stats.flights_this_year > 0 ? 100 : 0;
           }
+
+          // Новые метрики: все рейсы в этом году (независимо от статуса)
+          stats.completed_flights_this_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === currentYear;
+            }).length || 0;
+
+          stats.completed_flights_last_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === previousYear;
+            }).length || 0;
+
+          // Вычисляем процент изменения для completed flights
+          if (stats.completed_flights_last_year > 0) {
+            stats.completed_flights_change_percent =
+              ((stats.completed_flights_this_year -
+                stats.completed_flights_last_year) /
+                stats.completed_flights_last_year) *
+              100;
+          } else {
+            stats.completed_flights_change_percent =
+              stats.completed_flights_this_year > 0 ? 100 : 0;
+          }
         }
 
         if (!invoicesResult.error) {
-          // Считаем активные инвойсы (не заполненные или не оспоренные)
+          const invoices = invoicesResult.data || [];
+
+          // Считаем активные инвойсы (не заполненные или не оспоренные) - старая логика
           stats.invoices_pending =
-            invoicesResult.data?.filter(
-              inv => !inv.inv_filled || inv.inv_disputed
-            ).length || 0;
+            invoices.filter(inv => !inv.inv_filled || inv.inv_disputed)
+              .length || 0;
+
+          // Новая метрика: инвойсы в этом году по дате инвойса (inv_date)
+          stats.processed_invoices_this_year =
+            invoices.filter(invoice => {
+              if (!invoice.inv_date) return false;
+              const invoiceYear = new Date(invoice.inv_date).getFullYear();
+              return invoiceYear === currentYear;
+            }).length || 0;
         }
 
         if (!expensesResult.error) {
@@ -5747,14 +5870,21 @@ app.get('/api/dashboard/stats', async (_req, res) => {
 
         if (!discrepanciesResult.error) {
           const discrepancies = discrepanciesResult.data || [];
-          // Count active discrepancies (Created and Raised)
+
+          // Старая логика для обратной совместимости
           stats.discrepancies_active =
             discrepancies.filter(
               d => d.status === 'Created' || d.status === 'Raised'
             ).length || 0;
-          // Count closed discrepancies
           stats.discrepancies_closed =
             discrepancies.filter(d => d.status === 'Closed').length || 0;
+
+          // Новые метрики
+          stats.discrepancies_open =
+            discrepancies.filter(
+              d => d.status === 'Created' || d.status === 'Raised'
+            ).length || 0;
+          stats.discrepancies_total = discrepancies.length || 0;
         }
       } catch (dbError) {
         console.log('Database error, using mock stats:', dbError);
@@ -5769,6 +5899,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           invoices_pending: 1,
           discrepancies_active: 0,
           discrepancies_closed: 0,
+          completed_flights_this_year: 1,
+          completed_flights_last_year: 1,
+          completed_flights_change_percent: 0,
+          processed_invoices_this_year: 0,
+          discrepancies_open: 0,
+          discrepancies_total: 0,
         };
       }
     } else {
@@ -5783,6 +5919,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
         invoices_pending: 1,
         discrepancies_active: 0,
         discrepancies_closed: 0,
+        completed_flights_this_year: 1,
+        completed_flights_last_year: 1,
+        completed_flights_change_percent: 0,
+        processed_invoices_this_year: 0,
+        discrepancies_open: 0,
+        discrepancies_total: 0,
       };
     }
 
@@ -5799,6 +5941,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       invoices_pending: 1,
       discrepancies_active: 0,
       discrepancies_closed: 0,
+      completed_flights_this_year: 0,
+      completed_flights_last_year: 0,
+      completed_flights_change_percent: 0,
+      processed_invoices_this_year: 0,
+      discrepancies_open: 0,
+      discrepancies_total: 0,
     });
   }
 });

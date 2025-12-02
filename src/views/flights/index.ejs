@@ -6,68 +6,56 @@
 
 <!-- Finance Cards -->
 <div class="finance-cards" id="stats-cards">
+  <!-- Completed Flights -->
   <div class="finance-card animation-delay-0">
     <div class="finance-card-content">
-      <div class="finance-card-icon finance-card-icon--orange">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-      </div>
-      <div class="finance-card-info" style="flex: 1; display: flex; flex-direction: column;">
-        <h3 class="finance-card-title">Total Flights</h3>
-        <div class="finance-card-value-row" style="display: flex; justify-content: space-between; align-items: flex-end;">
-          <span class="finance-card-value" id="total-flights-value">0</span>
-          <div id="flights-year-details" style="display: none; text-align: right; font-size: 0.7rem; color: hsl(210, 6%, 46%); line-height: 1.3;">
-            <div>
-              <span id="flights-this-year">0</span> this year
-            </div>
-            <div>
-              <span id="flights-last-year">0</span> last year
-            </div>
-            <div id="flights-change" style="font-weight: 500; margin-top: 0.125rem;"></div>
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">Completed Flights</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value" id="completed-flights-value">0</span>
+          <div class="metric-badge" id="completed-flights-badge" style="display: none;">
+            <span class="metric-badge-text" id="completed-flights-percent">0%</span>
+            <i class="bi" id="completed-flights-arrow"></i>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Processed Invoices -->
   <div class="finance-card animation-delay-100">
     <div class="finance-card-content">
-      <div class="finance-card-icon finance-card-icon--blue">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-          <line x1="8" y1="21" x2="16" y2="21"></line>
-          <line x1="12" y1="17" x2="12" y2="21"></line>
-        </svg>
-      </div>
       <div class="finance-card-info">
-        <h3 class="finance-card-title">Active Invoices</h3>
+        <h3 class="finance-card-title">Processed Invoices</h3>
         <div class="finance-card-value-row">
-          <span class="finance-card-value" id="active-invoices-value">0</span>
+          <span class="finance-card-value" id="processed-invoices-value">0</span>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Discrepancies -->
   <div class="finance-card animation-delay-200">
     <div class="finance-card-content">
-      <div class="finance-card-icon finance-card-icon--red">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-          <line x1="12" y1="9" x2="12" y2="13"></line>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-      </div>
       <div class="finance-card-info">
         <h3 class="finance-card-title">Discrepancies</h3>
         <div class="finance-card-value-row">
-          <span class="finance-card-value" id="discrepancies-active-value">0</span>
+          <span class="finance-card-value" id="discrepancies-open-value">0</span>
+          <div class="metric-badge-secondary" id="discrepancies-total-badge">
+            <span class="metric-badge-text-secondary" id="discrepancies-total-value">0</span>
+          </div>
         </div>
-        <div style="font-size: 0.75rem; color: hsl(210, 6%, 46%); margin-top: 0.25rem;">
-          <span id="discrepancies-closed-value">0</span> closed
+      </div>
+    </div>
+  </div>
+
+  <!-- Placeholder Card -->
+  <div class="finance-card animation-delay-300">
+    <div class="finance-card-content">
+      <div class="finance-card-info">
+        <h3 class="finance-card-title">—</h3>
+        <div class="finance-card-value-row">
+          <span class="finance-card-value">—</span>
         </div>
       </div>
     </div>
@@ -137,6 +125,7 @@
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
             <th>STATUS</th>
+            <th>EXPENSES</th>
             <th>COMMENTS</th>
             <th>ACTIONS</th>
           </tr>
@@ -288,61 +277,98 @@ async function loadStats() {
     if (response.ok) {
       const stats = await response.json();
       
-      // Update Total Flights
-      const totalFlightsEl = document.getElementById('total-flights-value');
-      if (totalFlightsEl) {
-        totalFlightsEl.textContent = stats.flights_count || 0;
+      // Update Completed Flights
+      const completedFlightsEl = document.getElementById('completed-flights-value');
+      if (completedFlightsEl) {
+        completedFlightsEl.textContent = stats.completed_flights_this_year || 0;
       }
 
-      // Update year details
-      const flightsThisYearEl = document.getElementById('flights-this-year');
-      const flightsLastYearEl = document.getElementById('flights-last-year');
-      const flightsChangeEl = document.getElementById('flights-change');
-      const flightsYearDetailsEl = document.getElementById('flights-year-details');
-
-      if (flightsThisYearEl && flightsLastYearEl && flightsChangeEl && flightsYearDetailsEl) {
-        const thisYear = stats.flights_this_year || 0;
-        const lastYear = stats.flights_last_year || 0;
-        const changePercent = stats.flights_change_percent || 0;
-
-        flightsThisYearEl.textContent = thisYear;
-        flightsLastYearEl.textContent = lastYear;
-
-        if (changePercent !== 0) {
+      // Update Completed Flights badge with percentage
+      const completedFlightsBadge = document.getElementById('completed-flights-badge');
+      const completedFlightsPercent = document.getElementById('completed-flights-percent');
+      const completedFlightsArrow = document.getElementById('completed-flights-arrow');
+      
+      if (completedFlightsBadge && completedFlightsPercent && completedFlightsArrow) {
+        const changePercent = stats.completed_flights_change_percent || 0;
+        
+        if (changePercent !== 0 || stats.completed_flights_last_year > 0) {
           const isIncrease = changePercent > 0;
           const sign = isIncrease ? '+' : '';
-          const color = isIncrease ? 'hsl(142, 76%, 36%)' : 'hsl(0, 84%, 60%)';
-          flightsChangeEl.innerHTML = `<span style="color: ${color};">${sign}${changePercent.toFixed(1)}%</span> vs last year`;
+          const percentValue = Math.abs(changePercent).toFixed(0);
+          
+          completedFlightsPercent.textContent = `${sign}${percentValue}%`;
+          
+          // Set badge color and arrow
+          if (isIncrease) {
+            completedFlightsBadge.className = 'metric-badge metric-badge-positive';
+            completedFlightsArrow.className = 'bi bi-arrow-up';
+          } else if (changePercent < 0) {
+            completedFlightsBadge.className = 'metric-badge metric-badge-negative';
+            completedFlightsArrow.className = 'bi bi-arrow-down';
+          } else {
+            completedFlightsBadge.className = 'metric-badge metric-badge-neutral';
+            completedFlightsArrow.className = '';
+          }
+          
+          completedFlightsBadge.style.display = 'flex';
         } else {
-          flightsChangeEl.innerHTML = '<span style="color: hsl(210, 6%, 46%);">No change</span>';
-        }
-
-        // Показываем детали только если есть данные
-        if (thisYear > 0 || lastYear > 0) {
-          flightsYearDetailsEl.style.display = 'block';
+          completedFlightsBadge.style.display = 'none';
         }
       }
       
-      // Update Active Invoices
-      const activeInvoicesEl = document.getElementById('active-invoices-value');
-      if (activeInvoicesEl) {
-        activeInvoicesEl.textContent = stats.invoices_pending || 0;
+      // Update Processed Invoices
+      const processedInvoicesEl = document.getElementById('processed-invoices-value');
+      if (processedInvoicesEl) {
+        processedInvoicesEl.textContent = stats.processed_invoices_this_year || 0;
       }
 
       // Update Discrepancies
-      const discrepanciesActiveEl = document.getElementById('discrepancies-active-value');
-      if (discrepanciesActiveEl) {
-        discrepanciesActiveEl.textContent = stats.discrepancies_active || 0;
+      const discrepanciesOpenEl = document.getElementById('discrepancies-open-value');
+      if (discrepanciesOpenEl) {
+        discrepanciesOpenEl.textContent = stats.discrepancies_open || 0;
       }
 
-      const discrepanciesClosedEl = document.getElementById('discrepancies-closed-value');
-      if (discrepanciesClosedEl) {
-        discrepanciesClosedEl.textContent = stats.discrepancies_closed || 0;
+      const discrepanciesTotalEl = document.getElementById('discrepancies-total-value');
+      if (discrepanciesTotalEl) {
+        discrepanciesTotalEl.textContent = stats.discrepancies_total || 0;
       }
     }
   } catch (error) {
     console.error('Error loading stats:', error);
   }
+}
+
+// Check if flight has expenses for specific categories
+function checkExpenseCategories(flight) {
+  const expenses = flight.expenses || [];
+  const expenseTypes = expenses.map(e => (e.exp_type || '').toLowerCase());
+  
+  return {
+    hasGH: expenseTypes.some(type => type.includes('ground handling') || type.includes('groundhandling')),
+    hasFuel: expenseTypes.some(type => type.includes('fuel')),
+    hasCAT: expenseTypes.some(type => type.includes('catering') || type.includes('food'))
+  };
+}
+
+// Render expense status bar
+function renderExpenseBar(flight) {
+  const categories = checkExpenseCategories(flight);
+  
+  return `
+    <div class="expense-bar-container">
+      <div class="expense-bar">
+        <div class="expense-bar-section ${categories.hasGH ? 'filled' : 'empty'}" title="Ground Handling">
+          <span class="expense-bar-label">GH</span>
+        </div>
+        <div class="expense-bar-section ${categories.hasFuel ? 'filled' : 'empty'}" title="Fuel">
+          <span class="expense-bar-label">F</span>
+        </div>
+        <div class="expense-bar-section ${categories.hasCAT ? 'filled' : 'empty'}" title="Catering">
+          <span class="expense-bar-label">CAT</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // Load flights data from API
@@ -376,7 +402,7 @@ async function loadFlights() {
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="10" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load flights. Please try again.
           <br><small style="color: #9ca3af; margin-top: 0.5rem; display: block;">Error: ${error.message}</small>
@@ -398,7 +424,7 @@ function renderFlights() {
   if (!Array.isArray(flightsData) || flightsData.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="10" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-info-circle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           No flights available.
         </td>
@@ -440,7 +466,7 @@ function renderFlights() {
   monthGroups.forEach(group => {
     const monthRow = document.createElement('tr');
     monthRow.innerHTML = `
-      <td colspan="9" class="month-separator">
+      <td colspan="10" class="month-separator">
         <div class="month-divider">
           <span class="month-label">${group.label}</span>
         </div>
@@ -519,19 +545,16 @@ function renderFlights() {
           </div>
         </td>
         <td>
+          ${renderExpenseBar(flight)}
+        </td>
+        <td>
           <div class="comments-info">
             <div class="comments-main ${!flight.flt_comments ? 'comments-empty' : ''}">${flight.flt_comments || 'n/a'}</div>
           </div>
         </td>
         <td>
           <div class="action-buttons">
-            <button class="btn-action" title="View Details" data-action="view" data-id="${flight.id}" data-flight-number="${flight.flt_number}" style="pointer-events: none; opacity: 0.5;">
-              <i class="bi bi-eye"></i>
-            </button>
             <% if (user && user.role === 'superadmin') { %>
-            <button class="btn-action" title="Edit" data-action="edit" data-id="${flight.id}">
-              <i class="bi bi-pencil"></i>
-            </button>
             <button class="btn-action" title="Delete" data-action="delete" data-id="${flight.id}">
               <i class="bi bi-trash"></i>
             </button>
@@ -569,18 +592,9 @@ function renderFlights() {
           e.stopPropagation();
           const action = this.getAttribute('data-action');
           const id = this.getAttribute('data-id');
-          const flightNumber = this.getAttribute('data-flight-number');
 
-          switch (action) {
-            case 'view':
-              // Disabled - use flight number click instead
-              break;
-            case 'edit':
-              editFlight(id);
-              break;
-            case 'delete':
-              deleteFlight(id);
-              break;
+          if (action === 'delete') {
+            deleteFlight(id);
           }
         });
       });
@@ -1511,23 +1525,23 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .status-planned {
-  background-color: hsl(217, 50%, 85%);
-  color: hsl(217, 40%, 30%);
+  background-color: #F5DF01;
+  color: #1f2937;
 }
 
 .status-completed {
-  background-color: hsl(142, 45%, 80%);
-  color: hsl(142, 35%, 25%);
+  background-color: #6DED80;
+  color: #1f2937;
 }
 
 .status-invoiced {
-  background-color: hsl(262, 45%, 85%);
-  color: hsl(262, 40%, 30%);
+  background-color: #6689BD;
+  color: white;
 }
 
 .status-cancelled {
-  background-color: hsl(0, 50%, 85%);
-  color: hsl(0, 40%, 30%);
+  background-color: #FF6439;
+  color: white;
 }
 
 .form-select {
@@ -1546,5 +1560,139 @@ document.addEventListener('DOMContentLoaded', function() {
   outline: none;
   border-color: hsl(142, 76%, 36%);
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+/* Metric badges styles */
+.finance-card-value-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  gap: 0.5rem !important;
+}
+
+.metric-badge {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+}
+
+.metric-badge-positive {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+}
+
+.metric-badge-negative {
+  background-color: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
+.metric-badge-neutral {
+  background-color: #f3f4f6 !important;
+  color: #6b7280 !important;
+}
+
+.metric-badge-text {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+}
+
+.metric-badge i {
+  font-size: 0.625rem !important;
+  line-height: 1 !important;
+}
+
+.metric-badge-secondary {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+  background-color: #f3f4f6 !important;
+  color: #6b7280 !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+}
+
+.metric-badge-text-secondary {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: #6b7280 !important;
+}
+
+/* Icon styles without background */
+.finance-card-icon {
+  background: transparent !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.finance-card-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Expense bar styles */
+.expense-bar-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0;
+}
+
+.expense-bar {
+  display: flex;
+  width: 100%;
+  max-width: 120px;
+  height: 24px;
+  border-radius: 0.375rem;
+  overflow: hidden;
+  border: 1px solid hsl(210, 11%, 85%);
+  background-color: hsl(210, 11%, 95%);
+}
+
+.expense-bar-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-right: 1px solid hsl(210, 11%, 85%);
+  transition: background-color 0.2s ease;
+}
+
+.expense-bar-section:last-child {
+  border-right: none;
+}
+
+.expense-bar-section.filled {
+  background-color: hsl(142, 76%, 36%);
+}
+
+.expense-bar-section.empty {
+  background-color: hsl(210, 11%, 90%);
+}
+
+.expense-bar-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  z-index: 1;
+  position: relative;
+}
+
+.expense-bar-section.empty .expense-bar-label {
+  color: hsl(210, 6%, 60%);
+  text-shadow: none;
 }
 </style>
