@@ -3765,6 +3765,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
           ),
           flights!exp_flight (
             flt_number,
+            flt_date,
             flt_dep,
             flt_arr
           )

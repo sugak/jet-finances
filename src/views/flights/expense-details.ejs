@@ -23,8 +23,8 @@
 
 <!-- Content Container -->
 <div id="content-container" class="content-container" style="display: none;">
-  <div id="expenses-cards-container">
-    <!-- Expense cards will be populated by JavaScript -->
+  <div id="expenses-sections-container">
+    <!-- Expense sections will be populated by JavaScript -->
   </div>
 </div>
 
@@ -171,7 +171,7 @@ function getExpenseCategory(expense) {
 }
 
 function renderExpenseCards(groupedExpenses) {
-  const container = document.getElementById('expenses-cards-container');
+  const container = document.getElementById('expenses-sections-container');
   container.innerHTML = '';
   
   const categories = Object.keys(groupedExpenses).sort();
@@ -183,79 +183,77 @@ function renderExpenseCards(groupedExpenses) {
     const categorySection = document.createElement('div');
     categorySection.className = 'expense-category-section';
     
-    const categoryTitle = document.createElement('h2');
+    const categoryTitle = document.createElement('h3');
     categoryTitle.className = 'expense-category-title';
     categoryTitle.textContent = category;
     categorySection.appendChild(categoryTitle);
     
-    // Create cards container
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'expense-cards-grid';
+    // Create expenses table
+    const expensesTable = createExpensesTable(expenses);
+    categorySection.appendChild(expensesTable);
     
-    expenses.forEach(expense => {
-      const card = createExpenseCard(expense);
-      cardsContainer.appendChild(card);
-    });
-    
-    categorySection.appendChild(cardsContainer);
     container.appendChild(categorySection);
   });
 }
 
-function createExpenseCard(expense) {
-  const card = document.createElement('div');
-  card.className = 'expense-card';
+function createExpensesTable(expenses) {
+  const table = document.createElement('table');
+  table.className = 'expenses-table';
   
-  const amount = parseFloat(expense.exp_amount) || 0;
-  const currency = expense.exp_currency || 'USD';
-  const amountInUSD = convertToUSD(amount, currency);
+  // Create header
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr>
+      <th>Amount</th>
+      <th>Place</th>
+      <th>Subtype</th>
+      <th>Fuel Qty</th>
+      <th>Fuel Provider</th>
+      <th>Invoice</th>
+      <th>Comments</th>
+    </tr>
+  `;
+  table.appendChild(thead);
   
-  const invoiceNumber = expense.invoices?.inv_number || 'N/A';
-  const invoiceId = expense.invoices?.id || null;
-  const place = expense.exp_place || '';
-  const fuelQuantity = expense.exp_fuel_quan || '';
-  const fuelProvider = expense.exp_fuel_provider || '';
-  const comments = expense.exp_comments || '';
-  const subtype = expense.exp_subtype || '';
+  // Create body
+  const tbody = document.createElement('tbody');
   
-  // Create invoice link if available
-  const invoiceLink = invoiceId 
-    ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
-    : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
-  
-  card.innerHTML = `
-    <div class="expense-card-header">
-      <div class="expense-card-amount">
+  expenses.forEach(expense => {
+    const amount = parseFloat(expense.exp_amount) || 0;
+    const currency = expense.exp_currency || 'USD';
+    const amountInUSD = convertToUSD(amount, currency);
+    
+    const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+    const invoiceId = expense.invoices?.id || null;
+    const place = expense.exp_place || '';
+    const fuelQuantity = expense.exp_fuel_quan || '';
+    const fuelProvider = expense.exp_fuel_provider || '';
+    const comments = expense.exp_comments || '';
+    const subtype = expense.exp_subtype || '';
+    
+    // Create invoice link if available
+    const invoiceLink = invoiceId 
+      ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
+      : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="expense-amount-cell">
         <span class="expense-amount-value">$${amountInUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         <span class="expense-amount-currency">${currency}</span>
-      </div>
-      ${subtype ? `<div class="expense-card-subtype">${subtype}</div>` : ''}
-    </div>
-    <div class="expense-card-body">
-      ${place ? `<div class="expense-card-field">
-        <span class="expense-field-label">Place:</span>
-        <span class="expense-field-value">${place}</span>
-      </div>` : ''}
-      ${fuelQuantity ? `<div class="expense-card-field">
-        <span class="expense-field-label">Fuel Quantity:</span>
-        <span class="expense-field-value">${fuelQuantity} L</span>
-      </div>` : ''}
-      ${fuelProvider ? `<div class="expense-card-field">
-        <span class="expense-field-label">Fuel Provider:</span>
-        <span class="expense-field-value">${fuelProvider}</span>
-      </div>` : ''}
-      <div class="expense-card-field">
-        <span class="expense-field-label">Invoice:</span>
-        ${invoiceLink}
-      </div>
-      ${comments ? `<div class="expense-card-field expense-card-comments">
-        <span class="expense-field-label">Comments:</span>
-        <span class="expense-field-value">${comments}</span>
-      </div>` : ''}
-    </div>
-  `;
+      </td>
+      <td>${place || '-'}</td>
+      <td>${subtype || '-'}</td>
+      <td>${fuelQuantity ? fuelQuantity + ' L' : '-'}</td>
+      <td>${fuelProvider || '-'}</td>
+      <td>${invoiceLink}</td>
+      <td class="expense-comments-cell">${comments || '-'}</td>
+    `;
+    tbody.appendChild(row);
+  });
   
-  return card;
+  table.appendChild(tbody);
+  return table;
 }
 
 function convertToUSD(amount, currency) {
@@ -284,14 +282,14 @@ function convertToUSD(amount, currency) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
+  padding: 2rem 1rem;
   text-align: center;
 }
 
 .loading-text {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
   color: #6c757d;
-  font-size: 1.1rem;
+  font-size: 0.9375rem;
 }
 
 .content-container {
@@ -299,110 +297,77 @@ function convertToUSD(amount, currency) {
 }
 
 .no-data-container {
-  padding: 4rem 2rem;
+  padding: 2rem 1rem;
   text-align: center;
 }
 
 .expense-category-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .expense-category-title {
-  font-size: 1.25rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: hsl(210, 6%, 21%);
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid hsl(210, 11%, 90%);
-}
-
-.expense-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
-}
-
-.expense-card {
-  background-color: white;
-  border: 1px solid hsl(210, 11%, 90%);
-  border-radius: 0.5rem;
-  padding: 1rem;
-  transition: box-shadow 0.2s ease;
-}
-
-.expense-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.expense-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.375rem;
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid hsl(210, 11%, 90%);
 }
 
-.expense-card-amount {
-  display: flex;
-  flex-direction: column;
+.expenses-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  font-size: 0.875rem;
+}
+
+.expenses-table thead {
+  background-color: hsl(210, 11%, 96%);
+}
+
+.expenses-table th {
+  text-align: left;
+  padding: 0.375rem 0.625rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  border-bottom: 1px solid hsl(210, 11%, 90%);
+}
+
+.expenses-table td {
+  padding: 0.375rem 0.625rem;
+  border-bottom: 1px solid hsl(210, 11%, 95%);
+  color: hsl(210, 6%, 21%);
+  vertical-align: top;
+}
+
+.expenses-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%);
+}
+
+.expense-amount-cell {
+  white-space: nowrap;
 }
 
 .expense-amount-value {
-  font-size: 1.5rem;
   font-weight: 600;
   color: hsl(210, 6%, 21%);
-  line-height: 1.2;
+  display: block;
 }
 
 .expense-amount-currency {
   font-size: 0.75rem;
   color: hsl(210, 6%, 46%);
-  margin-top: 0.25rem;
+  font-weight: normal;
 }
 
-.expense-card-subtype {
-  font-size: 0.75rem;
-  color: hsl(210, 6%, 46%);
-  background-color: hsl(210, 11%, 96%);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  white-space: nowrap;
-}
-
-.expense-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.expense-card-field {
-  display: flex;
-  align-items: flex-start;
-  font-size: 0.875rem;
-}
-
-.expense-field-label {
-  font-weight: 500;
-  color: hsl(210, 6%, 46%);
-  min-width: 100px;
-  margin-right: 0.5rem;
-}
-
-.expense-field-value {
-  color: hsl(210, 6%, 21%);
-  flex: 1;
-}
-
-.expense-card-comments {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid hsl(210, 11%, 95%);
-}
-
-.expense-card-comments .expense-field-value {
+.expense-comments-cell {
+  max-width: 300px;
   font-style: italic;
   color: hsl(210, 6%, 46%);
+  word-wrap: break-word;
 }
 
 .expense-invoice-link {
@@ -425,15 +390,15 @@ function convertToUSD(amount, currency) {
   top: 4rem;
   z-index: 90;
   background-color: hsl(210, 11%, 98%);
-  padding: 1rem 0;
-  margin-bottom: 1rem;
+  padding: 0.75rem 0;
+  margin-bottom: 0.75rem;
   border-bottom: 1px solid hsl(210, 11%, 90%);
 }
 
 .page-description {
   color: hsl(210, 6%, 46%);
   font-size: 0.875rem;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
 }
 
 .page-actions {

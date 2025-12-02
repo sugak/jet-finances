@@ -500,8 +500,25 @@ function renderFlights() {
           return '00:00';
         }
 
-        const [hours, minutes] = timeString.split(':');
-        return `${hours}:${minutes}`;
+        // Check if time string contains a colon
+        if (timeString.includes(':')) {
+          const parts = timeString.split(':');
+          if (parts.length === 2) {
+            const [hours, minutes] = parts;
+            return `${hours}:${minutes}`;
+          }
+        }
+        
+        // Handle time string without colon (e.g., "0100" -> "01:00")
+        const digitsOnly = timeString.replace(/\D/g, '');
+        if (digitsOnly.length === 4) {
+          const hours = digitsOnly.substring(0, 2);
+          const minutes = digitsOnly.substring(2, 4);
+          return `${hours}:${minutes}`;
+        }
+        
+        // Fallback for invalid formats
+        return '00:00';
       };
 
       // Store flight data in the row for easy access (before setting innerHTML)
@@ -713,8 +730,26 @@ function getSchedule() {
     if (!timeString) {
       return '00:00';
     }
-    const [hours, minutes] = timeString.split(':');
-    return `${hours}:${minutes}`;
+    
+    // Check if time string contains a colon
+    if (timeString.includes(':')) {
+      const parts = timeString.split(':');
+      if (parts.length === 2) {
+        const [hours, minutes] = parts;
+        return `${hours}:${minutes}`;
+      }
+    }
+    
+    // Handle time string without colon (e.g., "0100" -> "01:00")
+    const digitsOnly = timeString.replace(/\D/g, '');
+    if (digitsOnly.length === 4) {
+      const hours = digitsOnly.substring(0, 2);
+      const minutes = digitsOnly.substring(2, 4);
+      return `${hours}:${minutes}`;
+    }
+    
+    // Fallback for invalid formats
+    return '00:00';
   };
 
   // Format schedule text
@@ -1694,5 +1729,23 @@ document.addEventListener('DOMContentLoaded', function() {
 .expense-bar-section.empty .expense-bar-label {
   color: hsl(210, 6%, 60%);
   text-shadow: none;
+}
+
+/* Reduce height of metric cards */
+#stats-cards .finance-card {
+  padding: 1rem !important;
+}
+
+#stats-cards .finance-card-title {
+  font-size: 0.75rem !important;
+  margin-bottom: 0.125rem !important;
+}
+
+#stats-cards .finance-card-value {
+  font-size: 1.25rem !important;
+}
+
+#stats-cards .finance-card-content {
+  gap: 0.5rem !important;
 }
 </style>
