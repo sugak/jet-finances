@@ -402,7 +402,7 @@ async function loadFlights() {
     const tbody = document.getElementById('flights-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="11" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load flights. Please try again.
           <br><small style="color: #9ca3af; margin-top: 0.5rem; display: block;">Error: ${error.message}</small>
@@ -424,7 +424,7 @@ function renderFlights() {
   if (!Array.isArray(flightsData) || flightsData.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="11" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-info-circle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           No flights available.
         </td>
@@ -466,7 +466,7 @@ function renderFlights() {
   monthGroups.forEach(group => {
     const monthRow = document.createElement('tr');
     monthRow.innerHTML = `
-      <td colspan="10" class="month-separator">
+      <td colspan="11" class="month-separator">
         <div class="month-divider">
           <span class="month-label">${group.label}</span>
         </div>
@@ -537,7 +537,7 @@ function renderFlights() {
           <div class="date-badge">${formattedDate}</div>
         </td>
         <td>
-          <div class="flight-number clickable-flight-number" data-flight-number="${flight.flt_number}" style="cursor: pointer; color: hsl(210, 76%, 36%);">${flight.flt_number}</div>
+          <div class="flight-number">${flight.flt_number}</div>
         </td>
         <td>
           <div class="route-info">
@@ -562,7 +562,9 @@ function renderFlights() {
           </div>
         </td>
         <td>
-          ${renderExpenseBar(flight)}
+          <div class="expense-bar-clickable" data-flight-number="${flight.flt_number}" style="cursor: pointer;">
+            ${renderExpenseBar(flight)}
+          </div>
         </td>
         <td>
           <div class="comments-info">
@@ -582,10 +584,10 @@ function renderFlights() {
         </td>
       `;
 
-      // Make flight number clickable
-      const flightNumberElement = row.querySelector('.clickable-flight-number');
-      if (flightNumberElement) {
-        flightNumberElement.addEventListener('click', function(e) {
+      // Make expense bar clickable
+      const expenseBarClickable = row.querySelector('.expense-bar-clickable');
+      if (expenseBarClickable) {
+        expenseBarClickable.addEventListener('click', function(e) {
           e.stopPropagation();
           const flightNumber = this.getAttribute('data-flight-number');
           viewFlight(flightNumber);
@@ -1729,6 +1731,21 @@ document.addEventListener('DOMContentLoaded', function() {
 .expense-bar-section.empty .expense-bar-label {
   color: hsl(210, 6%, 60%);
   text-shadow: none;
+}
+
+/* Clickable expense bar */
+.expense-bar-clickable {
+  display: inline-block;
+  width: 100%;
+  transition: opacity 0.2s ease;
+}
+
+.expense-bar-clickable:hover {
+  opacity: 0.8;
+}
+
+.expense-bar-clickable .expense-bar-container {
+  pointer-events: none;
 }
 
 /* Reduce height of metric cards */

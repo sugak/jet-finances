@@ -3108,6 +3108,51 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       const periodEnd = expense.exp_period_end;
       const flightId = expense.exp_flight;
 
+      // Check if this is an income item (charter profit or credit note)
+      const expCategory = expense.exp_category || 'expense';
+      const invoiceTypeName =
+        expense.invoice_types?.name || expense.exp_invoice_type || '';
+      const invoiceTypeNameLower = (
+        typeof invoiceTypeName === 'string' ? invoiceTypeName : ''
+      )
+        .toLowerCase()
+        .trim();
+      const expTypeLower = ((expense.exp_type || '') as string).toLowerCase();
+      const isCharterProfit =
+        expCategory === 'income_charter_profit' ||
+        (invoiceTypeNameLower.includes('charter') &&
+          invoiceTypeNameLower.includes('profit')) ||
+        (expTypeLower.includes('charter') && expTypeLower.includes('profit'));
+      const isCreditNote =
+        expCategory === 'income_credit_note' ||
+        (invoiceTypeNameLower.includes('credit') &&
+          invoiceTypeNameLower.includes('note'));
+      const isIncomeItem = isCharterProfit || isCreditNote;
+
+      // For charter profit: if attached to a flight, use flight date; otherwise use invoice date
+      // Period is ALWAYS ignored for charter profit
+      if (isCharterProfit) {
+        // If charter profit is attached to a flight, use flight date
+        if (flightId && expense.flights && expense.flights.flt_date) {
+          const flightDate = new Date(expense.flights.flt_date);
+          const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
+          return [{ monthKey, amount, currency }];
+        }
+        // If not attached to flight, use invoice date
+        if (expense.invoices && expense.invoices.inv_date) {
+          const invoiceDate = new Date(expense.invoices.inv_date);
+          const monthKey = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`;
+          return [{ monthKey, amount, currency }];
+        }
+        // Fallback: if no flight and no invoice date, use creation date (should not happen in practice)
+        const date = expense.created_at
+          ? new Date(expense.created_at)
+          : new Date();
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return [{ monthKey, amount, currency }];
+      }
+
+      // If expense has a flight, use flight date (for non-charter-profit expenses)
       if (flightId && expense.flights && expense.flights.flt_date) {
         const flightDate = new Date(expense.flights.flt_date);
         const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
@@ -3156,9 +3201,17 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         return months;
       }
 
-      const date = expense.created_at
-        ? new Date(expense.created_at)
-        : new Date();
+      // If no period and no flight, use invoice date for income items, otherwise use creation date
+      let date: Date;
+
+      if (isIncomeItem && expense.invoices && expense.invoices.inv_date) {
+        // For income items, use invoice date if available
+        date = new Date(expense.invoices.inv_date);
+      } else {
+        // For regular expenses, use creation date
+        date = expense.created_at ? new Date(expense.created_at) : new Date();
+      }
+
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       return [{ monthKey, amount, currency }];
     };
@@ -3173,6 +3226,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       )
         .toLowerCase()
         .trim();
+      const expTypeLower = ((expense.exp_type || '') as string).toLowerCase();
 
       const isCreditNote =
         expCategory === 'income_credit_note' ||
@@ -3182,7 +3236,8 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       const isCharterProfit =
         expCategory === 'income_charter_profit' ||
         (invoiceTypeNameLower.includes('charter') &&
-          invoiceTypeNameLower.includes('profit'));
+          invoiceTypeNameLower.includes('profit')) ||
+        (expTypeLower.includes('charter') && expTypeLower.includes('profit'));
 
       if (isCreditNote || isCharterProfit) {
         // Process as income item
@@ -3640,7 +3695,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         if (!ws[cellAddress]) continue;
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.font = { bold: true };
+        ws[cellAddress].s.font = { bold: false };
         ws[cellAddress].s.fill = { fgColor: { rgb: 'F3F4F6' } };
 
         if (col > 0 && typeof ws[cellAddress].v === 'number') {
@@ -3700,7 +3755,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         if (!ws[cellAddress]) continue;
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.font = { bold: true };
+        ws[cellAddress].s.font = { bold: false };
         ws[cellAddress].s.fill = { fgColor: { rgb: 'F3F4F6' } };
 
         if (col > 0 && typeof ws[cellAddress].v === 'number') {
