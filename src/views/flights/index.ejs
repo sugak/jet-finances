@@ -500,10 +500,10 @@ function renderFlights() {
           return '00:00';
         }
 
-        // Check if time string contains a colon
+        // Check if time string contains a colon (handles HH:MM or HH:MM:SS)
         if (timeString.includes(':')) {
           const parts = timeString.split(':');
-          if (parts.length === 2) {
+          if (parts.length >= 2) {
             const [hours, minutes] = parts;
             return `${hours}:${minutes}`;
           }
@@ -733,10 +733,10 @@ function getSchedule() {
       return '00:00';
     }
     
-    // Check if time string contains a colon
+    // Check if time string contains a colon (handles HH:MM or HH:MM:SS)
     if (timeString.includes(':')) {
       const parts = timeString.split(':');
-      if (parts.length === 2) {
+      if (parts.length >= 2) {
         const [hours, minutes] = parts;
         return `${hours}:${minutes}`;
       }
