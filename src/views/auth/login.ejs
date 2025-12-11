@@ -3,7 +3,10 @@
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Login · Jet Finances</title>
+    <title>Login · jet resource management</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/public/images/favicon.png">
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/public/images/favicon.png">
@@ -51,9 +54,9 @@
       }
       
       .login-title {
-        font-size: 1.5rem;
+        font-size: 1.0rem;
         font-weight: 600;
-        color: #1f2937;
+        color: #515151;
         margin-bottom: 0.5rem;
       }
       
@@ -170,8 +173,7 @@
       </div>
       
       <div class="login-header">
-        <h1 class="login-title">Jet Finances</h1>
-        <p class="login-subtitle">Sign in to your account</p>
+        <h1 class="login-title">JET RESOURCE MANAGEMENT</h1>
       </div>
       
       <div id="error-message" class="error-message">
@@ -284,7 +286,8 @@
             },
             body: JSON.stringify({
               email: email,
-              password: password
+              password: password,
+              remember: remember
             })
           });
           

@@ -551,6 +551,9 @@ async function loadExpenses(preserveExpandedState = false) {
                   ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
                     ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
                     : ''}
+                  ${expense.flights && expense.flights.flt_date 
+                    ? `<span class="flight-date">${new Date(expense.flights.flt_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>` 
+                    : ''}
                 </div>
               </td>
               <td>
@@ -637,6 +640,9 @@ async function loadExpenses(preserveExpandedState = false) {
                   ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
                     ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
                     : ''}
+                  ${expense.flights && expense.flights.flt_date 
+                    ? `<span class="flight-date">${new Date(expense.flights.flt_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>` 
+                    : ''}
                 </div>
               </td>
               <td>
@@ -683,6 +689,9 @@ async function loadExpenses(preserveExpandedState = false) {
                   ${expense.flights ? (expense.flights.flt_number || '-') : '-'}
                   ${expense.flights && expense.flights.flt_dep && expense.flights.flt_arr 
                     ? `<span class="flight-route">${expense.flights.flt_dep} - ${expense.flights.flt_arr}</span>` 
+                    : ''}
+                  ${expense.flights && expense.flights.flt_date 
+                    ? `<span class="flight-date">${new Date(expense.flights.flt_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>` 
                     : ''}
                 </div>
               </td>
@@ -2143,6 +2152,13 @@ document.addEventListener('DOMContentLoaded', function() {
   margin-top: 0.25rem !important;
 }
 
+.flight-date {
+  display: block !important;
+  font-size: 0.7rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  margin-top: 0.25rem !important;
+}
+
 /* Group cell styling - pastel background */
 .expenses-table td.group-cell {
   background-color: hsl(200, 50%, 95%) !important;
@@ -2232,21 +2248,21 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .btn-status.in-progress {
-  background-color: hsl(0, 84%, 60%) !important;
+  background-color: #FF6439 !important;
   color: white !important;
 }
 
 .btn-status.in-progress:hover {
-  background-color: hsl(0, 84%, 55%) !important;
+  background-color: #e55a2e !important;
 }
 
 .btn-status.completed {
-  background-color: hsl(142, 76%, 36%) !important;
-  color: white !important;
+  background-color: #6DED80 !important;
+  color: #1f2937 !important;
 }
 
 .btn-status.completed:hover {
-  background-color: hsl(142, 76%, 32%) !important;
+  background-color: #5dd670 !important;
 }
 
 /* Section total styles */

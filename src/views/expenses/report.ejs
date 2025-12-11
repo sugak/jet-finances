@@ -816,7 +816,7 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     monthHeader.colSpan = 2;
     monthHeader.textContent = monthName;
     monthHeader.style.textAlign = 'center';
-    monthHeader.style.minWidth = '240px';
+    monthHeader.style.minWidth = '170px';
     monthHeader.style.color = 'hsl(210, 6%, 46%)';
     monthHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     monthHeader.style.position = 'relative';
@@ -838,14 +838,14 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     const usdHeader = document.createElement('th');
     usdHeader.textContent = 'USD';
     usdHeader.style.textAlign = 'right';
-    usdHeader.style.minWidth = '120px';
-    usdHeader.style.width = '120px';
+    usdHeader.style.minWidth = '85px';
+    usdHeader.style.width = '85px';
     usdHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     usdHeader.style.position = 'relative';
     usdHeader.style.zIndex = '99';
     usdHeader.style.fontWeight = '400';
     usdHeader.style.fontSize = '0.7rem';
-    usdHeader.style.padding = '0.15rem 0.75rem';
+    usdHeader.style.padding = '0.15rem 0.5rem';
     usdHeader.style.lineHeight = '1.2';
     // Add border-left for all months except the first
     if (monthIndex > 0) {
@@ -856,14 +856,14 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     const aedHeader = document.createElement('th');
     aedHeader.textContent = 'AED';
     aedHeader.style.textAlign = 'right';
-    aedHeader.style.minWidth = '120px';
-    aedHeader.style.width = '120px';
+    aedHeader.style.minWidth = '85px';
+    aedHeader.style.width = '85px';
     aedHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
     aedHeader.style.position = 'relative';
     aedHeader.style.zIndex = '99';
     aedHeader.style.fontWeight = '400';
     aedHeader.style.fontSize = '0.7rem';
-    aedHeader.style.padding = '0.15rem 0.75rem';
+    aedHeader.style.padding = '0.15rem 0.5rem';
     aedHeader.style.lineHeight = '1.2';
     subHeaderRow.appendChild(aedHeader);
   });
@@ -945,8 +945,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
       const usdCell = document.createElement('td');
       usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       usdCell.style.textAlign = 'right';
-      usdCell.style.minWidth = '120px';
-      usdCell.style.width = '120px';
+      usdCell.style.minWidth = '85px';
+      usdCell.style.width = '85px';
+      usdCell.style.padding = '0.5rem 0.5rem';
       usdCell.style.backgroundColor = bgColor;
       // Add border-top if group changed
       if (groupChanged) {
@@ -971,8 +972,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
       const aedCell = document.createElement('td');
       aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       aedCell.style.textAlign = 'right';
-      aedCell.style.minWidth = '120px';
-      aedCell.style.width = '120px';
+      aedCell.style.minWidth = '85px';
+      aedCell.style.width = '85px';
+      aedCell.style.padding = '0.5rem 0.5rem';
       aedCell.style.backgroundColor = bgColor;
       // Add border-top if group changed
       if (groupChanged) {
@@ -1017,8 +1019,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     usdCell.style.textAlign = 'right';
     usdCell.style.fontWeight = '600';
-    usdCell.style.minWidth = '120px';
-    usdCell.style.width = '120px';
+    usdCell.style.minWidth = '75px';
+    usdCell.style.width = '75px';
+    usdCell.style.padding = '0.5rem 0.5rem';
     usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
     usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
     if (monthIndex > 0) {
@@ -1096,8 +1099,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     usdCell.textContent = totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     usdCell.style.textAlign = 'right';
     usdCell.style.fontWeight = '700';
-    usdCell.style.minWidth = '120px';
-    usdCell.style.width = '120px';
+    usdCell.style.minWidth = '75px';
+    usdCell.style.width = '75px';
+    usdCell.style.padding = '0.5rem 0.5rem';
     usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
     usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
     // Add border-left for all months except the first
@@ -1142,8 +1146,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     usdCell.style.textAlign = 'right';
     usdCell.style.fontWeight = '600';
-    usdCell.style.minWidth = '120px';
-    usdCell.style.width = '120px';
+    usdCell.style.minWidth = '75px';
+    usdCell.style.width = '75px';
+    usdCell.style.padding = '0.5rem 0.5rem';
     usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
     usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
     if (monthIndex > 0) {
@@ -1216,8 +1221,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     usdCell.textContent = totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     usdCell.style.textAlign = 'right';
     usdCell.style.fontWeight = '700';
-    usdCell.style.minWidth = '120px';
-    usdCell.style.width = '120px';
+    usdCell.style.minWidth = '75px';
+    usdCell.style.width = '75px';
+    usdCell.style.padding = '0.5rem 0.5rem';
     usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
     usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
     if (monthIndex > 0) {
@@ -1758,7 +1764,7 @@ document.addEventListener('DOMContentLoaded', function() {
   border-right: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
   background-color: hsl(210, 11%, 96%) !important;
-  min-width: 120px !important;
+  min-width: 85px !important;
 }
 
 /* Sticky headers - top will be set by JavaScript */
@@ -1792,15 +1798,15 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expenses-report-table td {
-  padding: 0.5rem 0.75rem !important;
+  padding: 0.4rem 0.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
   border-right: 1px solid hsl(210, 11%, 90%) !important;
   vertical-align: middle !important;
   color: hsl(210, 6%, 21%) !important;
   white-space: nowrap !important;
-  min-width: 120px !important;
-  width: 120px !important;
-  max-width: 120px !important;
+  min-width: 85px !important;
+  width: 85px !important;
+  max-width: 85px !important;
   font-size: 0.75rem !important;
 }
 
@@ -1838,8 +1844,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .table-wrapper {
   overflow-x: auto !important;
-  overflow-y: auto !important;
-  max-height: 70vh !important;
+  overflow-y: visible !important;
   width: 100% !important;
 }
 

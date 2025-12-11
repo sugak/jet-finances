@@ -206,16 +206,10 @@ async function authenticateSession(
     }
 
     if (!supabase) {
-      console.error('❌ authenticateSession: Supabase not available');
-      // Используем безопасный рендеринг или простой ответ
-      try {
-        return res.status(500).render('dashboard/index', {
-          title: 'Error',
-          error: 'Database not available',
-        });
-      } catch {
-        return res.status(500).send('Database not available');
-      }
+      return res.status(500).render('error', {
+        title: 'Error',
+        error: 'Database not available',
+      });
     }
 
     // Verify session token
@@ -1238,18 +1232,13 @@ app.get('/logs', authenticateSession, async (req, res) => {
   try {
     if (!supabase) {
       console.error('❌ Logs route: Supabase not available');
-      try {
-        return res.status(500).render('logs/index', {
-          title: 'Logs',
-          logs: [],
-          error: 'Database not available',
-          months: [],
-          selectedPeriod: null,
-        });
-      } catch (renderError) {
-        console.error('❌ Cannot render logs page:', renderError);
-        return res.status(500).send('Database not available');
-      }
+      return res.status(500).render('logs/index', {
+        title: 'Logs',
+        logs: [],
+        error: 'Database not available',
+        months: [],
+        selectedPeriod: null,
+      });
     }
 
     console.log('📋 Loading logs page...');
@@ -1405,8 +1394,6 @@ app.get('/logs', authenticateSession, async (req, res) => {
     }
 
     console.log('📋 Rendering logs page with', logs.length, 'logs');
-
-    // Безопасный рендеринг с обработкой ошибок
     try {
       res.render('logs/index', {
         title: 'Logs',
@@ -1415,41 +1402,9 @@ app.get('/logs', authenticateSession, async (req, res) => {
         months,
         selectedPeriod,
       });
-    } catch (renderError: any) {
+    } catch (renderError) {
       console.error('❌ Error rendering logs template:', renderError);
-      console.error('Render error name:', renderError?.name);
-      console.error('Render error message:', renderError?.message);
-      console.error('Render error stack:', renderError?.stack);
-
-      // Пытаемся отрендерить страницу с ошибкой
-      try {
-        return res.status(500).render('logs/index', {
-          title: 'Logs',
-          logs: [],
-          error:
-            'Error rendering page: ' +
-            (renderError?.message || 'Unknown error'),
-          months: [],
-          selectedPeriod: null,
-        });
-      } catch (fallbackError) {
-        // Если даже рендеринг ошибки не работает, возвращаем простой HTML
-        console.error('❌ Critical: Cannot render error page:', fallbackError);
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Server Error</title>
-              <meta charset="utf-8">
-            </head>
-            <body>
-              <h1>Server Error</h1>
-              <p>Error loading logs: ${renderError?.message || 'Unknown error'}</p>
-              <p>Please check server logs for more details.</p>
-            </body>
-          </html>
-        `);
-      }
+      throw renderError; // Пробрасываем ошибку в catch блок
     }
   } catch (error: any) {
     console.error('❌ Error loading logs page:', error);
@@ -1459,7 +1414,7 @@ app.get('/logs', authenticateSession, async (req, res) => {
 
     // Пытаемся отрендерить страницу с ошибкой
     try {
-      return res.status(500).render('logs/index', {
+      res.status(500).render('logs/index', {
         title: 'Logs',
         logs: [],
         error: error?.message || 'Error loading logs',
@@ -1467,19 +1422,14 @@ app.get('/logs', authenticateSession, async (req, res) => {
         selectedPeriod: null,
       });
     } catch (renderError) {
-      // Если даже рендеринг ошибки не работает, возвращаем простой HTML
+      // Если даже рендеринг ошибки не работает, возвращаем простой ответ
       console.error('❌ Critical: Cannot render error page:', renderError);
-      return res.status(500).send(`
-        <!DOCTYPE html>
+      res.status(500).send(`
         <html>
-          <head>
-            <title>Server Error</title>
-            <meta charset="utf-8">
-          </head>
+          <head><title>Server Error</title></head>
           <body>
             <h1>Server Error</h1>
             <p>Error loading logs: ${error?.message || 'Unknown error'}</p>
-            <p>Please check server logs for more details.</p>
           </body>
         </html>
       `);
@@ -1639,11 +1589,91 @@ const mockData = {
 app.get('/api/flights', authenticateToken, async (_req, res) => {
   try {
     if (supabase) {
-      const { data, error } = await supabase.from('flights').select('*');
+      // Try to get flights with expenses
+      let { data, error } = await supabase.from('flights').select(`
+        *,
+        expenses!exp_flight (
+          exp_type
+        )
+      `);
 
+      // If query with expenses fails, try without expenses
       if (error) {
-        console.log('Supabase error, using mock data:', error.message);
-        return res.json(sortFlightsLogically(mockData.flights));
+        console.log(
+          'Supabase error fetching flights with expenses, trying without:',
+          error.message
+        );
+        const flightsResult = await supabase.from('flights').select('*');
+        if (flightsResult.error) {
+          console.log(
+            'Supabase error, using mock data:',
+            flightsResult.error.message
+          );
+          return res.json(sortFlightsLogically(mockData.flights));
+        }
+        data = flightsResult.data;
+        // Add empty expenses array to each flight
+        if (data) {
+          data = data.map((flight: any) => ({ ...flight, expenses: [] }));
+        }
+      }
+
+      // Enrich expenses with type names if exp_type is an ID
+      if (data && data.length > 0) {
+        try {
+          // Get all unique expense type IDs
+          const expenseTypeIds = new Set<number>();
+          data.forEach((flight: any) => {
+            if (flight.expenses && Array.isArray(flight.expenses)) {
+              flight.expenses.forEach((expense: any) => {
+                if (expense.exp_type && typeof expense.exp_type === 'number') {
+                  expenseTypeIds.add(expense.exp_type);
+                }
+              });
+            }
+          });
+
+          // Fetch expense type names if we have IDs
+          const expenseTypeMap: { [key: number]: string } = {};
+          if (expenseTypeIds.size > 0) {
+            const { data: expenseTypes, error: typesError } = await supabase
+              .from('expense_types')
+              .select('id, name')
+              .in('id', Array.from(expenseTypeIds));
+
+            if (!typesError && expenseTypes) {
+              expenseTypes.forEach((et: any) => {
+                expenseTypeMap[et.id] = et.name;
+              });
+            }
+          }
+
+          // Enrich flights with expense type names
+          const enrichedData = data.map((flight: any) => {
+            if (flight.expenses && Array.isArray(flight.expenses)) {
+              flight.expenses = flight.expenses.map((expense: any) => {
+                // If exp_type is a number (ID), look up the name
+                if (
+                  typeof expense.exp_type === 'number' &&
+                  expenseTypeMap[expense.exp_type]
+                ) {
+                  return { exp_type: expenseTypeMap[expense.exp_type] };
+                }
+                // If exp_type is already a string, use it directly
+                return { exp_type: expense.exp_type };
+              });
+            }
+            return flight;
+          });
+          return res.json(sortFlightsLogically(enrichedData || []));
+        } catch (enrichError) {
+          // If enrichment fails, return data as-is
+          console.log(
+            'Error enriching expense types, returning data as-is:',
+            enrichError
+          );
+          return res.json(sortFlightsLogically(data || []));
+        }
       }
 
       return res.json(sortFlightsLogically(data || []));
@@ -3078,6 +3108,51 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       const periodEnd = expense.exp_period_end;
       const flightId = expense.exp_flight;
 
+      // Check if this is an income item (charter profit or credit note)
+      const expCategory = expense.exp_category || 'expense';
+      const invoiceTypeName =
+        expense.invoice_types?.name || expense.exp_invoice_type || '';
+      const invoiceTypeNameLower = (
+        typeof invoiceTypeName === 'string' ? invoiceTypeName : ''
+      )
+        .toLowerCase()
+        .trim();
+      const expTypeLower = ((expense.exp_type || '') as string).toLowerCase();
+      const isCharterProfit =
+        expCategory === 'income_charter_profit' ||
+        (invoiceTypeNameLower.includes('charter') &&
+          invoiceTypeNameLower.includes('profit')) ||
+        (expTypeLower.includes('charter') && expTypeLower.includes('profit'));
+      const isCreditNote =
+        expCategory === 'income_credit_note' ||
+        (invoiceTypeNameLower.includes('credit') &&
+          invoiceTypeNameLower.includes('note'));
+      const isIncomeItem = isCharterProfit || isCreditNote;
+
+      // For charter profit: if attached to a flight, use flight date; otherwise use invoice date
+      // Period is ALWAYS ignored for charter profit
+      if (isCharterProfit) {
+        // If charter profit is attached to a flight, use flight date
+        if (flightId && expense.flights && expense.flights.flt_date) {
+          const flightDate = new Date(expense.flights.flt_date);
+          const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
+          return [{ monthKey, amount, currency }];
+        }
+        // If not attached to flight, use invoice date
+        if (expense.invoices && expense.invoices.inv_date) {
+          const invoiceDate = new Date(expense.invoices.inv_date);
+          const monthKey = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`;
+          return [{ monthKey, amount, currency }];
+        }
+        // Fallback: if no flight and no invoice date, use creation date (should not happen in practice)
+        const date = expense.created_at
+          ? new Date(expense.created_at)
+          : new Date();
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return [{ monthKey, amount, currency }];
+      }
+
+      // If expense has a flight, use flight date (for non-charter-profit expenses)
       if (flightId && expense.flights && expense.flights.flt_date) {
         const flightDate = new Date(expense.flights.flt_date);
         const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
@@ -3126,9 +3201,17 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         return months;
       }
 
-      const date = expense.created_at
-        ? new Date(expense.created_at)
-        : new Date();
+      // If no period and no flight, use invoice date for income items, otherwise use creation date
+      let date: Date;
+
+      if (isIncomeItem && expense.invoices && expense.invoices.inv_date) {
+        // For income items, use invoice date if available
+        date = new Date(expense.invoices.inv_date);
+      } else {
+        // For regular expenses, use creation date
+        date = expense.created_at ? new Date(expense.created_at) : new Date();
+      }
+
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       return [{ monthKey, amount, currency }];
     };
@@ -3143,6 +3226,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       )
         .toLowerCase()
         .trim();
+      const expTypeLower = ((expense.exp_type || '') as string).toLowerCase();
 
       const isCreditNote =
         expCategory === 'income_credit_note' ||
@@ -3152,7 +3236,8 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       const isCharterProfit =
         expCategory === 'income_charter_profit' ||
         (invoiceTypeNameLower.includes('charter') &&
-          invoiceTypeNameLower.includes('profit'));
+          invoiceTypeNameLower.includes('profit')) ||
+        (expTypeLower.includes('charter') && expTypeLower.includes('profit'));
 
       if (isCreditNote || isCharterProfit) {
         // Process as income item
@@ -3610,7 +3695,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         if (!ws[cellAddress]) continue;
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.font = { bold: true };
+        ws[cellAddress].s.font = { bold: false };
         ws[cellAddress].s.fill = { fgColor: { rgb: 'F3F4F6' } };
 
         if (col > 0 && typeof ws[cellAddress].v === 'number') {
@@ -3670,7 +3755,7 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         if (!ws[cellAddress]) continue;
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.font = { bold: true };
+        ws[cellAddress].s.font = { bold: false };
         ws[cellAddress].s.fill = { fgColor: { rgb: 'F3F4F6' } };
 
         if (col > 0 && typeof ws[cellAddress].v === 'number') {
@@ -3735,6 +3820,7 @@ app.get('/api/invoices/:id/expenses', async (req, res) => {
           ),
           flights!exp_flight (
             flt_number,
+            flt_date,
             flt_dep,
             flt_arr
           )
@@ -5728,6 +5814,13 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       invoices_pending: 0,
       discrepancies_active: 0,
       discrepancies_closed: 0,
+      // Новые метрики для страницы Flights
+      completed_flights_this_year: 0,
+      completed_flights_last_year: 0,
+      completed_flights_change_percent: 0,
+      processed_invoices_this_year: 0,
+      discrepancies_open: 0,
+      discrepancies_total: 0,
     };
 
     if (supabase) {
@@ -5745,14 +5838,14 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           supabase.from('discrepancies').select('status'),
         ]);
 
+        const currentYear = new Date().getFullYear();
+        const previousYear = currentYear - 1;
+
         if (!flightsResult.error) {
           const flights = flightsResult.data || [];
           stats.flights_count = flights.length;
 
-          // Подсчитываем рейсы по годам
-          const currentYear = new Date().getFullYear();
-          const previousYear = currentYear - 1;
-
+          // Подсчитываем рейсы по годам (старая логика для обратной совместимости)
           stats.flights_this_year =
             flights.filter(flight => {
               if (!flight.flt_date) return false;
@@ -5777,14 +5870,50 @@ app.get('/api/dashboard/stats', async (_req, res) => {
             stats.flights_change_percent =
               stats.flights_this_year > 0 ? 100 : 0;
           }
+
+          // Новые метрики: все рейсы в этом году (независимо от статуса)
+          stats.completed_flights_this_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === currentYear;
+            }).length || 0;
+
+          stats.completed_flights_last_year =
+            flights.filter(flight => {
+              if (!flight.flt_date) return false;
+              const flightYear = new Date(flight.flt_date).getFullYear();
+              return flightYear === previousYear;
+            }).length || 0;
+
+          // Вычисляем процент изменения для completed flights
+          if (stats.completed_flights_last_year > 0) {
+            stats.completed_flights_change_percent =
+              ((stats.completed_flights_this_year -
+                stats.completed_flights_last_year) /
+                stats.completed_flights_last_year) *
+              100;
+          } else {
+            stats.completed_flights_change_percent =
+              stats.completed_flights_this_year > 0 ? 100 : 0;
+          }
         }
 
         if (!invoicesResult.error) {
-          // Считаем активные инвойсы (не заполненные или не оспоренные)
+          const invoices = invoicesResult.data || [];
+
+          // Считаем активные инвойсы (не заполненные или не оспоренные) - старая логика
           stats.invoices_pending =
-            invoicesResult.data?.filter(
-              inv => !inv.inv_filled || inv.inv_disputed
-            ).length || 0;
+            invoices.filter(inv => !inv.inv_filled || inv.inv_disputed)
+              .length || 0;
+
+          // Новая метрика: инвойсы в этом году по дате инвойса (inv_date)
+          stats.processed_invoices_this_year =
+            invoices.filter(invoice => {
+              if (!invoice.inv_date) return false;
+              const invoiceYear = new Date(invoice.inv_date).getFullYear();
+              return invoiceYear === currentYear;
+            }).length || 0;
         }
 
         if (!expensesResult.error) {
@@ -5797,14 +5926,21 @@ app.get('/api/dashboard/stats', async (_req, res) => {
 
         if (!discrepanciesResult.error) {
           const discrepancies = discrepanciesResult.data || [];
-          // Count active discrepancies (Created and Raised)
+
+          // Старая логика для обратной совместимости
           stats.discrepancies_active =
             discrepancies.filter(
               d => d.status === 'Created' || d.status === 'Raised'
             ).length || 0;
-          // Count closed discrepancies
           stats.discrepancies_closed =
             discrepancies.filter(d => d.status === 'Closed').length || 0;
+
+          // Новые метрики
+          stats.discrepancies_open =
+            discrepancies.filter(
+              d => d.status === 'Created' || d.status === 'Raised'
+            ).length || 0;
+          stats.discrepancies_total = discrepancies.length || 0;
         }
       } catch (dbError) {
         console.log('Database error, using mock stats:', dbError);
@@ -5819,6 +5955,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
           invoices_pending: 1,
           discrepancies_active: 0,
           discrepancies_closed: 0,
+          completed_flights_this_year: 1,
+          completed_flights_last_year: 1,
+          completed_flights_change_percent: 0,
+          processed_invoices_this_year: 0,
+          discrepancies_open: 0,
+          discrepancies_total: 0,
         };
       }
     } else {
@@ -5833,6 +5975,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
         invoices_pending: 1,
         discrepancies_active: 0,
         discrepancies_closed: 0,
+        completed_flights_this_year: 1,
+        completed_flights_last_year: 1,
+        completed_flights_change_percent: 0,
+        processed_invoices_this_year: 0,
+        discrepancies_open: 0,
+        discrepancies_total: 0,
       };
     }
 
@@ -5849,6 +5997,12 @@ app.get('/api/dashboard/stats', async (_req, res) => {
       invoices_pending: 1,
       discrepancies_active: 0,
       discrepancies_closed: 0,
+      completed_flights_this_year: 0,
+      completed_flights_last_year: 0,
+      completed_flights_change_percent: 0,
+      processed_invoices_this_year: 0,
+      discrepancies_open: 0,
+      discrepancies_total: 0,
     });
   }
 });
@@ -6176,17 +6330,7 @@ app.use((_req, res) => {
 // Ошибки
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  console.error('❌ Global error handler triggered:', err);
-  console.error('Request path:', req.path);
-  console.error('Error name:', err?.name);
-  console.error('Error message:', err?.message);
-  console.error('Error stack:', err?.stack);
-
-  // Проверяем, был ли уже отправлен ответ
-  if (res.headersSent) {
-    console.error('⚠️ Response already sent, cannot send error response');
-    return;
-  }
+  console.error('Error handler:', err);
 
   // Для API эндпоинтов возвращаем JSON
   if (req.path.startsWith('/api/')) {
@@ -6196,55 +6340,8 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     });
   }
 
-  // Для /logs используем специальную обработку
-  if (req.path === '/logs') {
-    console.error('❌ Error in /logs route, attempting safe error rendering');
-    try {
-      return res.status(500).render('logs/index', {
-        title: 'Logs',
-        logs: [],
-        error: err instanceof Error ? err.message : 'Error loading logs',
-        months: [],
-        selectedPeriod: null,
-      });
-    } catch (renderError) {
-      console.error('❌ Cannot render logs error page:', renderError);
-      return res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Server Error</title>
-            <meta charset="utf-8">
-          </head>
-          <body>
-            <h1>Server Error</h1>
-            <p>Error in logs route: ${err instanceof Error ? err.message : 'Unknown error'}</p>
-            <p>Please check server logs for more details.</p>
-          </body>
-        </html>
-      `);
-    }
-  }
-
   // Для остальных запросов возвращаем HTML
-  try {
-    res.status(500).render('dashboard/index', { title: 'Server Error' });
-  } catch (renderError) {
-    console.error('❌ Cannot render error page:', renderError);
-    res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Server Error</title>
-          <meta charset="utf-8">
-        </head>
-        <body>
-          <h1>Server Error</h1>
-          <p>${err instanceof Error ? err.message : 'Unknown error'}</p>
-        </body>
-      </html>
-    `);
-  }
+  res.status(500).render('dashboard/index', { title: 'Server Error' });
 });
 
 // ---------- Start ----------

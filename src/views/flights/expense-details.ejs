@@ -1,6 +1,7 @@
 <!-- Page Header -->
 <div class="page-header">
   <div>
+    <h1 class="page-title" id="flight-title">Flight <%= flight.flt_number %> Expenses</h1>
     <p class="page-description" id="flight-info-description">
       Loading flight information...
     </p>
@@ -23,8 +24,8 @@
 
 <!-- Content Container -->
 <div id="content-container" class="content-container" style="display: none;">
-  <div id="expenses-cards-container">
-    <!-- Expense cards will be populated by JavaScript -->
+  <div id="expenses-sections-container">
+    <!-- Expense sections will be populated by JavaScript -->
   </div>
 </div>
 
@@ -146,116 +147,210 @@ function getExpenseCategory(expense) {
     return 'Fuel';
   }
   
-  if (type.includes('navigation') || type.includes('enroute')) {
-    return 'Enroute Navigation';
-  }
-  
-  if (type.includes('overflight')) {
-    return 'Overflight Permits';
-  }
-  
-  if (type.includes('landing')) {
-    return 'Landing Permits';
+  if (type.includes('disbursement')) {
+    return 'Disbursement Fee';
   }
   
   if (type.includes('catering') || type.includes('food')) {
     return 'Catering';
   }
   
-  if (type.includes('flight planning')) {
-    return 'Flight Planning';
+  // All other categories go to "Other Charges"
+  if (type.includes('navigation') || type.includes('enroute')) {
+    return 'Other Charges';
   }
   
-  // Default: capitalize first letter
-  return type.charAt(0).toUpperCase() + type.slice(1) + (subtype ? ` - ${subtype}` : '');
+  if (type.includes('overflight')) {
+    return 'Other Charges';
+  }
+  
+  if (type.includes('landing')) {
+    return 'Other Charges';
+  }
+  
+  if (type.includes('flight planning')) {
+    return 'Other Charges';
+  }
+  
+  // Default: Other Charges
+  return 'Other Charges';
 }
 
 function renderExpenseCards(groupedExpenses) {
-  const container = document.getElementById('expenses-cards-container');
+  const container = document.getElementById('expenses-sections-container');
   container.innerHTML = '';
   
-  const categories = Object.keys(groupedExpenses).sort();
+  // Define category order
+  const categoryOrder = [
+    'Ground Handling',
+    'Ground Handling - Departure',
+    'Ground Handling - Arrival',
+    'Fuel',
+    'Disbursement Fee',
+    'Catering',
+    'Other Charges'
+  ];
   
-  categories.forEach(category => {
+  // Get all categories
+  const allCategories = Object.keys(groupedExpenses);
+  
+  // Sort categories according to defined order
+  const sortedCategories = [];
+  const usedCategories = new Set();
+  
+  // First, add categories in defined order
+  categoryOrder.forEach(orderedCategory => {
+    // Check for exact match first
+    if (allCategories.includes(orderedCategory) && !usedCategories.has(orderedCategory)) {
+      sortedCategories.push(orderedCategory);
+      usedCategories.add(orderedCategory);
+    } else {
+      // Check for partial match (e.g., "Ground Handling" matches "Ground Handling - Departure")
+      const matchingCategory = allCategories.find(cat => 
+        !usedCategories.has(cat) && (
+          cat.toLowerCase().includes(orderedCategory.toLowerCase()) ||
+          orderedCategory.toLowerCase().includes(cat.toLowerCase())
+        )
+      );
+      if (matchingCategory) {
+        sortedCategories.push(matchingCategory);
+        usedCategories.add(matchingCategory);
+      }
+    }
+  });
+  
+  // Add remaining categories that weren't in the order list
+  allCategories.forEach(category => {
+    if (!usedCategories.has(category)) {
+      sortedCategories.push(category);
+      usedCategories.add(category);
+    }
+  });
+  
+  sortedCategories.forEach(category => {
     const expenses = groupedExpenses[category];
     
     // Create category section
     const categorySection = document.createElement('div');
     categorySection.className = 'expense-category-section';
     
-    const categoryTitle = document.createElement('h2');
+    const categoryTitle = document.createElement('h3');
     categoryTitle.className = 'expense-category-title';
     categoryTitle.textContent = category;
     categorySection.appendChild(categoryTitle);
     
-    // Create cards container
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'expense-cards-grid';
+    // Create expenses table with total
+    const expensesTable = createExpensesTable(expenses, category);
+    categorySection.appendChild(expensesTable);
     
-    expenses.forEach(expense => {
-      const card = createExpenseCard(expense);
-      cardsContainer.appendChild(card);
-    });
-    
-    categorySection.appendChild(cardsContainer);
     container.appendChild(categorySection);
   });
 }
 
-function createExpenseCard(expense) {
-  const card = document.createElement('div');
-  card.className = 'expense-card';
+function createExpensesTable(expenses, category) {
+  const table = document.createElement('table');
+  table.className = 'expenses-table';
   
-  const amount = parseFloat(expense.exp_amount) || 0;
-  const currency = expense.exp_currency || 'USD';
-  const amountInUSD = convertToUSD(amount, currency);
+  // Create header
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr>
+      <th>Amount</th>
+      <th>Place</th>
+      <th>Subtype</th>
+      <th>Invoice</th>
+      <th>Comments</th>
+    </tr>
+  `;
+  table.appendChild(thead);
   
-  const invoiceNumber = expense.invoices?.inv_number || 'N/A';
-  const invoiceId = expense.invoices?.id || null;
-  const place = expense.exp_place || '';
-  const fuelQuantity = expense.exp_fuel_quan || '';
-  const fuelProvider = expense.exp_fuel_provider || '';
-  const comments = expense.exp_comments || '';
-  const subtype = expense.exp_subtype || '';
+  // Create body
+  const tbody = document.createElement('tbody');
   
-  // Create invoice link if available
-  const invoiceLink = invoiceId 
-    ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
-    : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
+  let totalUSD = 0;
+  const currencyTotals = {};
   
-  card.innerHTML = `
-    <div class="expense-card-header">
-      <div class="expense-card-amount">
+  expenses.forEach(expense => {
+    const amount = parseFloat(expense.exp_amount) || 0;
+    const currency = expense.exp_currency || 'USD';
+    const amountInUSD = convertToUSD(amount, currency);
+    totalUSD += amountInUSD;
+    
+    // Track totals by currency
+    if (!currencyTotals[currency]) {
+      currencyTotals[currency] = 0;
+    }
+    currencyTotals[currency] += amount;
+    
+    const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+    const invoiceId = expense.invoices?.id || null;
+    const place = expense.exp_place || '';
+    const fuelQuantity = expense.exp_fuel_quan || '';
+    const fuelProvider = expense.exp_fuel_provider || '';
+    const comments = expense.exp_comments || '';
+    const subtype = expense.exp_subtype || '';
+    
+    // Create invoice link if available
+    const invoiceLink = invoiceId 
+      ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
+      : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
+    
+    // Combine comments with fuel info if available
+    let combinedComments = comments;
+    const fuelInfoParts = [];
+    if (fuelQuantity) {
+      fuelInfoParts.push(`Fuel Qty: ${fuelQuantity} L`);
+    }
+    if (fuelProvider) {
+      fuelInfoParts.push(`Fuel Provider: ${fuelProvider}`);
+    }
+    if (fuelInfoParts.length > 0) {
+      const fuelInfo = fuelInfoParts.join(', ');
+      combinedComments = comments 
+        ? `${comments} | ${fuelInfo}`
+        : fuelInfo;
+    }
+    
+    const row = document.createElement('tr');
+    row.className = 'expense-row';
+    row.innerHTML = `
+      <td class="expense-amount-cell">
         <span class="expense-amount-value">$${amountInUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         <span class="expense-amount-currency">${currency}</span>
-      </div>
-      ${subtype ? `<div class="expense-card-subtype">${subtype}</div>` : ''}
-    </div>
-    <div class="expense-card-body">
-      ${place ? `<div class="expense-card-field">
-        <span class="expense-field-label">Place:</span>
-        <span class="expense-field-value">${place}</span>
-      </div>` : ''}
-      ${fuelQuantity ? `<div class="expense-card-field">
-        <span class="expense-field-label">Fuel Quantity:</span>
-        <span class="expense-field-value">${fuelQuantity} L</span>
-      </div>` : ''}
-      ${fuelProvider ? `<div class="expense-card-field">
-        <span class="expense-field-label">Fuel Provider:</span>
-        <span class="expense-field-value">${fuelProvider}</span>
-      </div>` : ''}
-      <div class="expense-card-field">
-        <span class="expense-field-label">Invoice:</span>
-        ${invoiceLink}
-      </div>
-      ${comments ? `<div class="expense-card-field expense-card-comments">
-        <span class="expense-field-label">Comments:</span>
-        <span class="expense-field-value">${comments}</span>
-      </div>` : ''}
-    </div>
-  `;
+      </td>
+      <td>${place || '-'}</td>
+      <td>${subtype || '-'}</td>
+      <td>${invoiceLink}</td>
+      <td class="expense-comments-cell">${combinedComments || '-'}</td>
+    `;
+    tbody.appendChild(row);
+  });
   
-  return card;
+  // Add total row
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'expense-total-row';
+  
+  // Format currency totals
+  const currencyTotalsText = Object.keys(currencyTotals)
+    .sort()
+    .map(currency => {
+      const total = currencyTotals[currency];
+      return `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+    })
+    .join(' + ');
+  
+  totalRow.innerHTML = `
+    <td class="expense-amount-cell expense-total-cell">
+      <span class="expense-total-label">Total</span>
+      <span class="expense-amount-value expense-total-value">$${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      <span class="expense-amount-currency expense-total-currency">${currencyTotalsText}</span>
+    </td>
+    <td colspan="4" class="expense-total-empty"></td>
+  `;
+  tbody.appendChild(totalRow);
+  
+  table.appendChild(tbody);
+  return table;
 }
 
 function convertToUSD(amount, currency) {
@@ -284,14 +379,14 @@ function convertToUSD(amount, currency) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
+  padding: 2rem 1rem;
   text-align: center;
 }
 
 .loading-text {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
   color: #6c757d;
-  font-size: 1.1rem;
+  font-size: 0.9375rem;
 }
 
 .content-container {
@@ -299,110 +394,84 @@ function convertToUSD(amount, currency) {
 }
 
 .no-data-container {
-  padding: 4rem 2rem;
+  padding: 2rem 1rem;
   text-align: center;
 }
 
 .expense-category-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .expense-category-title {
-  font-size: 1.25rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: hsl(210, 6%, 21%);
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid hsl(210, 11%, 90%);
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid hsl(210, 11%, 85%);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.expense-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
-}
-
-.expense-card {
+.expenses-table {
+  width: 75%;
+  border-collapse: collapse;
   background-color: white;
-  border: 1px solid hsl(210, 11%, 90%);
-  border-radius: 0.5rem;
-  padding: 1rem;
-  transition: box-shadow 0.2s ease;
+  font-size: 0.75rem;
+  border-radius: 0.375rem;
+  overflow: hidden;
 }
 
-.expense-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.expenses-table thead {
+  background-color: hsl(210, 11%, 96%);
 }
 
-.expense-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+.expenses-table th {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
   border-bottom: 1px solid hsl(210, 11%, 90%);
 }
 
-.expense-card-amount {
-  display: flex;
-  flex-direction: column;
-}
-
-.expense-amount-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: hsl(210, 6%, 21%);
-  line-height: 1.2;
-}
-
-.expense-amount-currency {
-  font-size: 0.75rem;
-  color: hsl(210, 6%, 46%);
-  margin-top: 0.25rem;
-}
-
-.expense-card-subtype {
-  font-size: 0.75rem;
-  color: hsl(210, 6%, 46%);
-  background-color: hsl(210, 11%, 96%);
+.expenses-table td {
   padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
+  border-bottom: 1px solid hsl(210, 11%, 95%);
+  color: hsl(210, 6%, 21%);
+  vertical-align: top;
+  font-size: 0.75rem;
+}
+
+.expenses-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%);
+}
+
+.expense-amount-cell {
   white-space: nowrap;
 }
 
-.expense-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.expense-card-field {
-  display: flex;
-  align-items: flex-start;
-  font-size: 0.875rem;
-}
-
-.expense-field-label {
-  font-weight: 500;
-  color: hsl(210, 6%, 46%);
-  min-width: 100px;
-  margin-right: 0.5rem;
-}
-
-.expense-field-value {
+.expense-amount-value {
+  font-weight: 600;
   color: hsl(210, 6%, 21%);
-  flex: 1;
+  display: block;
+  font-size: 0.75rem;
 }
 
-.expense-card-comments {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid hsl(210, 11%, 95%);
+.expense-amount-currency {
+  font-size: 0.625rem;
+  color: hsl(210, 6%, 46%);
+  font-weight: normal;
 }
 
-.expense-card-comments .expense-field-value {
+.expense-comments-cell {
+  max-width: 300px;
   font-style: italic;
   color: hsl(210, 6%, 46%);
+  word-wrap: break-word;
+  font-size: 0.75rem;
 }
 
 .expense-invoice-link {
@@ -420,20 +489,69 @@ function convertToUSD(amount, currency) {
   color: hsl(210, 6%, 46%);
 }
 
+/* Total row styles */
+.expense-total-row {
+  background-color: hsl(210, 11%, 97%);
+  border-top: 2px solid hsl(210, 11%, 85%);
+  font-weight: 600;
+}
+
+.expense-total-cell {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.125rem !important;
+}
+
+.expense-total-label {
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+  text-transform: uppercase !important;
+  font-size: 0.6875rem !important;
+  letter-spacing: 0.05em !important;
+  margin-bottom: 0.125rem !important;
+}
+
+.expense-total-value {
+  font-size: 0.875rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  font-weight: 700 !important;
+}
+
+.expense-total-currency {
+  font-size: 0.625rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  font-weight: 500 !important;
+}
+
+.expense-total-empty {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: hsl(210, 6%, 21%);
+  margin: 0 0 0.25rem 0;
+  padding: 0;
+}
+
 .page-header {
   position: sticky;
   top: 4rem;
   z-index: 90;
   background-color: hsl(210, 11%, 98%);
-  padding: 1rem 0;
-  margin-bottom: 1rem;
+  padding: 0.75rem 0;
+  margin-bottom: 0.75rem;
   border-bottom: 1px solid hsl(210, 11%, 90%);
 }
 
 .page-description {
   color: hsl(210, 6%, 46%);
   font-size: 0.875rem;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
 }
 
 .page-actions {
