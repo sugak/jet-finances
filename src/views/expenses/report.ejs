@@ -444,6 +444,13 @@ async function processExpensesData(expenses) {
   // Reset expense details map
   expenseDetailsMap = {};
   
+  // Log flags state for debugging
+  console.log('[processExpensesData] Flags:', {
+    showSubcategories: showSubcategories,
+    reportForATS: reportForATS,
+    totalExpenses: expenses.length
+  });
+  
   // If reportForATS is enabled, filter out expenses with period starting before October 2025
   // and their related Disbursement fees
   let filteredExpenses = expenses;
@@ -469,6 +476,11 @@ async function processExpensesData(expenses) {
     
     // Filter out excluded expenses
     filteredExpenses = expenses.filter(exp => !excludedExpenseIds.has(exp.id));
+    console.log('[processExpensesData] ATS filter applied:', {
+      originalCount: expenses.length,
+      excludedCount: excludedExpenseIds.size,
+      filteredCount: filteredExpenses.length
+    });
   }
   
   // Process expenses - filter only those in specified groups
@@ -485,7 +497,7 @@ async function processExpensesData(expenses) {
   };
   
   // Process expenses - separate income items from regular expenses
-  // Check both exp_category and exp_invoice_type for income items
+  // Check both exp_category, exp_invoice_type, and exp_type for income items
   for (const expense of filteredExpenses) {
     // Check if this is an income item
     // First check exp_category (if set)
@@ -495,6 +507,9 @@ async function processExpensesData(expenses) {
     const invoiceTypeName = expense.invoice_types?.name || expense.exp_invoice_type || '';
     const invoiceTypeNameLower = (typeof invoiceTypeName === 'string' ? invoiceTypeName : '').toLowerCase().trim();
     
+    // Also check exp_type for charter profit identification
+    const expTypeLower = ((expense.exp_type || '') + '').toLowerCase();
+    
     const isCreditNote = (
       expCategory === 'income_credit_note' ||
       invoiceTypeNameLower.includes('credit') && invoiceTypeNameLower.includes('note')
@@ -502,26 +517,44 @@ async function processExpensesData(expenses) {
     
     const isCharterProfit = (
       expCategory === 'income_charter_profit' ||
-      (invoiceTypeNameLower.includes('charter') && invoiceTypeNameLower.includes('profit'))
+      (invoiceTypeNameLower.includes('charter') && invoiceTypeNameLower.includes('profit')) ||
+      (expTypeLower.includes('charter') && expTypeLower.includes('profit'))
     );
     
     if (isCreditNote || isCharterProfit) {
       // Process as income item
       const incomeType = isCreditNote ? 'creditNote' : 'charterProfit';
-      const months = splitExpenseByMonths(expense);
       
-      // Log income items for debugging
-      const monthKeys = months.map(m => m.monthKey);
-      console.log(`[Income] ${incomeType}:`, JSON.stringify({
-        invoice: expense.invoices?.inv_number,
-        exp_category: expCategory,
-        exp_invoice_type: expense.exp_invoice_type,
-        invoice_type_name: invoiceTypeName,
-        amount: expense.exp_amount,
-        currency: expense.exp_currency,
-        period: expense.exp_period_start ? `${expense.exp_period_start} - ${expense.exp_period_end}` : expense.flights?.flt_date || 'N/A',
-        months: monthKeys
-      }, null, 2));
+      // For charter profit: if attached to a flight, use flight date; otherwise use invoice date
+      // Period is ALWAYS ignored for charter profit
+      let months;
+      if (isCharterProfit) {
+        const amount = parseFloat(expense.exp_amount) || 0;
+        const currency = expense.exp_currency || 'USD';
+        const flightId = expense.exp_flight;
+        
+        // If charter profit is attached to a flight, use flight date
+        if (flightId && expense.flights && expense.flights.flt_date) {
+          const flightDate = new Date(expense.flights.flt_date);
+          const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
+          months = [{ monthKey, amount, currency, expense }];
+        }
+        // If not attached to flight, use invoice date
+        else if (expense.invoices && expense.invoices.inv_date) {
+          const invoiceDate = new Date(expense.invoices.inv_date);
+          const monthKey = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`;
+          months = [{ monthKey, amount, currency, expense }];
+        }
+        // Fallback: if no flight and no invoice date, use creation date (should not happen in practice)
+        else {
+          const date = expense.created_at ? new Date(expense.created_at) : new Date();
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          months = [{ monthKey, amount, currency, expense }];
+        }
+      } else {
+        // For credit notes, use regular splitExpenseByMonths
+        months = splitExpenseByMonths(expense);
+      }
       
       for (const { monthKey, amount, currency } of months) {
         if (!expensesByMonth[monthKey]) {
@@ -583,10 +616,25 @@ async function processExpensesData(expenses) {
     }
 
     // Determine which category to use based on showSubcategories flag
+    // IMPORTANT: showSubcategories must be checked here, not just in rendering
     const displayCategory = showSubcategories ? getExpenseCategory(expense) : baseCategory;
     
     // If getExpenseCategory returned null, use baseCategory
     const finalCategory = displayCategory || baseCategory;
+    
+    // Debug: log category determination when both flags are enabled
+    if (showSubcategories && reportForATS && Math.random() < 0.01) { // Log 1% of expenses to avoid spam
+      console.log('[Category Determination] Sample:', {
+        id: expense.id,
+        baseCategory: baseCategory,
+        displayCategory: displayCategory,
+        finalCategory: finalCategory,
+        exp_type: expense.exp_type,
+        exp_subtype: expense.exp_subtype,
+        showSubcategories: showSubcategories,
+        reportForATS: reportForATS
+      });
+    }
 
     const isNonFlight = isNonFlightExpense(expense);
     const group = isNonFlight ? categoryGroups.nonFlight : categoryGroups.flight;
@@ -657,6 +705,26 @@ async function processExpensesData(expenses) {
   allCategoryGroups = categoryGroups;
   window.incomeItems = incomeItems; // Store income items globally for rendering
 
+  // Log category groups summary when both flags are enabled
+  if (showSubcategories && reportForATS) {
+    const nonFlightCategories = Object.keys(categoryGroups.nonFlight);
+    const flightCategories = Object.keys(categoryGroups.flight);
+    const totalCategories = nonFlightCategories.length + flightCategories.length;
+    const hasSubcategories = nonFlightCategories.some(cat => cat.includes(' - ')) || flightCategories.some(cat => cat.includes(' - '));
+    const subcategoryCount = [...nonFlightCategories, ...flightCategories].filter(cat => cat.includes(' - ')).length;
+    console.log('[processExpensesData] Category groups summary:', {
+      showSubcategories: showSubcategories,
+      reportForATS: reportForATS,
+      totalCategories: totalCategories,
+      nonFlightCategories: nonFlightCategories.length,
+      flightCategories: flightCategories.length,
+      hasSubcategories: hasSubcategories,
+      subcategoryCount: subcategoryCount,
+      allNonFlightCategories: nonFlightCategories,
+      allFlightCategories: flightCategories
+    });
+  }
+
   // Get all months from expenses and income items, then filter by year
   const allMonthsSet = new Set(Object.keys(expensesByMonth));
   
@@ -666,16 +734,6 @@ async function processExpensesData(expenses) {
   
   const allMonths = Array.from(allMonthsSet).sort();
   const filteredMonths = filterMonthsByYear(allMonths);
-  
-  // Log income items summary with details
-  const creditNoteMonths = Object.keys(incomeItems.creditNote);
-  const charterProfitMonths = Object.keys(incomeItems.charterProfit);
-  console.log('[Income Summary]', JSON.stringify({
-    creditNoteMonths: creditNoteMonths,
-    charterProfitMonths: charterProfitMonths,
-    creditNoteData: incomeItems.creditNote,
-    charterProfitData: incomeItems.charterProfit
-  }, null, 2));
 
   // Render table
   renderExpensesReportTable(categoryGroups, filteredMonths, incomeItems);
@@ -763,6 +821,27 @@ function getGroupBackgroundColor(group) {
 
 // Render expenses report table
 function renderExpensesReportTable(categoryGroups, months, incomeItems = { creditNote: {}, charterProfit: {} }) {
+  
+  // Log rendering info when both flags are enabled
+  if (showSubcategories && reportForATS) {
+    const nonFlightCategories = Object.keys(categoryGroups.nonFlight || {});
+    const flightCategories = Object.keys(categoryGroups.flight || {});
+    const totalCategories = nonFlightCategories.length + flightCategories.length;
+    const hasSubcategories = nonFlightCategories.some(cat => cat.includes(' - ')) || flightCategories.some(cat => cat.includes(' - '));
+    const subcategoryCount = [...nonFlightCategories, ...flightCategories].filter(cat => cat.includes(' - ')).length;
+    console.log('[renderExpensesReportTable] Rendering with:', {
+      showSubcategories: showSubcategories,
+      reportForATS: reportForATS,
+      totalCategories: totalCategories,
+      nonFlightCategories: nonFlightCategories.length,
+      flightCategories: flightCategories.length,
+      months: months.length,
+      hasSubcategories: hasSubcategories,
+      subcategoryCount: subcategoryCount,
+      allNonFlightCategories: nonFlightCategories,
+      allFlightCategories: flightCategories
+    });
+  }
   
   // Update year filter options
   if (allExpensesData && allCategoryGroups) {
@@ -881,6 +960,17 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     allCategories.push({ category, source: 'flight' });
   });
   
+  // Log categories collection when both flags are enabled
+  if (showSubcategories && reportForATS) {
+    const subcategoryCount = allCategories.filter(cat => cat.category.includes(' - ')).length;
+    console.log('[renderExpensesReportTable] Categories collected:', {
+      totalCategories: allCategories.length,
+      subcategoryCount: subcategoryCount,
+      allCategories: allCategories.map(c => c.category),
+      first10Categories: allCategories.slice(0, 10).map(c => c.category)
+    });
+  }
+  
   // Sort by custom order
   // For subcategories, extract base category for sorting
   allCategories.sort((a, b) => {
@@ -901,7 +991,9 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
 
   // Render categories in sorted order
   let previousGroup = null;
+  let renderedCategories = [];
   allCategories.forEach(({ category, source }, index) => {
+    renderedCategories.push(category);
     const row = document.createElement('tr');
     // Extract base category for color coding (remove " - subtype" part if present)
     const baseCategoryForColor = category.split(' - ')[0];
@@ -938,6 +1030,16 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
     }
 
     const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
+
+    // Log category data when both flags are enabled (sample)
+    if (showSubcategories && reportForATS && index < 3) {
+      console.log(`[Category Data] ${category}:`, {
+        category: category,
+        source: source,
+        hasData: categoryData && Object.keys(categoryData).length > 0,
+        monthKeys: categoryData ? Object.keys(categoryData) : []
+      });
+    }
 
     months.forEach((monthKey, monthIndex) => {
       const data = categoryData[monthKey] || { USD: 0, AED: 0 };
@@ -995,6 +1097,25 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
 
     tbody.appendChild(row);
   });
+
+  // Log rendered categories when both flags are enabled
+  if (showSubcategories && reportForATS) {
+    // Check how many rows are actually in the DOM
+    const renderedRows = tbody.querySelectorAll('tr');
+    const categoryRows = Array.from(renderedRows).filter(row => {
+      const firstCell = row.querySelector('td:first-child');
+      return firstCell && !['Credit note', 'Total', 'Charter profit', 'Total profit'].includes(firstCell.textContent);
+    });
+    
+    console.log('[renderExpensesReportTable] Categories rendered:', {
+      totalRendered: renderedCategories.length,
+      renderedCategories: renderedCategories,
+      first10Rendered: renderedCategories.slice(0, 10),
+      domRowsCount: renderedRows.length,
+      categoryRowsInDOM: categoryRows.length,
+      first5CategoryRows: categoryRows.slice(0, 5).map(row => row.querySelector('td:first-child')?.textContent)
+    });
+  }
 
   // Add Credit note row (before Total)
   const creditNoteRow = document.createElement('tr');
@@ -1140,7 +1261,7 @@ function renderExpensesReportTable(categoryGroups, months, incomeItems = { credi
   charterProfitRow.appendChild(charterProfitCategoryCell);
 
   months.forEach((monthKey, monthIndex) => {
-    const data = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
+    const data = incomeItems.charterProfit && incomeItems.charterProfit[monthKey] ? incomeItems.charterProfit[monthKey] : { USD: 0, AED: 0 };
     
     const usdCell = document.createElement('td');
     usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1506,8 +1627,18 @@ async function exportToExcel() {
     // Get reportForATS checkbox state
     const reportForATS = document.getElementById('reportForATS')?.checked || false;
     
+    // Log parameters before sending
+    console.log('[Excel Export] Sending request with:', {
+      yearFilter: yearFilter,
+      showSubcategories: showSubcategories,
+      reportForATS: reportForATS,
+      showSubcategoriesString: String(showSubcategories),
+      reportForATSString: String(reportForATS)
+    });
+    
     // Make request to server endpoint
-    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${showSubcategories}&reportForATS=${reportForATS}`, {
+    // Explicitly convert boolean to string for URL
+    const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${String(showSubcategories)}&reportForATS=${String(reportForATS)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -1653,7 +1784,13 @@ document.addEventListener('DOMContentLoaded', function() {
   const showSubcategoriesCheckbox = document.getElementById('showSubcategories');
   if (showSubcategoriesCheckbox) {
     showSubcategoriesCheckbox.addEventListener('change', async function() {
+      const oldValue = showSubcategories;
       showSubcategories = this.checked;
+      console.log('[Checkbox] showSubcategories changed:', {
+        oldValue: oldValue,
+        newValue: showSubcategories,
+        reportForATS: reportForATS
+      });
       if (allExpensesData) {
         // Reprocess data with new subcategories setting
         await processExpensesData(allExpensesData);
@@ -1665,7 +1802,13 @@ document.addEventListener('DOMContentLoaded', function() {
   const reportForATSCheckbox = document.getElementById('reportForATS');
   if (reportForATSCheckbox) {
     reportForATSCheckbox.addEventListener('change', async function() {
+      const oldValue = reportForATS;
       reportForATS = this.checked;
+      console.log('[Checkbox] reportForATS changed:', {
+        oldValue: oldValue,
+        newValue: reportForATS,
+        showSubcategories: showSubcategories
+      });
       if (allExpensesData) {
         // Reprocess data with new ATS filter setting
         await processExpensesData(allExpensesData);

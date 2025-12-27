@@ -143,24 +143,7 @@
         to { transform: rotate(360deg); }
       }
       
-      .remember-me {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
-      }
       
-      .remember-me input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: #3b82f6;
-      }
-      
-      .remember-me label {
-        font-size: 0.875rem;
-        color: #6b7280;
-        cursor: pointer;
-      }
     </style>
   </head>
   <body>
@@ -205,11 +188,6 @@
           >
         </div>
         
-        <div class="remember-me">
-          <input type="checkbox" id="remember" name="remember">
-          <label for="remember">Remember me</label>
-        </div>
-        
         <button type="submit" class="btn-login" id="login-btn">
           <span id="btn-text">Sign In</span>
           <div id="btn-spinner" class="loading-spinner" style="display: none;"></div>
@@ -221,122 +199,164 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <script>
-      // Supabase configuration
-      const SUPABASE_URL = '<%= process.env.SUPABASE_URL %>';
-      const SUPABASE_ANON_KEY = '<%= process.env.SUPABASE_ANON_KEY %>';
-      
-      // Debug info
-      console.log('Environment variables:');
-      console.log('SUPABASE_URL:', SUPABASE_URL);
-      console.log('SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'SET' : 'NOT SET');
-      
-      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        console.error('❌ Supabase credentials missing!');
-        alert('Configuration error: Supabase credentials not found');
-        throw new Error('Supabase credentials not found');
-      }
-      
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      
-      // DOM elements
-      const loginForm = document.getElementById('login-form');
-      const loginBtn = document.getElementById('login-btn');
-      const btnText = document.getElementById('btn-text');
-      const btnSpinner = document.getElementById('btn-spinner');
-      const errorMessage = document.getElementById('error-message');
-      const errorText = document.getElementById('error-text');
-      
-      // Show error message
-      function showError(message) {
-        errorText.textContent = message;
-        errorMessage.style.display = 'block';
-        setTimeout(() => {
-          errorMessage.style.display = 'none';
-        }, 5000);
-      }
-      
-      // Set loading state
-      function setLoading(loading) {
-        loginBtn.disabled = loading;
-        btnText.style.display = loading ? 'none' : 'inline';
-        btnSpinner.style.display = loading ? 'block' : 'none';
-      }
-      
-      // Handle form submission
-      loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+      // Use IIFE to avoid variable conflicts
+      (function() {
+        'use strict';
         
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-        const remember = document.getElementById('remember').checked;
+        // Supabase configuration
+        const SUPABASE_URL = '<%= process.env.SUPABASE_URL %>';
+        const SUPABASE_ANON_KEY = '<%= process.env.SUPABASE_ANON_KEY %>';
         
-        setLoading(true);
+        // Debug info
+        console.log('Environment variables:');
+        console.log('SUPABASE_URL:', SUPABASE_URL);
+        console.log('SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'SET' : 'NOT SET');
         
-        try {
-          console.log('Attempting login for:', email);
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+          console.error('❌ Supabase credentials missing!');
+          alert('Configuration error: Supabase credentials not found');
+          return;
+        }
+        
+        // Initialize Supabase client only once
+        let supabase;
+        if (!window.supabaseClient) {
+          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          window.supabaseClient = supabase;
+        } else {
+          supabase = window.supabaseClient;
+        }
+        
+        // Wait for DOM to be ready
+        function initLoginPage() {
+          // DOM elements
+          const loginForm = document.getElementById('login-form');
+          const loginBtn = document.getElementById('login-btn');
+          const btnText = document.getElementById('btn-text');
+          const btnSpinner = document.getElementById('btn-spinner');
+          const errorMessage = document.getElementById('error-message');
+          const errorText = document.getElementById('error-text');
           
-          // Use server-side login API to avoid CORS issues
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: email,
-              password: password,
-              remember: remember
-            })
+          if (!loginForm || !loginBtn) {
+            console.error('Login form elements not found');
+            return;
+          }
+          
+          // Show error message
+          function showError(message) {
+            if (errorText) errorText.textContent = message;
+            if (errorMessage) {
+              errorMessage.style.display = 'block';
+              setTimeout(() => {
+                errorMessage.style.display = 'none';
+              }, 5000);
+            }
+          }
+          
+          // Set loading state
+          function setLoading(loading) {
+            loginBtn.disabled = loading;
+            if (btnText) btnText.style.display = loading ? 'none' : 'inline';
+            if (btnSpinner) btnSpinner.style.display = loading ? 'block' : 'none';
+          }
+          
+          // Handle form submission
+          loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            setLoading(true);
+            
+            try {
+              console.log('Attempting login for:', email);
+              
+              // Use server-side login API to avoid CORS issues
+              const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: email,
+                  password: password
+                })
+              });
+              
+              // Проверяем Content-Type перед парсингом JSON
+              const contentType = response.headers.get('content-type');
+              let result;
+              
+              if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+              } else {
+                // Если ответ не JSON, читаем как текст
+                const text = await response.text();
+                console.error('Non-JSON response:', text);
+                throw new Error('Server returned an invalid response. Please try again.');
+              }
+              
+              console.log('Login response:', result);
+              
+              if (!response.ok) {
+                throw new Error(result.error || 'Login failed');
+              }
+              
+              if (result.success) {
+                // Redirect to dashboard
+                window.location.href = result.redirect || '/';
+              }
+            } catch (error) {
+              console.error('Login error:', error);
+              if (error instanceof SyntaxError) {
+                showError('Server returned an invalid response. Please try again.');
+              } else {
+                showError(error.message || 'Login failed. Please try again.');
+              }
+            } finally {
+              setLoading(false);
+            }
           });
           
-          // Проверяем Content-Type перед парсингом JSON
-          const contentType = response.headers.get('content-type');
-          let result;
-          
-          if (contentType && contentType.includes('application/json')) {
-            result = await response.json();
-          } else {
-            // Если ответ не JSON, читаем как текст
-            const text = await response.text();
-            console.error('Non-JSON response:', text);
-            throw new Error('Server returned an invalid response. Please try again.');
+          // Check if user is already logged in
+          // Only check server-side session status to avoid redirect loops
+          async function checkAuth() {
+            try {
+              // Check server-side session status instead of client-side
+              const response = await fetch('/api/auth/status', {
+                credentials: 'include'
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                if (data.authenticated) {
+                  // User is authenticated, redirect to dashboard
+                  window.location.href = '/';
+                }
+              }
+              // If not authenticated, stay on login page
+            } catch (error) {
+              console.error('Auth check error:', error);
+              // On error, stay on login page
+            }
           }
           
-          console.log('Login response:', result);
-          
-          if (!response.ok) {
-            throw new Error(result.error || 'Login failed');
+          // Run auth check on page load (only once)
+          // Use a flag to prevent multiple checks
+          if (!window.authCheckDone) {
+            window.authCheckDone = true;
+            checkAuth();
           }
-          
-          if (result.success) {
-            // Redirect to dashboard
-            window.location.href = result.redirect || '/';
-          }
-        } catch (error) {
-          console.error('Login error:', error);
-          if (error instanceof SyntaxError) {
-            showError('Server returned an invalid response. Please try again.');
-          } else {
-            showError(error.message || 'Login failed. Please try again.');
-          }
-        } finally {
-          setLoading(false);
         }
-      });
-      
-      // Check if user is already logged in
-      async function checkAuth() {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            window.location.href = '/';
-          }
-        } catch (error) {
-          console.error('Auth check error:', error);
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initLoginPage);
+        } else {
+          initLoginPage();
         }
-      }
-      
-      // Run auth check on page load
-      checkAuth();
+      })();
     </script>
   </body>
 </html>
