@@ -812,7 +812,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(500).json({ error: 'Database not available' });
     }
 
-    const { email, password, remember } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
@@ -832,8 +832,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (data.user && data.session) {
       // Set session cookies with proper production settings
-      // If "remember me" is checked, set cookie to 30 days, otherwise 1 day
-      const maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+      // Cookie expires after 1 day
+      const maxAge = 24 * 60 * 60 * 1000;
       const cookieOptions = {
         maxAge: maxAge,
         httpOnly: false, // Allow JavaScript to read the token
@@ -2729,6 +2729,15 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
     const showSubcategories = req.query.showSubcategories === 'true';
     const reportForATS = req.query.reportForATS === 'true';
 
+    // Debug: log parameters
+    console.log('[Excel Export] Parameters:', {
+      yearFilter,
+      showSubcategories,
+      reportForATS,
+      showSubcategoriesRaw: req.query.showSubcategories,
+      reportForATSRaw: req.query.reportForATS,
+    });
+
     if (!supabase) {
       return res.status(500).json({ error: 'Database not available' });
     }
@@ -3309,6 +3318,18 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       // If getExpenseCategory returned null, use baseCategory
       const finalCategory = displayCategory || baseCategory;
 
+      // Debug: log category determination when both flags are enabled (sample)
+      if (showSubcategories && reportForATS && Math.random() < 0.01) {
+        console.log('[Excel Export] Category Determination Sample:', {
+          id: expense.id,
+          baseCategory: baseCategory,
+          displayCategory: displayCategory,
+          finalCategory: finalCategory,
+          exp_type: expense.exp_type,
+          exp_subtype: expense.exp_subtype,
+        });
+      }
+
       const isNonFlight = isNonFlightExpense(expense);
       const group = isNonFlight
         ? categoryGroups.nonFlight
@@ -3521,6 +3542,25 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
     Object.keys(categoryGroups.flight).forEach(category => {
       allCategories.push({ category, source: 'flight' });
     });
+
+    // Log categories when both flags are enabled
+    if (showSubcategories && reportForATS) {
+      const nonFlightCategories = Object.keys(categoryGroups.nonFlight);
+      const flightCategories = Object.keys(categoryGroups.flight);
+      const subcategoryCount = [
+        ...nonFlightCategories,
+        ...flightCategories,
+      ].filter(cat => cat.includes(' - ')).length;
+      console.log('[Excel Export] Category groups summary:', {
+        showSubcategories: showSubcategories,
+        reportForATS: reportForATS,
+        totalCategories: allCategories.length,
+        nonFlightCategories: nonFlightCategories.length,
+        flightCategories: flightCategories.length,
+        subcategoryCount: subcategoryCount,
+        allCategories: allCategories.map(c => c.category),
+      });
+    }
 
     // Sort by custom order (same as client - extract base category for sorting)
     allCategories.sort((a, b) => {
