@@ -1,189 +1,176 @@
-<!-- Page Header -->
-<div class="page-header" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-    <label for="yearFilter" style="font-weight: 500; color: hsl(210, 6%, 21%);">Year:</label>
-    <select id="yearFilter" style="padding: 0.5rem 1rem; border: 1px solid hsl(210, 11%, 85%); border-radius: 0.375rem; font-size: 0.875rem; background-color: white; cursor: pointer;">
-      <option value="current">Current Year</option>
-      <option value="all">All Years</option>
-    </select>
-    <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%); cursor: pointer;">
-      <input type="checkbox" id="showSubcategories" style="width: 1rem; height: 1rem; cursor: pointer;">
-      View all subcategories
-    </label>
-    <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; color: hsl(210, 6%, 21%); cursor: pointer;">
-      <input type="checkbox" id="reportForATS" style="width: 1rem; height: 1rem; cursor: pointer;">
-      Report for ATS
-    </label>
-    <button id="exportExcelBtn" class="btn btn-primary" style="display: none; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem; white-space: nowrap;">
+<div class="page-header" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+  <div class="table-actions" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+    <button id="exportExcelBtn" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem; white-space: nowrap;">
       <i class="bi bi-file-earmark-spreadsheet"></i>
       Export to Excel
     </button>
-</div>
-
-<!-- Loading Spinner -->
-<div id="loading-spinner" class="loading-container">
-  <div class="spinner-border text-primary" role="status">
-    <span class="visually-hidden">Loading...</span>
+    <button id="unassignedExpensesBtn" class="btn btn-secondary" disabled style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem; white-space: nowrap;">
+      <i class="bi bi-exclamation-triangle"></i>
+      Unassigned expenses (0)
+    </button>
   </div>
-  <p class="loading-text">Loading expenses report data...</p>
 </div>
 
-<!-- Content Container -->
-<div id="content-container" class="content-container" style="display: none;">
-  <!-- Expenses Report Table -->
-  <div class="table-container">
-    <div class="table-card">
-      <div class="table-header">
-        <div class="table-title">
-        </div>
-      </div>
-      
-      <div class="table-wrapper">
-        <table class="expenses-report-table" id="expensesReportTable">
-          <thead class="sticky-header" id="expensesReportTableHead">
-            <!-- Header will be generated dynamically -->
-          </thead>
-          <tbody id="expensesReportTableBody">
-            <!-- Data will be loaded via JavaScript -->
-          </tbody>
-        </table>
-      </div>
+<div class="table-container">
+  <div class="table-card">
+    <div class="table-wrapper">
+      <table class="invoices-table expenses-report-table" id="expensesReportTable">
+        <thead id="expensesReportHead"></thead>
+        <tbody id="expensesReportBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- Expense Details Modal -->
-<div id="expenseDetailsModal" class="modal-overlay">
-  <div class="modal-container" style="max-width: 1200px;">
+<div id="unassignedExpensesModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container modal-wide">
     <div class="modal-header">
-      <h3 id="modalTitle">Expense Details</h3>
-      <button class="modal-close" id="closeDetailsModalBtn">
+      <h3>Unassigned expenses</h3>
+      <button class="modal-close" id="closeUnassignedModalBtn">
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
-    <div class="modal-body">
-      <div id="expenseDetailsContent">
-        <!-- Details will be loaded dynamically -->
-      </div>
+    <div class="modal-body" id="unassignedExpensesContent"></div>
+  </div>
+</div>
+
+<div id="expenseDetailsModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container modal-wide">
+    <div class="modal-header">
+      <h3 id="expenseDetailsTitle">Details</h3>
+      <button class="modal-close" id="closeExpenseDetailsBtn">
+        <i class="bi bi-x-lg"></i>
+      </button>
     </div>
+    <div class="modal-body" id="expenseDetailsContent"></div>
   </div>
 </div>
 
 <script>
-// Currency conversion rates
-// AED_TO_USD: 3.6735 means 1 USD = 3.6735 AED, so 1 AED = 1/3.6735 USD ≈ 0.2722 USD
-// AED_TO_EUR: 4.3119 means 1 EUR = 4.3119 AED, so 1 AED = 1/4.3119 EUR ≈ 0.2319 EUR
-// EUR conversions always go through AED (not directly to USD)
 const CURRENCY_RATES = {
-  AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
-  AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
+  AED_TO_USD: 3.6735,
+  AED_TO_EUR: 4.3119,
 };
 
-// Expense categories
-const NON_FLIGHT_CATEGORIES = [
-  'CAMO and Management',
-  'Crew',
-  'Disbursement fee',
-  'Insurance charge',
-  'Maintenance',
-  'Subscriptions',
-  'Other charges', // non-flights subtype
-  'FalconCare',
-  'Honeywell'
-];
+const MONTH_COUNT = 6;
 
-const FLIGHT_CATEGORIES = [
+const EXPENSE_CATEGORIES = [
+  'CAMO and Management',
+  'Flight planning',
+  'Subscriptions',
+  'Maintenance',
+  'Insurance charge',
+  'Crew',
+  'FalconCare',
+  'Honeywell',
   'Ground handling',
   'Fuel',
   'Navigation charges',
   'Overfly charges',
   'Catering',
-  'Flight planning',
-  'Other charges' // flights subtype
+  'Other charges',
 ];
 
-// Convert amount to target currency
-// EUR conversions always go through AED (not directly to USD)
+const INCOME_TYPES = {
+  creditNote: 'Credit note',
+  charterProfit: 'Charter profit',
+};
+
+let expenseDetailsMap = {};
+let feeMonthsCache = new Map();
+
+function getCategoryGroup(category) {
+  const group1 = [
+    'CAMO and Management',
+    'Flight planning',
+    'Subscriptions',
+    'Maintenance',
+    'Insurance charge',
+    'Crew',
+  ];
+  const group2 = ['FalconCare', 'Honeywell'];
+  const group3 = [
+    'Ground handling',
+    'Fuel',
+    'Navigation charges',
+    'Overfly charges',
+    'Catering',
+    'Other charges',
+  ];
+
+  if (group1.includes(category)) return 1;
+  if (group2.includes(category)) return 2;
+  if (group3.includes(category)) return 3;
+  return 0;
+}
+
 function convertCurrency(amount, fromCurrency, toCurrency) {
   if (!amount || !fromCurrency || !toCurrency) return 0;
   if (fromCurrency === toCurrency) return amount;
 
-  // Handle EUR conversions - always through AED
   if (fromCurrency === 'EUR') {
-    // EUR → AED: 1 EUR = 4.3119 AED
     const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
-    
     if (toCurrency === 'AED') {
       return amountInAED;
-    } else if (toCurrency === 'USD') {
-      // EUR → AED → USD: 1 AED = 1/3.6735 USD
+    }
+    if (toCurrency === 'USD') {
       return amountInAED / CURRENCY_RATES.AED_TO_USD;
     }
   }
-  
+
   if (toCurrency === 'EUR') {
-    // Convert to AED first, then to EUR
     let amountInAED = 0;
     if (fromCurrency === 'USD') {
-      // USD → AED: 1 USD = 3.6735 AED
       amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
     } else if (fromCurrency === 'AED') {
       amountInAED = amount;
     }
-    // AED → EUR: 1 AED = 1/4.3119 EUR
     return amountInAED / CURRENCY_RATES.AED_TO_EUR;
   }
 
-  // For non-EUR conversions, convert through USD
-  // Convert to USD first
   let amountInUSD = amount;
   if (fromCurrency === 'AED') {
-    // 1 AED = 1/3.6735 USD
     amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
   }
 
-  // Convert from USD to target
   if (toCurrency === 'USD') {
     return amountInUSD;
-  } else if (toCurrency === 'AED') {
-    // 1 USD = 3.6735 AED
+  }
+  if (toCurrency === 'AED') {
     return amountInUSD * CURRENCY_RATES.AED_TO_USD;
   }
 
   return amount;
 }
 
-// Get base expense category (without subtype) - for table display
-function getBaseExpenseCategory(expense) {
+function normalizeExpenseType(expense) {
   const type = (expense.exp_type || '').toLowerCase();
 
-  // Check for non-flight categories
   if (type === 'camo and management' || (type.includes('camo') && type.includes('management'))) {
     return 'CAMO and Management';
   }
-  if (type === 'crew') {
-    return 'Crew';
-  }
-  if (type === 'disbursement fee' || type.includes('disbursement')) {
-    return 'Disbursement fee';
-  }
-  if (type === 'insurance charge' || type.includes('insurance')) {
-    return 'Insurance charge';
-  }
-  if (type === 'maintenance') {
-    return 'Maintenance';
+  if (type.includes('flight planning') || type.includes('flightplanning')) {
+    return 'Flight planning';
   }
   if (type === 'subscriptions' || type.includes('subscription')) {
     return 'Subscriptions';
   }
-  if (type === 'falconcare' || type.includes('falconcare') || type.includes('falcon care')) {
+  if (type === 'maintenance') {
+    return 'Maintenance';
+  }
+  if (type === 'insurance charge' || type.includes('insurance')) {
+    return 'Insurance charge';
+  }
+  if (type === 'crew') {
+    return 'Crew';
+  }
+  if (type === 'falconcare' || type.includes('falcon care')) {
     return 'FalconCare';
   }
   if (type === 'honeywell') {
     return 'Honeywell';
   }
-  
-  // Check for flight categories
-  if (type === 'ground handling' || type.includes('ground handling') || type.includes('groundhandling')) {
+  if (type === 'ground handling' || type.includes('groundhandling')) {
     return 'Ground handling';
   }
   if (type === 'fuel') {
@@ -198,134 +185,510 @@ function getBaseExpenseCategory(expense) {
   if (type === 'catering' || type.includes('catering') || type.includes('food')) {
     return 'Catering';
   }
-  if (type === 'flight planning' || type.includes('flight planning') || type.includes('flightplanning')) {
-    return 'Flight planning';
-  }
-  
-  // Check for Other charges - determine by flight association
   if (type === 'other charges' || type.includes('other charges')) {
     return 'Other charges';
   }
 
-  // Return null if not in any category
   return null;
 }
 
-// Get expense category with subtype - for modal display
-function getExpenseCategory(expense) {
+function isDisbursementFee(expense) {
   const type = (expense.exp_type || '').toLowerCase();
-  const subtype = (expense.exp_subtype || '').trim();
-  const baseCategory = getBaseExpenseCategory(expense);
-  
-  if (baseCategory === null) {
-    return null;
-  }
-  
-  return subtype ? `${baseCategory} - ${subtype}` : baseCategory;
+  return type === 'disbursement fee' || type.includes('disbursement');
 }
 
-// Check if expense is non-flight related
-function isNonFlightExpense(expense) {
-  const baseCategory = getBaseExpenseCategory(expense);
-  
-  // If category is null, expense doesn't belong to any group - skip it
-  if (baseCategory === null) {
-    return null;
+function isIncomeItem(expense) {
+  const expCategory = expense.exp_category || 'expense';
+  const invoiceTypeName = expense.invoice_types?.name || expense.exp_invoice_type || '';
+  const invoiceTypeNameLower = (typeof invoiceTypeName === 'string' ? invoiceTypeName : '').toLowerCase().trim();
+  const expTypeLower = ((expense.exp_type || '') + '').toLowerCase();
+
+  const isCreditNote = (
+    expCategory === 'income_credit_note' ||
+    (invoiceTypeNameLower.includes('credit') && invoiceTypeNameLower.includes('note'))
+  );
+
+  const isCharterProfit = (
+    expCategory === 'income_charter_profit' ||
+    (invoiceTypeNameLower.includes('charter') && invoiceTypeNameLower.includes('profit')) ||
+    (expTypeLower.includes('charter') && expTypeLower.includes('profit'))
+  );
+
+  if (isCreditNote) {
+    return 'creditNote';
   }
-  
-  // Check if base category is in non-flight list
-  return NON_FLIGHT_CATEGORIES.includes(baseCategory);
+  if (isCharterProfit) {
+    return 'charterProfit';
+  }
+  return null;
 }
 
-// Split expense by months - uses period or flight date
-function splitExpenseByMonths(expense) {
+function getMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function splitExpenseByPeriod(expense) {
   const amount = parseFloat(expense.exp_amount) || 0;
   const currency = expense.exp_currency || 'USD';
   const periodStart = expense.exp_period_start;
   const periodEnd = expense.exp_period_end;
-  const flightId = expense.exp_flight;
 
-  // If expense has a flight, use flight date
-  if (flightId && expense.flights && expense.flights.flt_date) {
-    const flightDate = new Date(expense.flights.flt_date);
-    const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
-    return [{ monthKey, amount, currency, expense }];
+  if (!periodStart || !periodEnd) {
+    return [];
   }
 
-  // If expense has a period, split by months
-  // User always enters only month and year (YYYY-MM format), system converts to dates
-  // If start and end are the same month, system sets end as 1st day of next month
-  if (periodStart && periodEnd) {
-    const start = new Date(periodStart);
-    const end = new Date(periodEnd);
-    const months = [];
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+  const months = [];
 
-    // Calculate number of months covered
-    const startYear = start.getFullYear();
-    const startMonth = start.getMonth();
-    const endYear = end.getFullYear();
-    const endMonth = end.getMonth();
-    const endDay = end.getDate();
+  const startYear = start.getFullYear();
+  const startMonth = start.getMonth();
+  const endYear = end.getFullYear();
+  const endMonth = end.getMonth();
+  const endDay = end.getDate();
 
-    // Check if end date is the first day of the next month (indicating single month period)
-    // This happens when user enters the same month for start and end (e.g., both "2024-01")
-    // System automatically sets end as 1st day of next month (e.g., "2024-02-01")
-    const isSingleMonth = (
-      endDay === 1 && 
-      ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
-       (endMonth === 0 && endYear === startYear + 1))
-    );
+  const isSingleMonth = (
+    endDay === 1 &&
+    ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+     (endMonth === 0 && endYear === startYear + 1))
+  );
 
-    // Calculate total number of months (inclusive)
-    // If it's a single month period (end is 1st of next month), count as 1 month
-    let totalMonths;
-    if (isSingleMonth) {
-      // Single month period - entire amount goes to start month
-      totalMonths = 1;
-    } else {
-      // Multiple months period - calculate difference
-      // Formula: (endYear - startYear) * 12 + (endMonth - startMonth) + 1
-      // The +1 is because we count both start and end months inclusively
-      // Example: Jan (0) to Mar (2) = (0-0)*12 + (2-0) + 1 = 3 months
-      totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
-    }
-    
-    // Divide the total amount by the number of months to get monthly portion
-    // Each month gets an equal share of the total expense
-    const monthlyAmount = totalMonths > 0 ? amount / totalMonths : amount;
-
-    // Generate month keys for all months in the period
-    let currentYear = startYear;
-    let currentMonth = startMonth;
-
-    for (let i = 0; i < totalMonths; i++) {
-      const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-      months.push({ monthKey, amount: monthlyAmount, currency, expense });
-
-      currentMonth++;
-      if (currentMonth > 11) {
-        currentMonth = 0;
-        currentYear++;
-      }
-    }
-
-    return months.length > 0 ? months : [{ monthKey: `${startYear}-${String(startMonth + 1).padStart(2, '0')}`, amount, currency, expense }];
+  let totalMonths;
+  if (isSingleMonth) {
+    totalMonths = 1;
+  } else {
+    totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
   }
 
-  // If no period and no flight, use creation date
-  const date = expense.created_at ? new Date(expense.created_at) : new Date();
-  const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-  return [{ monthKey, amount, currency, expense }];
+  const monthlyAmount = totalMonths > 0 ? amount / totalMonths : amount;
+  let currentYear = startYear;
+  let currentMonth = startMonth;
+
+  for (let i = 0; i < totalMonths; i++) {
+    const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    months.push({ monthKey, amount: monthlyAmount, currency });
+    currentMonth++;
+    if (currentMonth > 11) {
+      currentMonth = 0;
+      currentYear++;
+    }
+  }
+
+  return months;
 }
 
-// Global variables for filtering
-let allExpensesData = null;
-let allCategoryGroups = null;
-let expenseDetailsMap = {}; // Map to store expense details: { category_monthKey: [expenses] }
-let showSubcategories = false; // Flag to show subcategories
-let reportForATS = false; // Flag for ATS report filter
+function getExpenseMonths(expense) {
+  const hasPeriod = !!(expense.exp_period_start && expense.exp_period_end);
+  const hasFlight = !!(expense.exp_flight && expense.flights && expense.flights.flt_date);
 
-// Load and process expenses
+  if (hasPeriod && hasFlight) {
+    return { months: [], invalidReason: 'Expense has both period and flight' };
+  }
+
+  if (hasPeriod) {
+    return { months: splitExpenseByPeriod(expense), invalidReason: null };
+  }
+
+  if (hasFlight) {
+    const flightDate = new Date(expense.flights.flt_date);
+    return {
+      months: [{ monthKey: getMonthKey(flightDate), amount: parseFloat(expense.exp_amount) || 0, currency: expense.exp_currency || 'USD' }],
+      invalidReason: null,
+    };
+  }
+
+  return { months: [], invalidReason: 'Expense has no period and no flight' };
+}
+
+function findRelatedDisbursementFees(expense, fees) {
+  const matches = [];
+
+  for (const fee of fees) {
+    if (!isDisbursementFee(fee)) {
+      continue;
+    }
+
+    if (expense.exp_invoice) {
+      if (fee.exp_invoice !== expense.exp_invoice) {
+        continue;
+      }
+    } else if (fee.exp_invoice) {
+      continue;
+    }
+
+    if (expense.exp_flight) {
+      if (fee.exp_flight !== expense.exp_flight) {
+        continue;
+      }
+    } else if (fee.exp_flight !== null) {
+      continue;
+    }
+
+    if (expense.exp_period_start && expense.exp_period_end) {
+      if (fee.exp_period_start !== expense.exp_period_start ||
+          fee.exp_period_end !== expense.exp_period_end) {
+        continue;
+      }
+    } else if (fee.exp_period_start !== null || fee.exp_period_end !== null) {
+      continue;
+    }
+
+    if (expense.exp_place) {
+      if (fee.exp_place !== expense.exp_place) {
+        continue;
+      }
+    } else if (fee.exp_place !== null) {
+      continue;
+    }
+
+    matches.push(fee);
+  }
+
+  return matches;
+}
+
+function normalizeAmountString(value) {
+  const amount = parseFloat(value);
+  if (Number.isNaN(amount)) return null;
+  return amount.toFixed(2);
+}
+
+function getFeeMonthsSet(fee) {
+  if (!feeMonthsCache.has(fee.id)) {
+    return null;
+  }
+  return feeMonthsCache.get(fee.id);
+}
+
+function feeMatchesExpenseComment(fee, expense, monthKey) {
+  const comment = (fee.exp_comments || '').toLowerCase();
+  if (!comment) return false;
+
+  const type = (expense.exp_type || '').toLowerCase();
+  const subtype = (expense.exp_subtype || '').toLowerCase();
+
+  const expenseDescription = (expense.exp_comments || '').toLowerCase().trim();
+  if (expenseDescription && !comment.includes(expenseDescription)) {
+    return false;
+  }
+  if (!expenseDescription) {
+    if (type && !comment.includes(type)) {
+      return false;
+    }
+    if (subtype && !comment.includes(subtype)) {
+      return false;
+    }
+  }
+
+  const amountString = normalizeAmountString(expense.exp_amount);
+  const currency = (expense.exp_currency || '').toLowerCase();
+  if (amountString && currency) {
+    const amountToken = `${amountString} ${currency}`;
+    if (!comment.includes(amountToken)) {
+      return false;
+    }
+  }
+
+  const feeMonths = getFeeMonthsSet(fee);
+  if (!feeMonths || !feeMonths.has(monthKey)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getLastMonths(count) {
+  const now = new Date();
+  const months = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(getMonthKey(date));
+  }
+  return months;
+}
+
+function initTotals(categories, months) {
+  const totals = {};
+  categories.forEach(category => {
+    totals[category] = {};
+    months.forEach(month => {
+      totals[category][month] = 0;
+    });
+  });
+  return totals;
+}
+
+function formatAmount(value) {
+  const absValue = Math.abs(value);
+  const formatted = absValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${value < 0 ? '-' : ''}$${formatted}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDisplayDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function buildExpenseSummary(expense) {
+  const invoiceId = expense.exp_invoice || null;
+  const expenseId = expense.id || null;
+  const invoiceNumber = expense.invoices?.inv_number || null;
+  const invoiceLink = invoiceId
+    ? (expenseId ? `/invoices/${invoiceId}?expense=${expenseId}` : `/invoices/${invoiceId}`)
+    : null;
+
+  return [
+    { label: 'ID', value: expense.id },
+    { label: 'Type', value: expense.exp_type },
+    { label: 'Subtype', value: expense.exp_subtype },
+    { label: 'Amount', value: expense.exp_amount },
+    { label: 'Currency', value: expense.exp_currency },
+    { label: 'Invoice ID', value: expense.exp_invoice },
+    { label: 'Invoice', value: invoiceNumber, link: invoiceLink },
+    { label: 'Period Start', value: expense.exp_period_start },
+    { label: 'Period End', value: expense.exp_period_end },
+    { label: 'Flight ID', value: expense.exp_flight },
+    { label: 'Flight Date', value: expense.flights?.flt_date },
+    { label: 'Comments', value: expense.exp_comments },
+  ];
+}
+
+function renderUnassignedExpenses(list) {
+  const content = document.getElementById('unassignedExpensesContent');
+  const btn = document.getElementById('unassignedExpensesBtn');
+  const count = list.length;
+
+  if (btn) {
+    btn.disabled = count === 0;
+    btn.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Unassigned expenses (${count})`;
+  }
+
+  if (!content) {
+    return;
+  }
+
+  if (count === 0) {
+    content.innerHTML = '<div class="empty-state">No unassigned expenses.</div>';
+    return;
+  }
+
+  const rows = list.map(item => {
+    const summaryRows = buildExpenseSummary(item.expense)
+      .filter(field => field.value !== undefined && field.value !== null && field.value !== '')
+      .map(field => {
+        const value = escapeHtml(field.value);
+        const content = field.link
+          ? `<a class="summary-link" href="${escapeHtml(field.link)}">${value}</a>`
+          : value;
+
+        return `
+          <div class="summary-row">
+            <span class="summary-label">${escapeHtml(field.label)}:</span>
+            <span class="summary-value">${content}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    return `
+      <tr>
+        <td class="reason-col">${escapeHtml(item.reason)}</td>
+        <td>
+          <div class="summary-block">
+            ${summaryRows || '<span class="summary-empty">No data</span>'}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  content.innerHTML = `
+    <table class="invoices-table unassigned-table">
+      <thead>
+        <tr>
+          <th class="reason-col">Reason</th>
+          <th>Expense data</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderTable(months, categoryTotals, incomeTotals) {
+  const thead = document.getElementById('expensesReportHead');
+  const tbody = document.getElementById('expensesReportBody');
+
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+
+  const headerRow = document.createElement('tr');
+  const categoryHeader = document.createElement('th');
+  categoryHeader.textContent = 'Category';
+  headerRow.appendChild(categoryHeader);
+
+  months.forEach(monthKey => {
+    const [year, month] = monthKey.split('-');
+    const monthName = new Date(parseInt(year), parseInt(month) - 1)
+      .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const th = document.createElement('th');
+    th.textContent = monthName;
+    headerRow.appendChild(th);
+  });
+
+  thead.appendChild(headerRow);
+
+  EXPENSE_CATEGORIES.forEach(category => {
+    const row = document.createElement('tr');
+    const group = getCategoryGroup(category);
+    row.classList.add(`category-group-${group}`);
+    const label = document.createElement('td');
+    label.textContent = category;
+    row.appendChild(label);
+
+    months.forEach(monthKey => {
+      const value = categoryTotals[category][monthKey] || 0;
+      const cell = document.createElement('td');
+      cell.textContent = formatAmount(value);
+      cell.className = 'amount-cell';
+      cell.dataset.category = category;
+      cell.dataset.month = monthKey;
+      cell.dataset.rowType = 'expense';
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
+  });
+
+  Object.keys(INCOME_TYPES).forEach(typeKey => {
+    const row = document.createElement('tr');
+    row.className = 'income-row';
+    const label = document.createElement('td');
+    label.textContent = INCOME_TYPES[typeKey];
+    row.appendChild(label);
+
+    months.forEach(monthKey => {
+      const value = incomeTotals[typeKey][monthKey] || 0;
+      const cell = document.createElement('td');
+      cell.textContent = formatAmount(value);
+      cell.className = 'amount-cell income-cell';
+      cell.dataset.category = INCOME_TYPES[typeKey];
+      cell.dataset.month = monthKey;
+      cell.dataset.rowType = 'income';
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
+  });
+}
+
+function getDetailsKey(category, monthKey, rowType) {
+  return `${rowType}:${category}:${monthKey}`;
+}
+
+function buildInvoiceLink(expense) {
+  const invoiceId = expense.exp_invoice || null;
+  const expenseId = expense.id || null;
+  if (!invoiceId) {
+    return null;
+  }
+  return expenseId ? `/invoices/${invoiceId}?expense=${expenseId}` : `/invoices/${invoiceId}`;
+}
+
+function renderExpenseDetails(category, monthKey, rowType) {
+  const modal = document.getElementById('expenseDetailsModal');
+  const title = document.getElementById('expenseDetailsTitle');
+  const content = document.getElementById('expenseDetailsContent');
+
+  if (!modal || !title || !content) {
+    return;
+  }
+
+  const detailsKey = getDetailsKey(category, monthKey, rowType);
+  const rows = expenseDetailsMap[detailsKey] || [];
+  const [year, month] = monthKey.split('-');
+  const monthName = new Date(parseInt(year), parseInt(month) - 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  title.textContent = `${category} - ${monthName}`;
+
+  if (rows.length === 0) {
+    content.innerHTML = '<div class="empty-state">No expenses for this period.</div>';
+  } else {
+    let totalAmountUSD = 0;
+    let totalFeeUSD = 0;
+    let totalWithFeeUSD = 0;
+
+    const bodyRows = rows.map(item => {
+      totalAmountUSD += item.originalAmountUSD || 0;
+      totalFeeUSD += item.feeUSD || 0;
+      totalWithFeeUSD += item.totalUSD || 0;
+
+      const invoiceLink = item.invoiceLink
+        ? `<a class="summary-link" href="${escapeHtml(item.invoiceLink)}">${escapeHtml(item.invoiceNumber || item.invoiceId || 'Invoice')}</a>`
+        : escapeHtml(item.invoiceNumber || item.invoiceId || '—');
+
+      return `
+        <tr>
+          <td>${escapeHtml(item.type || '—')}</td>
+          <td>${escapeHtml(item.subtype || '—')}</td>
+          <td>${escapeHtml(item.flight || '—')}</td>
+          <td>${escapeHtml(item.place || '—')}</td>
+          <td>${invoiceLink}</td>
+          <td class="amount-cell">${formatAmount(item.originalAmountUSD)}</td>
+          <td class="amount-cell">${formatAmount(item.feeUSD)}</td>
+          <td class="amount-cell">${formatAmount(item.totalUSD)}</td>
+          <td>${escapeHtml(item.periodLabel || '—')}</td>
+          <td>${escapeHtml(item.comments || '—')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    content.innerHTML = `
+      <table class="invoices-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Subtype</th>
+            <th>Flight</th>
+            <th>Place</th>
+            <th>Invoice</th>
+            <th>USD Amount</th>
+            <th>Disbursement fee</th>
+            <th>Total USD</th>
+            <th>Period/Flight</th>
+            <th>Comments</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+          <tr class="details-total-row">
+            <td colspan="5">Total</td>
+            <td class="amount-cell">${formatAmount(totalAmountUSD)}</td>
+            <td class="amount-cell">${formatAmount(totalFeeUSD)}</td>
+            <td class="amount-cell">${formatAmount(totalWithFeeUSD)}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
 async function loadExpensesReport() {
   try {
     const response = await apiRequest('/api/expenses');
@@ -335,1274 +698,220 @@ async function loadExpensesReport() {
       throw new Error('Invalid expenses data format');
     }
 
-    // Store all expenses
-    allExpensesData = expenses;
+    const months = getLastMonths(MONTH_COUNT);
+    const categoryTotals = initTotals(EXPENSE_CATEGORIES, months);
+    const incomeTotals = initTotals(Object.keys(INCOME_TYPES), months);
+    const unassigned = [];
+    const disbursementFees = expenses.filter(isDisbursementFee);
+    const noInvoiceFees = disbursementFees.filter(fee => !fee.exp_invoice);
+    const usedFeeIds = new Set();
+    const feesByInvoice = {};
+    expenseDetailsMap = {};
+    feeMonthsCache = new Map();
 
-    // Process expenses (now async)
-    await processExpensesData(expenses);
-
-    // Hide loading spinner and show content
-    document.getElementById('loading-spinner').style.display = 'none';
-    document.getElementById('content-container').style.display = 'block';
-    
-    // Show export button
-    const exportBtn = document.getElementById('exportExcelBtn');
-    if (exportBtn) {
-      exportBtn.style.display = 'inline-flex';
-    }
-    
-    // Update table header position after content is shown
-    setTimeout(updateTableHeaderPosition, 100);
-  } catch (error) {
-    console.error('Error loading expenses report:', error);
-    document.getElementById('loading-spinner').innerHTML = `
-      <div style="text-align: center; padding: 2rem; color: #6b7280;">
-        <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
-        Failed to load expenses report. Please try again.
-        <br><small>Error: ${error.message}</small>
-      </div>
-    `;
-  }
-}
-
-// Check if expense period starts before October 2025
-function isPeriodBeforeOctober2025(expense) {
-  if (!expense.exp_period_start) {
-    return false; // If no period, don't filter it out
-  }
-  const periodStart = new Date(expense.exp_period_start);
-  const october2025 = new Date('2025-10-01');
-  return periodStart < october2025;
-}
-
-// Check if expense is a Disbursement fee
-function isDisbursementFee(expense) {
-  const baseCategory = getBaseExpenseCategory(expense);
-  return baseCategory === 'Disbursement fee';
-}
-
-// Find related Disbursement fee expenses for a given expense
-function findRelatedDisbursementFees(expense, allExpenses) {
-  const disbursementFees = [];
-  
-  for (const exp of allExpenses) {
-    if (!isDisbursementFee(exp)) {
-      continue;
-    }
-    
-    // Match by invoice
-    if (expense.exp_invoice && exp.exp_invoice !== expense.exp_invoice) {
-      continue;
-    }
-    if (!expense.exp_invoice && exp.exp_invoice) {
-      continue;
-    }
-    
-    // Match by flight if exists
-    if (expense.exp_flight) {
-      if (exp.exp_flight !== expense.exp_flight) {
-        continue;
-      }
-    } else {
-      if (exp.exp_flight !== null) {
-        continue;
-      }
-    }
-    
-    // Match by period if exists
-    if (expense.exp_period_start && expense.exp_period_end) {
-      if (exp.exp_period_start !== expense.exp_period_start || 
-          exp.exp_period_end !== expense.exp_period_end) {
-        continue;
-      }
-    } else {
-      if (exp.exp_period_start !== null || exp.exp_period_end !== null) {
-        continue;
-      }
-    }
-    
-    // Match by place if exists
-    if (expense.exp_place) {
-      if (exp.exp_place !== expense.exp_place) {
-        continue;
-      }
-    } else {
-      if (exp.exp_place !== null) {
-        continue;
-      }
-    }
-    
-    // This disbursement fee matches the expense
-    disbursementFees.push(exp);
-  }
-  
-  return disbursementFees;
-}
-
-// Process expenses data
-async function processExpensesData(expenses) {
-  // Reset expense details map
-  expenseDetailsMap = {};
-  
-  // Log flags state for debugging
-  console.log('[processExpensesData] Flags:', {
-    showSubcategories: showSubcategories,
-    reportForATS: reportForATS,
-    totalExpenses: expenses.length
-  });
-  
-  // If reportForATS is enabled, filter out expenses with period starting before October 2025
-  // and their related Disbursement fees
-  let filteredExpenses = expenses;
-  if (reportForATS) {
-    const excludedExpenseIds = new Set();
-    
-    // First pass: identify expenses to exclude
-    for (const expense of expenses) {
-      if (isPeriodBeforeOctober2025(expense)) {
-        excludedExpenseIds.add(expense.id);
-      }
-    }
-    
-    // Second pass: identify related Disbursement fees to exclude
-    for (const expense of expenses) {
-      if (excludedExpenseIds.has(expense.id)) {
-        const relatedFees = findRelatedDisbursementFees(expense, expenses);
-        for (const fee of relatedFees) {
-          excludedExpenseIds.add(fee.id);
-        }
-      }
-    }
-    
-    // Filter out excluded expenses
-    filteredExpenses = expenses.filter(exp => !excludedExpenseIds.has(exp.id));
-    console.log('[processExpensesData] ATS filter applied:', {
-      originalCount: expenses.length,
-      excludedCount: excludedExpenseIds.size,
-      filteredCount: filteredExpenses.length
-    });
-  }
-  
-  // Process expenses - filter only those in specified groups
-  const expensesByMonth = {};
-  const categoryGroups = {
-    nonFlight: {},
-    flight: {}
-  };
-  
-  // Income items (Credit note and Charter profit)
-  const incomeItems = {
-    creditNote: {},
-    charterProfit: {}
-  };
-  
-  // Process expenses - separate income items from regular expenses
-  // Check both exp_category, exp_invoice_type, and exp_type for income items
-  for (const expense of filteredExpenses) {
-    // Check if this is an income item
-    // First check exp_category (if set)
-    const expCategory = expense.exp_category || 'expense';
-    
-    // Also check exp_invoice_type (can be string or object with name)
-    const invoiceTypeName = expense.invoice_types?.name || expense.exp_invoice_type || '';
-    const invoiceTypeNameLower = (typeof invoiceTypeName === 'string' ? invoiceTypeName : '').toLowerCase().trim();
-    
-    // Also check exp_type for charter profit identification
-    const expTypeLower = ((expense.exp_type || '') + '').toLowerCase();
-    
-    const isCreditNote = (
-      expCategory === 'income_credit_note' ||
-      invoiceTypeNameLower.includes('credit') && invoiceTypeNameLower.includes('note')
-    );
-    
-    const isCharterProfit = (
-      expCategory === 'income_charter_profit' ||
-      (invoiceTypeNameLower.includes('charter') && invoiceTypeNameLower.includes('profit')) ||
-      (expTypeLower.includes('charter') && expTypeLower.includes('profit'))
-    );
-    
-    if (isCreditNote || isCharterProfit) {
-      // Process as income item
-      const incomeType = isCreditNote ? 'creditNote' : 'charterProfit';
-      
-      // For charter profit: if attached to a flight, use flight date; otherwise use invoice date
-      // Period is ALWAYS ignored for charter profit
-      let months;
-      if (isCharterProfit) {
-        const amount = parseFloat(expense.exp_amount) || 0;
-        const currency = expense.exp_currency || 'USD';
-        const flightId = expense.exp_flight;
-        
-        // If charter profit is attached to a flight, use flight date
-        if (flightId && expense.flights && expense.flights.flt_date) {
-          const flightDate = new Date(expense.flights.flt_date);
-          const monthKey = `${flightDate.getFullYear()}-${String(flightDate.getMonth() + 1).padStart(2, '0')}`;
-          months = [{ monthKey, amount, currency, expense }];
-        }
-        // If not attached to flight, use invoice date
-        else if (expense.invoices && expense.invoices.inv_date) {
-          const invoiceDate = new Date(expense.invoices.inv_date);
-          const monthKey = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`;
-          months = [{ monthKey, amount, currency, expense }];
-        }
-        // Fallback: if no flight and no invoice date, use creation date (should not happen in practice)
-        else {
-          const date = expense.created_at ? new Date(expense.created_at) : new Date();
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          months = [{ monthKey, amount, currency, expense }];
-        }
+    disbursementFees.forEach(fee => {
+      const { months: feeMonths, invalidReason } = getExpenseMonths(fee);
+      if (invalidReason) {
+        unassigned.push({ reason: invalidReason, expense: fee });
+        feeMonthsCache.set(fee.id, null);
       } else {
-        // For credit notes, use regular splitExpenseByMonths
-        months = splitExpenseByMonths(expense);
+        feeMonthsCache.set(fee.id, new Set(feeMonths.map(item => item.monthKey)));
       }
-      
-      for (const { monthKey, amount, currency } of months) {
-        if (!expensesByMonth[monthKey]) {
-          expensesByMonth[monthKey] = {};
+
+      if (!fee.exp_invoice) {
+        return;
+      }
+      if (!feesByInvoice[fee.exp_invoice]) {
+        feesByInvoice[fee.exp_invoice] = [];
+      }
+      feesByInvoice[fee.exp_invoice].push(fee);
+    });
+
+    for (const expense of expenses) {
+      const incomeType = isIncomeItem(expense);
+      if (isDisbursementFee(expense)) {
+        continue;
+      }
+
+      if (incomeType) {
+        const { months: incomeMonths, invalidReason } = getExpenseMonths(expense);
+
+        if (invalidReason) {
+          unassigned.push({ reason: invalidReason, expense });
+          continue;
         }
-        
-        if (!incomeItems[incomeType][monthKey]) {
-          incomeItems[incomeType][monthKey] = { USD: 0, AED: 0 };
+
+        if (!incomeMonths.length) {
+          unassigned.push({ reason: 'Expense has no valid months', expense });
+          continue;
         }
-        
-        // Store expense details
-        const detailKey = `${incomeType}_${monthKey}`;
+
+        const incomeMonthsInRange = incomeMonths.filter(({ monthKey }) => (monthKey in incomeTotals[incomeType]));
+        if (incomeMonthsInRange.length === 0) {
+          unassigned.push({ reason: 'Expense is outside visible range', expense });
+          continue;
+        }
+
+        incomeMonthsInRange.forEach(({ monthKey, amount, currency }) => {
+          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+          incomeTotals[incomeType][monthKey] -= usdAmount;
+
+          const detailKey = getDetailsKey(INCOME_TYPES[incomeType], monthKey, 'income');
+          if (!expenseDetailsMap[detailKey]) {
+            expenseDetailsMap[detailKey] = [];
+          }
+
+          const periodLabel = expense.exp_period_start && expense.exp_period_end
+            ? `${formatDisplayDate(expense.exp_period_start)} - ${formatDisplayDate(expense.exp_period_end)}`
+            : formatDisplayDate(expense.flights?.flt_date);
+
+          expenseDetailsMap[detailKey].push({
+            type: expense.exp_type,
+            subtype: expense.exp_subtype,
+            flight: expense.flights?.flt_number || expense.exp_flight,
+            place: expense.exp_place,
+            invoiceId: expense.exp_invoice,
+            invoiceNumber: expense.invoices?.inv_number,
+            invoiceLink: buildInvoiceLink(expense),
+            originalAmountUSD: -usdAmount,
+            feeUSD: 0,
+            totalUSD: -usdAmount,
+            periodLabel: periodLabel,
+            comments: expense.exp_comments,
+          });
+        });
+        continue;
+      }
+
+      const { months: expenseMonths, invalidReason } = getExpenseMonths(expense);
+
+      if (invalidReason) {
+        unassigned.push({ reason: invalidReason, expense });
+        continue;
+      }
+
+      if (!expenseMonths.length) {
+        unassigned.push({ reason: 'Expense has no valid months', expense });
+        continue;
+      }
+
+      const category = normalizeExpenseType(expense);
+      if (!category || !categoryTotals[category]) {
+        unassigned.push({ reason: 'Expense has unknown category', expense });
+        continue;
+      }
+
+      const expenseMonthsInRange = expenseMonths.filter(({ monthKey }) => (monthKey in categoryTotals[category]));
+      if (expenseMonthsInRange.length === 0) {
+        unassigned.push({ reason: 'Expense is outside visible range', expense });
+        continue;
+      }
+
+      if (expense.exp_invoice) {
+        const invoiceFees = feesByInvoice[expense.exp_invoice] || [];
+        expenseMonthsInRange.forEach(({ monthKey, amount, currency }) => {
+          const relatedFees = invoiceFees.filter(
+            fee => !usedFeeIds.has(fee.id) && feeMatchesExpenseComment(fee, expense, monthKey)
+          );
+          let feeTotalUSD = 0;
+          relatedFees.forEach(fee => {
+            usedFeeIds.add(fee.id);
+            const feeAmount = parseFloat(fee.exp_amount) || 0;
+            feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD');
+          });
+
+          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+          categoryTotals[category][monthKey] += usdAmount + feeTotalUSD;
+
+          const detailKey = getDetailsKey(category, monthKey, 'expense');
+          if (!expenseDetailsMap[detailKey]) {
+            expenseDetailsMap[detailKey] = [];
+          }
+
+          const periodLabel = expense.exp_period_start && expense.exp_period_end
+            ? `${formatDisplayDate(expense.exp_period_start)} - ${formatDisplayDate(expense.exp_period_end)}`
+            : formatDisplayDate(expense.flights?.flt_date);
+
+          expenseDetailsMap[detailKey].push({
+            type: expense.exp_type,
+            subtype: expense.exp_subtype,
+            flight: expense.flights?.flt_number || expense.exp_flight,
+            place: expense.exp_place,
+            invoiceId: expense.exp_invoice,
+            invoiceNumber: expense.invoices?.inv_number,
+            invoiceLink: buildInvoiceLink(expense),
+            originalAmountUSD: usdAmount,
+            feeUSD: feeTotalUSD,
+            totalUSD: usdAmount + feeTotalUSD,
+            periodLabel: periodLabel,
+            comments: expense.exp_comments,
+          });
+        });
+        continue;
+      }
+
+      const relatedFees = findRelatedDisbursementFees(expense, noInvoiceFees);
+      let feeTotalUSD = 0;
+      relatedFees.forEach(fee => {
+        if (usedFeeIds.has(fee.id)) {
+          return;
+        }
+        usedFeeIds.add(fee.id);
+        const feeAmount = parseFloat(fee.exp_amount) || 0;
+        feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD');
+      });
+
+      const feePerMonth = expenseMonthsInRange.length ? feeTotalUSD / expenseMonthsInRange.length : 0;
+
+      expenseMonthsInRange.forEach(({ monthKey, amount, currency }) => {
+        const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+        categoryTotals[category][monthKey] += usdAmount + feePerMonth;
+
+        const detailKey = getDetailsKey(category, monthKey, 'expense');
         if (!expenseDetailsMap[detailKey]) {
           expenseDetailsMap[detailKey] = [];
         }
-        const totalMonths = months.length || 1;
-        const originalTotalAmount = parseFloat(expense.exp_amount) || 0;
-        const monthlyAmount = totalMonths > 0 ? originalTotalAmount / totalMonths : originalTotalAmount;
-        
+
+        const periodLabel = expense.exp_period_start && expense.exp_period_end
+          ? `${formatDisplayDate(expense.exp_period_start)} - ${formatDisplayDate(expense.exp_period_end)}`
+          : formatDisplayDate(expense.flights?.flt_date);
+
         expenseDetailsMap[detailKey].push({
-          expense: expense,
-          amount: originalTotalAmount,
-          currency: currency,
-          monthlyAmount: monthlyAmount,
-          totalMonths: totalMonths
+          type: expense.exp_type,
+          subtype: expense.exp_subtype,
+          flight: expense.flights?.flt_number || expense.exp_flight,
+          place: expense.exp_place,
+          invoiceId: expense.exp_invoice,
+          invoiceNumber: expense.invoices?.inv_number,
+          invoiceLink: buildInvoiceLink(expense),
+          originalAmountUSD: usdAmount,
+          feeUSD: feePerMonth,
+          totalUSD: usdAmount + feePerMonth,
+          periodLabel: periodLabel,
+          comments: expense.exp_comments,
         });
-        
-        // Add amount in original currency and convert to fill both columns
-        if (currency === 'USD') {
-          incomeItems[incomeType][monthKey].USD += amount;
-          const aedAmount = convertCurrency(amount, 'USD', 'AED');
-          incomeItems[incomeType][monthKey].AED += aedAmount;
-        } else if (currency === 'AED') {
-          incomeItems[incomeType][monthKey].AED += amount;
-          const usdAmount = convertCurrency(amount, 'AED', 'USD');
-          incomeItems[incomeType][monthKey].USD += usdAmount;
-        } else if (currency === 'EUR') {
-          const usdAmount = convertCurrency(amount, 'EUR', 'USD');
-          const aedAmount = convertCurrency(amount, 'EUR', 'AED');
-          incomeItems[incomeType][monthKey].USD += usdAmount;
-          incomeItems[incomeType][monthKey].AED += aedAmount;
-        } else {
-          const usdAmount = convertCurrency(amount, currency, 'USD');
-          const aedAmount = convertCurrency(amount, currency, 'AED');
-          incomeItems[incomeType][monthKey].USD += usdAmount;
-          incomeItems[incomeType][monthKey].AED += aedAmount;
-        }
-      }
-      continue; // Skip regular expense processing for income items
-      // Income items (Credit note, Charter profit) are NOT included in Total expenses
-    }
-    
-    // Process regular expenses (NOT income items)
-    const baseCategory = getBaseExpenseCategory(expense);
-    
-    // Skip expenses that don't belong to any category
-    if (baseCategory === null) {
-      continue;
-    }
-
-    // Determine which category to use based on showSubcategories flag
-    // IMPORTANT: showSubcategories must be checked here, not just in rendering
-    const displayCategory = showSubcategories ? getExpenseCategory(expense) : baseCategory;
-    
-    // If getExpenseCategory returned null, use baseCategory
-    const finalCategory = displayCategory || baseCategory;
-    
-    // Debug: log category determination when both flags are enabled
-    if (showSubcategories && reportForATS && Math.random() < 0.01) { // Log 1% of expenses to avoid spam
-      console.log('[Category Determination] Sample:', {
-        id: expense.id,
-        baseCategory: baseCategory,
-        displayCategory: displayCategory,
-        finalCategory: finalCategory,
-        exp_type: expense.exp_type,
-        exp_subtype: expense.exp_subtype,
-        showSubcategories: showSubcategories,
-        reportForATS: reportForATS
       });
     }
 
-    const isNonFlight = isNonFlightExpense(expense);
-    const group = isNonFlight ? categoryGroups.nonFlight : categoryGroups.flight;
-
-    if (!group[finalCategory]) {
-      group[finalCategory] = {};
-    }
-
-    const months = splitExpenseByMonths(expense);
-
-    for (const { monthKey, amount, currency } of months) {
-      if (!expensesByMonth[monthKey]) {
-        expensesByMonth[monthKey] = {};
+    disbursementFees.forEach(fee => {
+      if (!usedFeeIds.has(fee.id)) {
+        unassigned.push({ reason: 'Disbursement fee has no matching expense', expense: fee });
       }
-
-      if (!group[finalCategory][monthKey]) {
-        group[finalCategory][monthKey] = { USD: 0, AED: 0 };
-      }
-
-      // Store expense details for this cell (using final category for table)
-      const detailKey = `${finalCategory}_${monthKey}`;
-      if (!expenseDetailsMap[detailKey]) {
-        expenseDetailsMap[detailKey] = [];
-      }
-      // Calculate monthly amount (already divided in splitExpenseByMonths)
-      // The amount here is already the monthly portion for this specific month
-      const totalMonths = months.length || 1;
-      const originalTotalAmount = parseFloat(expense.exp_amount) || 0;
-      // Calculate monthly amount - this is the portion for each month
-      const monthlyAmount = totalMonths > 0 ? originalTotalAmount / totalMonths : originalTotalAmount;
-      
-      expenseDetailsMap[detailKey].push({
-        expense: expense,
-        amount: originalTotalAmount, // Full amount of the expense
-        currency: currency,
-        monthlyAmount: monthlyAmount, // Monthly portion for this month
-        totalMonths: totalMonths // Total number of months the expense spans
-      });
-      
-      // Add amount in original currency and convert to fill both columns
-      if (currency === 'USD') {
-        group[finalCategory][monthKey].USD += amount;
-        // Convert USD to AED
-        const aedAmount = convertCurrency(amount, 'USD', 'AED');
-        group[finalCategory][monthKey].AED += aedAmount;
-      } else if (currency === 'AED') {
-        group[finalCategory][monthKey].AED += amount;
-        // Convert AED to USD
-        const usdAmount = convertCurrency(amount, 'AED', 'USD');
-        group[finalCategory][monthKey].USD += usdAmount;
-      } else if (currency === 'EUR') {
-        // Convert EUR to USD and AED
-        const usdAmount = convertCurrency(amount, 'EUR', 'USD');
-        const aedAmount = convertCurrency(amount, 'EUR', 'AED');
-        group[finalCategory][monthKey].USD += usdAmount;
-        group[finalCategory][monthKey].AED += aedAmount;
-      } else {
-        // Unknown currency, try to convert to USD and AED
-        const usdAmount = convertCurrency(amount, currency, 'USD');
-        const aedAmount = convertCurrency(amount, currency, 'AED');
-        group[finalCategory][monthKey].USD += usdAmount;
-        group[finalCategory][monthKey].AED += aedAmount;
-      }
-    }
-  }
-
-  // Store processed data
-  allCategoryGroups = categoryGroups;
-  window.incomeItems = incomeItems; // Store income items globally for rendering
-
-  // Log category groups summary when both flags are enabled
-  if (showSubcategories && reportForATS) {
-    const nonFlightCategories = Object.keys(categoryGroups.nonFlight);
-    const flightCategories = Object.keys(categoryGroups.flight);
-    const totalCategories = nonFlightCategories.length + flightCategories.length;
-    const hasSubcategories = nonFlightCategories.some(cat => cat.includes(' - ')) || flightCategories.some(cat => cat.includes(' - '));
-    const subcategoryCount = [...nonFlightCategories, ...flightCategories].filter(cat => cat.includes(' - ')).length;
-    console.log('[processExpensesData] Category groups summary:', {
-      showSubcategories: showSubcategories,
-      reportForATS: reportForATS,
-      totalCategories: totalCategories,
-      nonFlightCategories: nonFlightCategories.length,
-      flightCategories: flightCategories.length,
-      hasSubcategories: hasSubcategories,
-      subcategoryCount: subcategoryCount,
-      allNonFlightCategories: nonFlightCategories,
-      allFlightCategories: flightCategories
-    });
-  }
-
-  // Get all months from expenses and income items, then filter by year
-  const allMonthsSet = new Set(Object.keys(expensesByMonth));
-  
-  // Add months from income items
-  Object.keys(incomeItems.creditNote).forEach(monthKey => allMonthsSet.add(monthKey));
-  Object.keys(incomeItems.charterProfit).forEach(monthKey => allMonthsSet.add(monthKey));
-  
-  const allMonths = Array.from(allMonthsSet).sort();
-  const filteredMonths = filterMonthsByYear(allMonths);
-
-  // Render table
-  renderExpensesReportTable(categoryGroups, filteredMonths, incomeItems);
-}
-
-// Filter months by selected year
-function filterMonthsByYear(months) {
-  const yearFilter = document.getElementById('yearFilter')?.value || 'current';
-  const currentYear = new Date().getFullYear();
-
-  if (yearFilter === 'current') {
-    return months.filter(monthKey => {
-      const year = parseInt(monthKey.split('-')[0]);
-      return year === currentYear;
-    });
-  } else if (yearFilter === 'all') {
-    return months;
-  } else {
-    // Specific year selected
-    const selectedYear = parseInt(yearFilter);
-    return months.filter(monthKey => {
-      const year = parseInt(monthKey.split('-')[0]);
-      return year === selectedYear;
-    });
-  }
-}
-
-// Update year filter options
-function updateYearFilterOptions(months) {
-  const yearFilter = document.getElementById('yearFilter');
-  if (!yearFilter) return;
-
-  // Get all unique years from months
-  const years = [...new Set(months.map(monthKey => parseInt(monthKey.split('-')[0])))].sort((a, b) => b - a);
-  
-  // Clear existing options except first two
-  const currentValue = yearFilter.value;
-  yearFilter.innerHTML = '<option value="current">Current Year</option><option value="all">All Years</option>';
-  
-  // Add specific year options
-  years.forEach(year => {
-    const option = document.createElement('option');
-    option.value = year.toString();
-    option.textContent = year.toString();
-    yearFilter.appendChild(option);
-  });
-
-  // Restore previous selection if it still exists
-  if (currentValue && Array.from(yearFilter.options).some(opt => opt.value === currentValue)) {
-    yearFilter.value = currentValue;
-  }
-}
-
-// Category groups and sorting order
-const CATEGORY_GROUPS = {
-  group1: ['CAMO and Management', 'Flight planning', 'Subscriptions', 'Maintenance', 'Insurance charge', 'Crew'],
-  group2: ['FalconCare', 'Honeywell'],
-  group3: ['Ground handling', 'Fuel', 'Navigation charges', 'Overfly charges', 'Catering', 'Other charges', 'Disbursement fee']
-};
-
-// Get group number for a category (1, 2, or 3)
-function getCategoryGroup(category) {
-  if (CATEGORY_GROUPS.group1.includes(category)) return 1;
-  if (CATEGORY_GROUPS.group2.includes(category)) return 2;
-  if (CATEGORY_GROUPS.group3.includes(category)) return 3;
-  return 0; // Unknown category
-}
-
-// Get sort order for a category
-function getCategorySortOrder(category) {
-  const allCategories = [...CATEGORY_GROUPS.group1, ...CATEGORY_GROUPS.group2, ...CATEGORY_GROUPS.group3];
-  const index = allCategories.indexOf(category);
-  return index >= 0 ? index : 999; // Unknown categories go to the end
-}
-
-// Get pastel background color for a group
-function getGroupBackgroundColor(group) {
-  switch(group) {
-    case 1: return 'hsl(200, 50%, 96%)'; // Light blue pastel
-    case 2: return 'hsl(280, 40%, 96%)'; // Light purple pastel
-    case 3: return 'hsl(120, 30%, 97%)'; // Light green pastel
-    default: return 'white';
-  }
-}
-
-// Render expenses report table
-function renderExpensesReportTable(categoryGroups, months, incomeItems = { creditNote: {}, charterProfit: {} }) {
-  
-  // Log rendering info when both flags are enabled
-  if (showSubcategories && reportForATS) {
-    const nonFlightCategories = Object.keys(categoryGroups.nonFlight || {});
-    const flightCategories = Object.keys(categoryGroups.flight || {});
-    const totalCategories = nonFlightCategories.length + flightCategories.length;
-    const hasSubcategories = nonFlightCategories.some(cat => cat.includes(' - ')) || flightCategories.some(cat => cat.includes(' - '));
-    const subcategoryCount = [...nonFlightCategories, ...flightCategories].filter(cat => cat.includes(' - ')).length;
-    console.log('[renderExpensesReportTable] Rendering with:', {
-      showSubcategories: showSubcategories,
-      reportForATS: reportForATS,
-      totalCategories: totalCategories,
-      nonFlightCategories: nonFlightCategories.length,
-      flightCategories: flightCategories.length,
-      months: months.length,
-      hasSubcategories: hasSubcategories,
-      subcategoryCount: subcategoryCount,
-      allNonFlightCategories: nonFlightCategories,
-      allFlightCategories: flightCategories
-    });
-  }
-  
-  // Update year filter options
-  if (allExpensesData && allCategoryGroups) {
-    // Get all months from category groups and income items
-    const allMonthsSet = new Set();
-    Object.values(allCategoryGroups.nonFlight).forEach(category => {
-      Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
-    });
-    Object.values(allCategoryGroups.flight).forEach(category => {
-      Object.keys(category).forEach(monthKey => allMonthsSet.add(monthKey));
-    });
-    // Add months from income items
-    if (incomeItems.creditNote) {
-      Object.keys(incomeItems.creditNote).forEach(monthKey => allMonthsSet.add(monthKey));
-    }
-    if (incomeItems.charterProfit) {
-      Object.keys(incomeItems.charterProfit).forEach(monthKey => allMonthsSet.add(monthKey));
-    }
-    const allMonths = Array.from(allMonthsSet).sort();
-    updateYearFilterOptions(allMonths);
-  }
-  const thead = document.getElementById('expensesReportTableHead');
-  const tbody = document.getElementById('expensesReportTableBody');
-
-  // Clear existing content
-  thead.innerHTML = '';
-  tbody.innerHTML = '';
-
-  // Create header row
-  const headerRow = document.createElement('tr');
-  const categoryHeader = document.createElement('th');
-  categoryHeader.textContent = 'Category';
-  categoryHeader.style.minWidth = '220px';
-  categoryHeader.style.maxWidth = '350px';
-  categoryHeader.style.width = 'auto';
-  categoryHeader.rowSpan = 2;
-  categoryHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
-  categoryHeader.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-  categoryHeader.style.whiteSpace = 'normal';
-  categoryHeader.style.position = 'sticky';
-  categoryHeader.style.left = '0';
-  categoryHeader.style.zIndex = '102';
-  headerRow.appendChild(categoryHeader);
-
-  // Add month columns with USD and AED subcolumns
-  months.forEach((monthKey, index) => {
-    const [year, month] = monthKey.split('-');
-    const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    
-    const monthHeader = document.createElement('th');
-    monthHeader.colSpan = 2;
-    monthHeader.textContent = monthName;
-    monthHeader.style.textAlign = 'center';
-    monthHeader.style.minWidth = '170px';
-    monthHeader.style.color = 'hsl(210, 6%, 46%)';
-    monthHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
-    monthHeader.style.position = 'relative';
-    monthHeader.style.zIndex = '100';
-    // Add border-left for all months except the first
-    if (index > 0) {
-      monthHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    headerRow.appendChild(monthHeader);
-  });
-
-  thead.appendChild(headerRow);
-
-  // Create subheader row for currencies
-  const subHeaderRow = document.createElement('tr');
-  // Don't add category cell here - it's already in headerRow with rowSpan=2
-
-  months.forEach((monthKey, monthIndex) => {
-    const usdHeader = document.createElement('th');
-    usdHeader.textContent = 'USD';
-    usdHeader.style.textAlign = 'right';
-    usdHeader.style.minWidth = '85px';
-    usdHeader.style.width = '85px';
-    usdHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
-    usdHeader.style.position = 'relative';
-    usdHeader.style.zIndex = '99';
-    usdHeader.style.fontWeight = '400';
-    usdHeader.style.fontSize = '0.7rem';
-    usdHeader.style.padding = '0.15rem 0.5rem';
-    usdHeader.style.lineHeight = '1.2';
-    // Add border-left for all months except the first
-    if (monthIndex > 0) {
-      usdHeader.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    subHeaderRow.appendChild(usdHeader);
-
-    const aedHeader = document.createElement('th');
-    aedHeader.textContent = 'AED';
-    aedHeader.style.textAlign = 'right';
-    aedHeader.style.minWidth = '85px';
-    aedHeader.style.width = '85px';
-    aedHeader.style.backgroundColor = 'hsl(210, 11%, 96%)';
-    aedHeader.style.position = 'relative';
-    aedHeader.style.zIndex = '99';
-    aedHeader.style.fontWeight = '400';
-    aedHeader.style.fontSize = '0.7rem';
-    aedHeader.style.padding = '0.15rem 0.5rem';
-    aedHeader.style.lineHeight = '1.2';
-    subHeaderRow.appendChild(aedHeader);
-  });
-
-  thead.appendChild(subHeaderRow);
-
-  // Combine all categories and sort by custom order
-  const allCategories = [];
-  
-  // Collect all categories from both groups
-  Object.keys(categoryGroups.nonFlight).forEach(category => {
-    allCategories.push({ category, source: 'nonFlight' });
-  });
-  Object.keys(categoryGroups.flight).forEach(category => {
-    allCategories.push({ category, source: 'flight' });
-  });
-  
-  // Log categories collection when both flags are enabled
-  if (showSubcategories && reportForATS) {
-    const subcategoryCount = allCategories.filter(cat => cat.category.includes(' - ')).length;
-    console.log('[renderExpensesReportTable] Categories collected:', {
-      totalCategories: allCategories.length,
-      subcategoryCount: subcategoryCount,
-      allCategories: allCategories.map(c => c.category),
-      first10Categories: allCategories.slice(0, 10).map(c => c.category)
-    });
-  }
-  
-  // Sort by custom order
-  // For subcategories, extract base category for sorting
-  allCategories.sort((a, b) => {
-    // Extract base category (before " - ")
-    const baseCategoryA = a.category.split(' - ')[0];
-    const baseCategoryB = b.category.split(' - ')[0];
-    
-    const orderA = getCategorySortOrder(baseCategoryA);
-    const orderB = getCategorySortOrder(baseCategoryB);
-    
-    // If same base category, sort alphabetically by full category name
-    if (orderA === orderB) {
-      return a.category.localeCompare(b.category);
-    }
-    
-    return orderA - orderB;
-  });
-
-  // Render categories in sorted order
-  let previousGroup = null;
-  let renderedCategories = [];
-  allCategories.forEach(({ category, source }, index) => {
-    renderedCategories.push(category);
-    const row = document.createElement('tr');
-    // Extract base category for color coding (remove " - subtype" part if present)
-    const baseCategoryForColor = category.split(' - ')[0];
-    const group = getCategoryGroup(baseCategoryForColor);
-    const bgColor = getGroupBackgroundColor(group);
-    
-    // Check if group changed (separate categories by color groups)
-    const groupChanged = previousGroup !== null && previousGroup !== group;
-    previousGroup = group;
-    
-    const categoryCell = document.createElement('td');
-    
-    // Display category (with subtype if showSubcategories is enabled)
-    categoryCell.textContent = category;
-    categoryCell.style.fontWeight = '500';
-    
-    categoryCell.style.position = 'sticky';
-    categoryCell.style.left = '0';
-    categoryCell.style.zIndex = '90';
-    categoryCell.style.backgroundColor = bgColor;
-    categoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-    // Add border-top to category cell if group changed
-    if (groupChanged) {
-      categoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    }
-    row.appendChild(categoryCell);
-
-    // Set row background color
-    row.style.backgroundColor = bgColor;
-    
-    // Add border-top to all cells in row if group changed
-    if (groupChanged) {
-      row.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    }
-
-    const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
-
-    // Log category data when both flags are enabled (sample)
-    if (showSubcategories && reportForATS && index < 3) {
-      console.log(`[Category Data] ${category}:`, {
-        category: category,
-        source: source,
-        hasData: categoryData && Object.keys(categoryData).length > 0,
-        monthKeys: categoryData ? Object.keys(categoryData) : []
-      });
-    }
-
-    months.forEach((monthKey, monthIndex) => {
-      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
-      
-      const usdCell = document.createElement('td');
-      usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      usdCell.style.textAlign = 'right';
-      usdCell.style.minWidth = '85px';
-      usdCell.style.width = '85px';
-      usdCell.style.padding = '0.5rem 0.5rem';
-      usdCell.style.backgroundColor = bgColor;
-      // Add border-top if group changed
-      if (groupChanged) {
-        usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-      }
-      // Add border-left for all months except the first
-      if (monthIndex > 0) {
-        usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-      }
-      if (data.USD > 0 || data.AED > 0) {
-        usdCell.style.cursor = 'pointer';
-        usdCell.style.color = 'hsl(210, 76%, 36%)';
-        usdCell.title = 'Click to view details';
-        usdCell.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          showExpenseDetails(category, monthKey, 'USD');
-        });
-      }
-      row.appendChild(usdCell);
-
-      const aedCell = document.createElement('td');
-      aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      aedCell.style.textAlign = 'right';
-      aedCell.style.minWidth = '85px';
-      aedCell.style.width = '85px';
-      aedCell.style.padding = '0.5rem 0.5rem';
-      aedCell.style.backgroundColor = bgColor;
-      // Add border-top if group changed
-      if (groupChanged) {
-        aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-      }
-      if (data.USD > 0 || data.AED > 0) {
-        aedCell.style.cursor = 'pointer';
-        aedCell.style.color = 'hsl(210, 76%, 36%)';
-        aedCell.title = 'Click to view details';
-        aedCell.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          showExpenseDetails(category, monthKey, 'AED');
-        });
-      }
-      row.appendChild(aedCell);
     });
 
-    tbody.appendChild(row);
-  });
-
-  // Log rendered categories when both flags are enabled
-  if (showSubcategories && reportForATS) {
-    // Check how many rows are actually in the DOM
-    const renderedRows = tbody.querySelectorAll('tr');
-    const categoryRows = Array.from(renderedRows).filter(row => {
-      const firstCell = row.querySelector('td:first-child');
-      return firstCell && !['Credit note', 'Total', 'Charter profit', 'Total profit'].includes(firstCell.textContent);
-    });
-    
-    console.log('[renderExpensesReportTable] Categories rendered:', {
-      totalRendered: renderedCategories.length,
-      renderedCategories: renderedCategories,
-      first10Rendered: renderedCategories.slice(0, 10),
-      domRowsCount: renderedRows.length,
-      categoryRowsInDOM: categoryRows.length,
-      first5CategoryRows: categoryRows.slice(0, 5).map(row => row.querySelector('td:first-child')?.textContent)
-    });
-  }
-
-  // Add Credit note row (before Total)
-  const creditNoteRow = document.createElement('tr');
-  creditNoteRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  creditNoteRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  
-  const creditNoteCategoryCell = document.createElement('td');
-  creditNoteCategoryCell.textContent = 'Credit note';
-  creditNoteCategoryCell.style.fontWeight = '600';
-  creditNoteCategoryCell.style.position = 'sticky';
-  creditNoteCategoryCell.style.left = '0';
-  creditNoteCategoryCell.style.zIndex = '90';
-  creditNoteCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  creditNoteCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-  creditNoteCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  creditNoteRow.appendChild(creditNoteCategoryCell);
-
-  months.forEach((monthKey, monthIndex) => {
-    const data = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
-    
-    const usdCell = document.createElement('td');
-    usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    usdCell.style.textAlign = 'right';
-    usdCell.style.fontWeight = '600';
-    usdCell.style.minWidth = '75px';
-    usdCell.style.width = '75px';
-    usdCell.style.padding = '0.5rem 0.5rem';
-    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    if (monthIndex > 0) {
-      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    creditNoteRow.appendChild(usdCell);
-
-    const aedCell = document.createElement('td');
-    aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    aedCell.style.textAlign = 'right';
-    aedCell.style.fontWeight = '600';
-    aedCell.style.minWidth = '120px';
-    aedCell.style.width = '120px';
-    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    creditNoteRow.appendChild(aedCell);
-  });
-
-  tbody.appendChild(creditNoteRow);
-
-  // Add Total row
-  const totalRow = document.createElement('tr');
-  totalRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  totalRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  
-  const totalCategoryCell = document.createElement('td');
-  totalCategoryCell.textContent = 'Total';
-  totalCategoryCell.style.fontWeight = '700';
-  totalCategoryCell.style.position = 'sticky';
-  totalCategoryCell.style.left = '0';
-  totalCategoryCell.style.zIndex = '90';
-  totalCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  totalCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-  totalCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  totalRow.appendChild(totalCategoryCell);
-
-  // Calculate totals for each month
-  // Total = Sum of all regular expenses - Credit note
-  months.forEach((monthKey, monthIndex) => {
-    let totalUSD = 0;
-    let totalAED = 0;
-
-    // Sum all categories for this month (only regular expenses)
-    allCategories.forEach(({ category, source }) => {
-      const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
-      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
-      totalUSD += data.USD;
-      totalAED += data.AED;
-    });
-    
-    // Subtract Credit note from Total (Credit note reduces expenses)
-    const creditNoteData = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
-    totalUSD -= creditNoteData.USD;
-    totalAED -= creditNoteData.AED;
-    
-    // Debug: log totals for verification (only for first month to avoid spam)
-    if (monthIndex === 0) {
-      const charterProfitData = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
-      console.log(`[Total Calculation] ${monthKey}:`, {
-        totalExpensesBeforeCreditNote: {
-          USD: totalUSD + creditNoteData.USD,
-          AED: totalAED + creditNoteData.AED
-        },
-        creditNote: creditNoteData,
-        totalExpensesAfterCreditNote: { USD: totalUSD, AED: totalAED },
-        charterProfit: charterProfitData,
-        totalProfit: {
-          USD: charterProfitData.USD - totalUSD,
-          AED: charterProfitData.AED - totalAED
-        }
-      });
-    }
-
-    const usdCell = document.createElement('td');
-    usdCell.textContent = totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    usdCell.style.textAlign = 'right';
-    usdCell.style.fontWeight = '700';
-    usdCell.style.minWidth = '75px';
-    usdCell.style.width = '75px';
-    usdCell.style.padding = '0.5rem 0.5rem';
-    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    // Add border-left for all months except the first
-    if (monthIndex > 0) {
-      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    totalRow.appendChild(usdCell);
-
-    const aedCell = document.createElement('td');
-    aedCell.textContent = totalAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    aedCell.style.textAlign = 'right';
-    aedCell.style.fontWeight = '700';
-    aedCell.style.minWidth = '120px';
-    aedCell.style.width = '120px';
-    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    totalRow.appendChild(aedCell);
-  });
-
-  tbody.appendChild(totalRow);
-
-  // Add Charter profit row (after Total)
-  const charterProfitRow = document.createElement('tr');
-  charterProfitRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  charterProfitRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  
-  const charterProfitCategoryCell = document.createElement('td');
-  charterProfitCategoryCell.textContent = 'Charter profit';
-  charterProfitCategoryCell.style.fontWeight = '600';
-  charterProfitCategoryCell.style.position = 'sticky';
-  charterProfitCategoryCell.style.left = '0';
-  charterProfitCategoryCell.style.zIndex = '90';
-  charterProfitCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  charterProfitCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-  charterProfitCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  charterProfitRow.appendChild(charterProfitCategoryCell);
-
-  months.forEach((monthKey, monthIndex) => {
-    const data = incomeItems.charterProfit && incomeItems.charterProfit[monthKey] ? incomeItems.charterProfit[monthKey] : { USD: 0, AED: 0 };
-    
-    const usdCell = document.createElement('td');
-    usdCell.textContent = data.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    usdCell.style.textAlign = 'right';
-    usdCell.style.fontWeight = '600';
-    usdCell.style.minWidth = '75px';
-    usdCell.style.width = '75px';
-    usdCell.style.padding = '0.5rem 0.5rem';
-    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    if (monthIndex > 0) {
-      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    charterProfitRow.appendChild(usdCell);
-
-    const aedCell = document.createElement('td');
-    aedCell.textContent = data.AED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    aedCell.style.textAlign = 'right';
-    aedCell.style.fontWeight = '600';
-    aedCell.style.minWidth = '120px';
-    aedCell.style.width = '120px';
-    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    charterProfitRow.appendChild(aedCell);
-  });
-
-  tbody.appendChild(charterProfitRow);
-
-  // Add Total profit row (after Charter profit)
-  const totalProfitRow = document.createElement('tr');
-  totalProfitRow.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  totalProfitRow.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  
-  const totalProfitCategoryCell = document.createElement('td');
-  totalProfitCategoryCell.textContent = 'Total profit';
-  totalProfitCategoryCell.style.fontWeight = '700';
-  totalProfitCategoryCell.style.position = 'sticky';
-  totalProfitCategoryCell.style.left = '0';
-  totalProfitCategoryCell.style.zIndex = '90';
-  totalProfitCategoryCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-  totalProfitCategoryCell.style.borderRight = '2px solid hsl(210, 11%, 85%)';
-  totalProfitCategoryCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-  totalProfitRow.appendChild(totalProfitCategoryCell);
-
-  months.forEach((monthKey, monthIndex) => {
-    // Calculate total expenses for this month (same as Total row calculation)
-    let totalExpensesUSD = 0;
-    let totalExpensesAED = 0;
-    allCategories.forEach(({ category, source }) => {
-      const categoryData = source === 'nonFlight' ? categoryGroups.nonFlight[category] : categoryGroups.flight[category];
-      const data = categoryData[monthKey] || { USD: 0, AED: 0 };
-      totalExpensesUSD += data.USD;
-      totalExpensesAED += data.AED;
-    });
-    
-    // Subtract Credit note from total expenses (same as Total row)
-    const creditNoteData = incomeItems.creditNote[monthKey] || { USD: 0, AED: 0 };
-    totalExpensesUSD -= creditNoteData.USD;
-    totalExpensesAED -= creditNoteData.AED;
-
-    // Get Charter profit for this month
-    const charterProfitData = incomeItems.charterProfit[monthKey] || { USD: 0, AED: 0 };
-    
-    // Total profit = Charter profit - Total expenses (where Total already accounts for Credit note)
-    const totalProfitUSD = charterProfitData.USD - totalExpensesUSD;
-    const totalProfitAED = charterProfitData.AED - totalExpensesAED;
-    
-    // Debug: log total profit calculation (only for first month to avoid spam)
-    if (monthIndex === 0) {
-      console.log(`[Total Profit Calculation] ${monthKey}:`, {
-        totalExpenses: { USD: totalExpensesUSD, AED: totalExpensesAED },
-        charterProfit: charterProfitData,
-        totalProfit: { USD: totalProfitUSD, AED: totalProfitAED }
-      });
-    }
-    
-    const usdCell = document.createElement('td');
-    usdCell.textContent = totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    usdCell.style.textAlign = 'right';
-    usdCell.style.fontWeight = '700';
-    usdCell.style.minWidth = '75px';
-    usdCell.style.width = '75px';
-    usdCell.style.padding = '0.5rem 0.5rem';
-    usdCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    usdCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    if (monthIndex > 0) {
-      usdCell.style.borderLeft = '2px solid hsl(210, 6%, 21%)';
-    }
-    totalProfitRow.appendChild(usdCell);
-
-    const aedCell = document.createElement('td');
-    aedCell.textContent = totalProfitAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    aedCell.style.textAlign = 'right';
-    aedCell.style.fontWeight = '700';
-    aedCell.style.minWidth = '120px';
-    aedCell.style.width = '120px';
-    aedCell.style.backgroundColor = 'hsl(210, 11%, 98%)';
-    aedCell.style.borderTop = '2px solid hsl(210, 6%, 21%)';
-    totalProfitRow.appendChild(aedCell);
-  });
-
-  tbody.appendChild(totalProfitRow);
-
-  // Update table header position after rendering
-  // Use multiple timeouts to ensure DOM is fully updated and heights are calculated
-  setTimeout(() => {
-    updateTableHeaderPosition();
-    // Call again after a short delay to ensure correct positioning
-    setTimeout(updateTableHeaderPosition, 100);
-  }, 50);
-}
-
-// Show expense details modal
-function showExpenseDetails(category, monthKey, currency) {
-  try {
-    console.log('showExpenseDetails called:', { category, monthKey, currency });
-    const detailKey = `${category}_${monthKey}`;
-    console.log('Looking for detailKey:', detailKey);
-    console.log('expenseDetailsMap keys:', Object.keys(expenseDetailsMap));
-    const expenses = expenseDetailsMap[detailKey] || [];
-    console.log('Found expenses for', detailKey, ':', expenses.length);
-    
-    const modal = document.getElementById('expenseDetailsModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalContent = document.getElementById('expenseDetailsContent');
-    
-    if (!modal) {
-      console.error('Modal element not found');
-      alert('Modal element not found');
-      return;
-    }
-    
-    if (!modalTitle || !modalContent) {
-      console.error('Modal title or content not found');
-      return;
-    }
-    
-    if (expenses.length === 0) {
-      console.log('No expenses found for this cell');
-      alert(`No expenses found for ${category} in ${monthKey}`);
-      return;
-    }
-  
-  const [year, month] = monthKey.split('-');
-  const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  
-  modalTitle.textContent = `${category} - ${monthName} (${currency})`;
-  
-  // Filter expenses for this category
-  // Category can be either base category or category with subtype
-  const filteredExpenses = expenses.filter(({ expense }) => {
-    if (showSubcategories) {
-      // When showing subcategories, compare with full category (with subtype)
-      const fullCategory = getExpenseCategory(expense);
-      return fullCategory === category;
-    } else {
-      // When showing base categories, compare with base category only
-      const baseCategory = getBaseExpenseCategory(expense);
-      return baseCategory === category;
-    }
-  });
-  
-  // Calculate totals
-  let totalOriginal = 0;
-  let totalConverted = 0;
-  
-  filteredExpenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
-    if (expCurrency === currency) {
-      totalOriginal += monthlyAmount;
-    } else {
-      totalConverted += convertCurrency(monthlyAmount, expCurrency, currency);
-    }
-  });
-  
-  const total = totalOriginal + totalConverted;
-  
-  // Build content
-  let content = `
-    <div style="margin-bottom: 1.5rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: hsl(210, 11%, 98%); border-radius: 0.5rem; margin-bottom: 1rem;">
-        <div>
-          <div style="font-size: 0.875rem; color: hsl(210, 6%, 46%); margin-bottom: 0.25rem;">Total Amount</div>
-          <div style="font-size: 1.5rem; font-weight: 600; color: hsl(210, 6%, 21%);">
-            ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <div style="font-size: 0.875rem; color: hsl(210, 6%, 46%);">Number of Expenses</div>
-          <div style="font-size: 1.25rem; font-weight: 600; color: hsl(210, 6%, 21%);">
-            ${filteredExpenses.length}
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div style="margin-bottom: 1rem;">
-      <table style="width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.875rem; table-layout: auto;">
-        <thead>
-          <tr style="background-color: hsl(210, 11%, 96%); border-bottom: 2px solid hsl(210, 11%, 90%);">
-            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 140px; font-size: 0.8125rem;">Expense Subtype</th>
-            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 100px; font-size: 0.8125rem;">Invoice #</th>
-            <th style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 220px; font-size: 0.8125rem;">Full Amount</th>
-            <th style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 200px; font-size: 0.8125rem;">Original Amount</th>
-            <th style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 180px; font-size: 0.8125rem;">USD Amount</th>
-            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 180px; font-size: 0.8125rem;">Period</th>
-            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: hsl(210, 6%, 21%); font-size: 0.8125rem; min-width: 350px;">Comments</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
-  
-  // Calculate total for USD Amount
-  let totalMonthlyUSD = 0;
-  
-  // Render all expenses in one table
-  filteredExpenses.forEach(({ expense, amount, currency: expCurrency, monthlyAmount }) => {
-      const expenseType = expense.exp_type || 'N/A';
-      const expenseSubtype = expense.exp_subtype || '—';
-      const invoiceNumber = expense.invoices?.inv_number || 'N/A';
-      const invoiceId = expense.exp_invoice || null;
-      const comments = expense.exp_comments || '—';
-      
-      // Full amount in original currency (not monthly) - from invoice
-      const fullAmount = parseFloat(amount) || 0;
-      const fullAmountFormatted = fullAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      
-      // Monthly amount in original currency (portion for this specific month)
-      const monthlyAmountOriginal = parseFloat(monthlyAmount) || 0;
-      const monthlyAmountOriginalFormatted = monthlyAmountOriginal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      
-      // Monthly amount in USD
-      const monthlyAmountUSD = convertCurrency(monthlyAmountOriginal, expCurrency, 'USD');
-      const monthlyAmountUSDFormatted = monthlyAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      
-      // Add to total
-      totalMonthlyUSD += monthlyAmountUSD;
-      
-      // Format route if flight exists
-      let routeDisplay = '';
-      if (expense.flights && expense.flights.flt_dep && expense.flights.flt_arr) {
-        routeDisplay = `${expense.flights.flt_dep} - ${expense.flights.flt_arr}`;
-      }
-      
-      // Full amount with route
-      const fullAmountWithRoute = routeDisplay 
-        ? `${fullAmountFormatted} ${expCurrency} (${routeDisplay})`
-        : `${fullAmountFormatted} ${expCurrency}`;
-      
-      // Format period - show range only if multiple months
-      let period = 'N/A';
-      if (expense.exp_period_start && expense.exp_period_end) {
-        const startDate = new Date(expense.exp_period_start);
-        const endDate = new Date(expense.exp_period_end);
-        
-        // Check if this is a single month period
-        const startMonth = startDate.getMonth();
-        const startYear = startDate.getFullYear();
-        const endMonth = endDate.getMonth();
-        const endYear = endDate.getFullYear();
-        
-        // If period is within the same month, show only one month
-        const isSingleMonth = (startYear === endYear && startMonth === endMonth);
-        
-        const startDateFormatted = startDate.toLocaleDateString('en-US', { 
-          month: 'short', 
-          year: 'numeric' 
-        });
-        
-        if (isSingleMonth) {
-          // Single month - show only start month
-          period = startDateFormatted;
-        } else {
-          // Multiple months - show range
-          const endDateFormatted = endDate.toLocaleDateString('en-US', { 
-            month: 'short', 
-            year: 'numeric' 
-          });
-          period = `${startDateFormatted} - ${endDateFormatted}`;
-        }
-      } else if (expense.flights?.flt_date) {
-        period = new Date(expense.flights.flt_date).toLocaleDateString('en-US');
-      }
-      
-      // Create invoice link if invoice ID exists - link to specific expense in invoice
-      const expenseId = expense.id || null;
-      const invoiceCell = invoiceId && expenseId
-        ? `<a href="/invoices/${invoiceId}?expense=${expenseId}" style="color: hsl(210, 76%, 36%); text-decoration: underline; cursor: pointer;">${invoiceNumber}</a>`
-        : invoiceId
-        ? `<a href="/invoices/${invoiceId}" style="color: hsl(210, 76%, 36%); text-decoration: underline; cursor: pointer;">${invoiceNumber}</a>`
-        : invoiceNumber;
-      
-    content += `
-      <tr style="border-bottom: 1px solid hsl(210, 11%, 90%);">
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 140px;">${expenseSubtype}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 100px;">${invoiceCell}</td>
-        <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 220px;">${fullAmountWithRoute}</td>
-        <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 200px;">${monthlyAmountOriginalFormatted} ${expCurrency}</td>
-        <td style="padding: 0.75rem; text-align: right; color: hsl(210, 6%, 21%); font-weight: 500; white-space: nowrap; min-width: 180px;">$${monthlyAmountUSDFormatted}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 46%); font-size: 0.8125rem; white-space: nowrap; min-width: 180px;">${period}</td>
-        <td style="padding: 0.75rem; color: hsl(210, 6%, 46%); font-size: 0.8125rem; word-wrap: break-word; min-width: 350px;">${comments}</td>
+    renderTable(months, categoryTotals, incomeTotals);
+    renderUnassignedExpenses(unassigned);
+  } catch (error) {
+    console.error('Error loading expenses report:', error);
+    const tbody = document.getElementById('expensesReportBody');
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="${MONTH_COUNT + 1}" style="text-align: center; padding: 2rem; color: #6b7280;">
+          <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+          Failed to load expenses report. Please try again.
+        </td>
       </tr>
     `;
-  });
-  
-  // Add total row
-  const totalMonthlyUSDFormatted = totalMonthlyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  
-  content += `
-      <tr style="border-top: 2px solid hsl(210, 11%, 90%); background-color: hsl(210, 11%, 98%);">
-        <td colspan="4" style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%);">Total:</td>
-        <td style="padding: 0.75rem; text-align: right; font-weight: 600; color: hsl(210, 6%, 21%); white-space: nowrap; min-width: 180px;">$${totalMonthlyUSDFormatted}</td>
-        <td colspan="2" style="padding: 0.75rem;"></td>
-      </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-  
-    modalContent.innerHTML = content;
-    console.log('Setting modal display to flex');
-    
-    // Use the same approach as other modals in the app
-    modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
-    
-    console.log('Modal display style:', modal.style.display);
-    console.log('Modal element:', modal);
-    console.log('Modal computed style:', window.getComputedStyle(modal).display);
-    console.log('Modal classList:', modal.classList);
-  } catch (error) {
-    console.error('Error in showExpenseDetails:', error);
-    alert('Error opening expense details: ' + error.message);
-  }
-}
-
-// Close expense details modal
-function closeExpenseDetailsModal() {
-  const modal = document.getElementById('expenseDetailsModal');
-  if (modal) {
-    modal.classList.remove('show');
-    document.body.style.overflow = 'auto';
   }
 }
 
@@ -1610,34 +919,17 @@ function closeExpenseDetailsModal() {
 async function exportToExcel() {
   const exportBtn = document.getElementById('exportExcelBtn');
   const originalText = exportBtn ? exportBtn.innerHTML : '';
-  
+
   try {
-    // Show loading state
     if (exportBtn) {
       exportBtn.disabled = true;
       exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Exporting...';
     }
 
-    // Get year filter value
     const yearFilter = document.getElementById('yearFilter')?.value || 'current';
-    
-    // Get subcategories checkbox state
     const showSubcategories = document.getElementById('showSubcategories')?.checked || false;
-    
-    // Get reportForATS checkbox state
     const reportForATS = document.getElementById('reportForATS')?.checked || false;
-    
-    // Log parameters before sending
-    console.log('[Excel Export] Sending request with:', {
-      yearFilter: yearFilter,
-      showSubcategories: showSubcategories,
-      reportForATS: reportForATS,
-      showSubcategoriesString: String(showSubcategories),
-      reportForATSString: String(reportForATS)
-    });
-    
-    // Make request to server endpoint
-    // Explicitly convert boolean to string for URL
+
     const response = await fetch(`/api/expenses/export-excel?year=${yearFilter}&showSubcategories=${String(showSubcategories)}&reportForATS=${String(reportForATS)}`, {
       method: 'GET',
       headers: {
@@ -1651,26 +943,21 @@ async function exportToExcel() {
       throw new Error(errorData.error || `Server error: ${response.status}`);
     }
 
-    // Get filename from Content-Disposition header or generate one
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename = `Expenses_Report_${yearFilter === 'all' ? 'AllYears' : yearFilter}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    
+
     if (contentDisposition) {
-      // Try to extract filename from Content-Disposition header
-      // Support both filename="..." and filename*=UTF-8''...
-      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/i) || 
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/i) ||
                            contentDisposition.match(/filename="?([^";]+)"?/i);
       if (filenameMatch && filenameMatch[1]) {
         filename = decodeURIComponent(filenameMatch[1]);
       }
     }
 
-    // Ensure filename has .xlsx extension
     if (!filename.toLowerCase().endsWith('.xlsx')) {
       filename = filename.replace(/\.xlsx_?$/i, '') + '.xlsx';
     }
 
-    // Get blob and create download link
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1679,16 +966,12 @@ async function exportToExcel() {
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    
-    // Clean up after a short delay
+
     setTimeout(() => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     }, 100);
 
-    console.log('Excel file exported successfully');
-    
-    // Restore button state
     if (exportBtn) {
       exportBtn.disabled = false;
       exportBtn.innerHTML = originalText;
@@ -1696,8 +979,7 @@ async function exportToExcel() {
   } catch (error) {
     console.error('Error exporting to Excel:', error);
     alert('Error exporting to Excel: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    
-    // Restore button state on error
+
     if (exportBtn) {
       exportBtn.disabled = false;
       exportBtn.innerHTML = originalText || '<i class="bi bi-file-earmark-spreadsheet"></i> Export to Excel';
@@ -1705,118 +987,9 @@ async function exportToExcel() {
   }
 }
 
-// Update table header position (similar to flights/expenses.ejs)
-function updateTableHeaderPosition() {
-  const header = document.querySelector('.header');
-  const pageHeader = document.querySelector('.page-header');
-  const table = document.querySelector('.expenses-report-table');
-
-  if (!header || !pageHeader || !table) {
-    return;
-  }
-
-  // Calculate total height of fixed headers above table
-  const headerHeight = header.offsetHeight || 0;
-  const pageHeaderHeight = pageHeader.offsetHeight || 0;
-  const totalHeight = headerHeight + pageHeaderHeight;
-
-  // Get all header rows
-  const firstRowHeaders = table.querySelectorAll('thead tr:first-child th');
-  const secondRowHeaders = table.querySelectorAll('thead tr:last-child th');
-  
-  if (firstRowHeaders.length === 0) {
-    return;
-  }
-
-  // Get first row height - force layout calculation
-  const firstRowHeight = firstRowHeaders[0].offsetHeight || 0;
-  
-  // Only log once to avoid spam
-  if (!window.headerPositionLogged) {
-    console.log('[Header Position]', {
-      headerHeight,
-      pageHeaderHeight,
-      totalHeight,
-      firstRowHeight,
-      firstRowTop: totalHeight,
-      secondRowTop: totalHeight + firstRowHeight
-    });
-    window.headerPositionLogged = true;
-  }
-  
-  // Set top for first row headers (months and category)
-  firstRowHeaders.forEach((th, index) => {
-    th.style.top = totalHeight + 'px';
-    // Only Category (first column) should have left: 0
-    if (index === 0) {
-      th.style.left = '0';
-      th.style.zIndex = '102';
-    } else {
-      th.style.zIndex = '101';
-    }
-  });
-
-  // Set top for second row headers (USD/AED)
-  if (secondRowHeaders.length > 0) {
-    secondRowHeaders.forEach((th) => {
-      th.style.top = (totalHeight + firstRowHeight) + 'px';
-      th.style.zIndex = '101';
-    });
-  }
-}
-
-// Load data when page loads
 document.addEventListener('DOMContentLoaded', function() {
   loadExpensesReport();
 
-  // Add year filter change handler
-  const yearFilter = document.getElementById('yearFilter');
-  if (yearFilter) {
-    yearFilter.addEventListener('change', async function() {
-      if (allExpensesData) {
-        // Reprocess data with current settings
-        await processExpensesData(allExpensesData);
-      }
-    });
-  }
-
-  // Add subcategories checkbox handler
-  const showSubcategoriesCheckbox = document.getElementById('showSubcategories');
-  if (showSubcategoriesCheckbox) {
-    showSubcategoriesCheckbox.addEventListener('change', async function() {
-      const oldValue = showSubcategories;
-      showSubcategories = this.checked;
-      console.log('[Checkbox] showSubcategories changed:', {
-        oldValue: oldValue,
-        newValue: showSubcategories,
-        reportForATS: reportForATS
-      });
-      if (allExpensesData) {
-        // Reprocess data with new subcategories setting
-        await processExpensesData(allExpensesData);
-      }
-    });
-  }
-
-  // Add reportForATS checkbox handler
-  const reportForATSCheckbox = document.getElementById('reportForATS');
-  if (reportForATSCheckbox) {
-    reportForATSCheckbox.addEventListener('change', async function() {
-      const oldValue = reportForATS;
-      reportForATS = this.checked;
-      console.log('[Checkbox] reportForATS changed:', {
-        oldValue: oldValue,
-        newValue: reportForATS,
-        showSubcategories: showSubcategories
-      });
-      if (allExpensesData) {
-        // Reprocess data with new ATS filter setting
-        await processExpensesData(allExpensesData);
-      }
-    });
-  }
-
-  // Add Excel export button handler
   const exportExcelBtn = document.getElementById('exportExcelBtn');
   if (exportExcelBtn) {
     exportExcelBtn.addEventListener('click', function(e) {
@@ -1825,188 +998,129 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Add modal close handlers
-  const closeModalBtn = document.getElementById('closeDetailsModalBtn');
-  if (closeModalBtn) {
-    closeModalBtn.addEventListener('click', closeExpenseDetailsModal);
+  const unassignedBtn = document.getElementById('unassignedExpensesBtn');
+  const unassignedModal = document.getElementById('unassignedExpensesModal');
+  const closeUnassignedBtn = document.getElementById('closeUnassignedModalBtn');
+
+  if (unassignedBtn && unassignedModal) {
+    unassignedBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      unassignedModal.classList.add('show');
+      document.body.style.overflow = 'hidden';
+    });
   }
-  
-  const modal = document.getElementById('expenseDetailsModal');
-  if (modal) {
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) {
-        closeExpenseDetailsModal();
+
+  if (closeUnassignedBtn && unassignedModal) {
+    closeUnassignedBtn.addEventListener('click', function() {
+      unassignedModal.classList.remove('show');
+      document.body.style.overflow = 'auto';
+    });
+  }
+
+  if (unassignedModal) {
+    unassignedModal.addEventListener('click', function(e) {
+      if (e.target === unassignedModal) {
+        unassignedModal.classList.remove('show');
+        document.body.style.overflow = 'auto';
       }
     });
   }
 
-  // Update header position on resize and after table render
-  let resizeTimeout;
-  window.addEventListener('resize', function() {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(updateTableHeaderPosition, 100);
-  });
+  const expenseDetailsModal = document.getElementById('expenseDetailsModal');
+  const closeExpenseDetailsBtn = document.getElementById('closeExpenseDetailsBtn');
+
+  if (closeExpenseDetailsBtn && expenseDetailsModal) {
+    closeExpenseDetailsBtn.addEventListener('click', function() {
+      expenseDetailsModal.classList.remove('show');
+      document.body.style.overflow = 'auto';
+    });
+  }
+
+  if (expenseDetailsModal) {
+    expenseDetailsModal.addEventListener('click', function(e) {
+      if (e.target === expenseDetailsModal) {
+        expenseDetailsModal.classList.remove('show');
+        document.body.style.overflow = 'auto';
+      }
+    });
+  }
+
+  const reportTable = document.getElementById('expensesReportTable');
+  if (reportTable) {
+    reportTable.addEventListener('click', function(e) {
+      const cell = e.target.closest('td');
+      if (!cell || !cell.dataset.category || !cell.dataset.month) {
+        return;
+      }
+      renderExpenseDetails(cell.dataset.category, cell.dataset.month, cell.dataset.rowType || 'expense');
+    });
+  }
 });
 </script>
 
 <style>
-/* Override page-content padding from layout - use more specific selector */
-.main-content main.page-content {
-  padding-top: 0 !important;
-  padding-left: 1.5rem !important;
-  padding-right: 1.5rem !important;
-  padding-bottom: 1.5rem !important;
+.expenses-report-table th,
+.expenses-report-table td {
+  text-align: left !important;
 }
 
-/* Remove all spacing from page-content first child */
-.main-content main.page-content > *:first-child {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
+.expenses-report-table .amount-cell {
+  text-align: right !important;
+  white-space: nowrap !important;
 }
 
-.page-header {
-  position: sticky !important;
-  top: 4rem !important;
-  z-index: 90 !important;
+.expenses-report-table .income-row td {
   background-color: hsl(210, 11%, 98%) !important;
-  padding: 0.25rem 0 !important;
-  margin-bottom: 0.5rem !important;
-  margin-top: 0 !important;
-  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  font-weight: 600 !important;
 }
 
+.expenses-report-table .income-cell {
+  color: hsl(142, 76%, 30%) !important;
+}
 
-.expenses-report-table {
+.expenses-report-table .category-group-1 td {
+  background-color: hsl(200, 50%, 96%) !important;
+}
+
+.expenses-report-table .category-group-2 td {
+  background-color: hsl(280, 40%, 96%) !important;
+}
+
+.expenses-report-table .category-group-3 td {
+  background-color: hsl(120, 30%, 97%) !important;
+}
+
+.invoices-table {
   width: 100% !important;
-  border-collapse: separate !important;
-  border-spacing: 0 !important;
+  border-collapse: collapse !important;
   font-size: 0.8rem !important;
-  table-layout: auto !important;
-  min-width: max-content !important;
+  table-layout: fixed !important;
 }
 
-.expenses-report-table thead {
+.invoices-table thead {
   background-color: hsl(210, 11%, 96%) !important;
-  position: relative !important;
 }
 
-/* Make second header row (USD/AED) smaller */
-.expenses-report-table thead tr:nth-child(2) th {
-  padding: 0.15rem 0.75rem !important;
-  font-size: 0.7rem !important;
-  font-weight: 400 !important;
-  line-height: 1.2 !important;
-}
-
-.expenses-report-table th {
-  padding: 0.5rem 0.75rem !important;
+.invoices-table th {
+  padding: 0.5rem 0.5rem !important;
   text-align: left !important;
   font-weight: 600 !important;
   color: hsl(210, 6%, 21%) !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
-  border-right: 1px solid hsl(210, 11%, 90%) !important;
   white-space: nowrap !important;
-  background-color: hsl(210, 11%, 96%) !important;
-  min-width: 85px !important;
-}
-
-/* Sticky headers - top will be set by JavaScript */
-.expenses-report-table thead th {
-  position: sticky !important;
-  background-color: hsl(210, 11%, 96%) !important;
-  top: 0 !important; /* Default, will be overridden by JavaScript */
-}
-
-/* Category column - sticky both horizontally and vertically */
-.expenses-report-table thead th:first-child {
-  left: 0 !important;
-  z-index: 102 !important;
-  border-right: 2px solid hsl(210, 11%, 85%) !important;
-  background-color: hsl(210, 11%, 96%) !important;
-}
-
-/* Ensure all other header cells have lower z-index and don't overlap Category */
-.expenses-report-table thead th:not(:first-child) {
-  position: relative !important;
-  z-index: 99 !important;
-}
-
-/* All other headers - sticky only vertically */
-.expenses-report-table thead th:not(:first-child) {
-  z-index: 101 !important;
-}
-
-.expenses-report-table th:last-child {
-  border-right: none !important;
-}
-
-.expenses-report-table td {
-  padding: 0.4rem 0.5rem !important;
-  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
-  border-right: 1px solid hsl(210, 11%, 90%) !important;
-  vertical-align: middle !important;
-  color: hsl(210, 6%, 21%) !important;
-  white-space: nowrap !important;
-  min-width: 85px !important;
-  width: 85px !important;
-  max-width: 85px !important;
   font-size: 0.75rem !important;
 }
 
-.expenses-report-table td:last-child {
-  border-right: none !important;
+.invoices-table td {
+  padding: 0.5rem 0.5rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 90%) !important;
+  vertical-align: middle !important;
 }
 
-/* Only Category column should be sticky horizontally */
-.expenses-report-table td:first-child {
-  font-weight: 500 !important;
-  min-width: 220px !important;
-  max-width: 350px !important;
-  width: auto !important;
-  position: sticky !important;
-  left: 0 !important;
-  z-index: 90 !important;
-  border-right: 2px solid hsl(210, 11%, 85%) !important;
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  background-color: inherit !important;
+.invoices-table tbody tr:hover {
+  background-color: hsl(210, 11%, 98%) !important;
 }
 
-.expenses-report-table tbody tr:hover {
-  opacity: 0.9;
-}
-
-.expenses-report-table tbody tr:hover td {
-  opacity: 0.9;
-}
-
-.expenses-report-table .group-header td {
-  padding: 0.75rem 0.5rem !important;
-  font-size: 0.875rem !important;
-}
-
-.table-wrapper {
-  overflow-x: auto !important;
-  overflow-y: visible !important;
-  width: 100% !important;
-}
-
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem;
-  min-height: 300px;
-}
-
-.loading-text {
-  margin-top: 1rem;
-  color: hsl(210, 6%, 46%);
-  font-size: 0.875rem;
-}
-
-/* Modal styles */
 .modal-overlay {
   position: fixed !important;
   top: 0 !important;
@@ -2020,7 +1134,6 @@ document.addEventListener('DOMContentLoaded', function() {
   z-index: 10000 !important;
 }
 
-.modal-overlay[style*="display: flex"],
 .modal-overlay.show {
   display: flex !important;
 }
@@ -2035,13 +1148,17 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow-y: auto !important;
 }
 
+.modal-wide {
+  max-width: 1300px !important;
+}
+
 .modal-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
   padding: 1.5rem 1.5rem 0 1.5rem !important;
   border-bottom: 1px solid hsl(210, 11%, 90%) !important;
-  margin-bottom: 1.5rem !important;
+  margin-bottom: 1rem !important;
 }
 
 .modal-header h3 {
@@ -2069,6 +1186,52 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .modal-body {
   padding: 0 1.5rem 1.5rem 1.5rem !important;
+}
+
+.unassigned-table .reason-col {
+  width: 220px;
+}
+
+.summary-block {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: hsl(210, 6%, 21%);
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.5rem;
+}
+
+.summary-label {
+  color: hsl(210, 6%, 46%);
+  font-weight: 600;
+}
+
+.summary-value {
+  word-break: break-word;
+}
+
+.summary-link {
+  color: hsl(210, 76%, 36%);
+  text-decoration: underline;
+}
+
+.details-total-row td {
+  font-weight: 600;
+  background-color: hsl(210, 11%, 98%);
+  border-top: 1px solid hsl(210, 11%, 85%);
+}
+
+.summary-empty {
+  color: hsl(210, 6%, 46%);
+}
+
+.empty-state {
+  color: hsl(210, 6%, 46%);
+  padding: 1rem 0;
 }
 </style>
 

@@ -1,3 +1,11 @@
+<%
+  const invoiceStatus = invoice.inv_filled
+    ? 'completed'
+    : (invoice.inv_disputed ? 'inc-ats' : 'in-progress');
+  const invoiceStatusLabel = invoiceStatus === 'completed'
+    ? 'Completed'
+    : (invoiceStatus === 'inc-ats' ? 'Inc. for ATS' : 'In Progress');
+%>
 <!-- Page Header -->
 <div class="page-header">
   <div>
@@ -17,12 +25,16 @@
       <i class="bi bi-arrow-left"></i>
       Back to Invoices
     </button>
-    <button class="btn btn-status" id="statusBtn" data-status="<%= invoice.inv_filled %>">
-      <span class="status-text"><%= invoice.inv_filled ? 'Completed' : 'In Progress' %></span>
+    <button class="btn btn-status" id="statusBtn" data-status="<%= invoiceStatus %>">
+      <span class="status-text"><%= invoiceStatusLabel %></span>
     </button>
     <button class="btn btn-primary" id="addExpenseBtn">
       <i class="bi bi-plus-lg"></i>
       Add Expense
+    </button>
+    <button class="btn btn-secondary" id="monthlyViewBtn">
+      <i class="bi bi-calendar3"></i>
+      Monthly View
     </button>
   </div>
 </div>
@@ -162,7 +174,94 @@
   </div>
 </div>
 
+<!-- Monthly Expenses Modal -->
+<div class="modal-overlay" id="monthlyExpensesModal" style="display: none;">
+  <div class="modal-container modal-container-wide">
+    <div class="modal-header">
+      <h2>Expenses by Month — <%= invoice.inv_number || invoice.inv_code || invoice.id %></h2>
+      <div class="modal-header-actions">
+        <button class="btn btn-secondary btn-print" id="openMonthlyPrintBtn" type="button">
+          <i class="bi bi-box-arrow-up-right"></i>
+          Open Print View
+        </button>
+        <button class="modal-close" id="closeMonthlyExpensesBtn">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="monthlyExpensesContent">
+        <!-- Monthly expenses will be loaded here -->
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+let invoiceExpensesCache = [];
+const invoiceNumberLabel = '<%= invoice.inv_number || invoice.inv_code || invoice.id %>';
+
+// Currency conversion rates
+// EUR conversions always go through AED (not directly to USD)
+const CURRENCY_RATES = {
+  AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
+  AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
+};
+
+// Convert currency function
+// EUR conversions always go through AED (not directly to USD)
+function convertCurrency(amount, fromCurrency, toCurrency) {
+  if (fromCurrency === toCurrency) {
+    return amount;
+  }
+  
+  // Handle EUR conversions - always through AED
+  if (fromCurrency === 'EUR') {
+    // EUR → AED: 1 EUR = 4.3119 AED
+    const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
+    
+    if (toCurrency === 'AED') {
+      return amountInAED;
+    } else if (toCurrency === 'USD') {
+      // EUR → AED → USD: 1 AED = 1/3.6735 USD
+      return amountInAED / CURRENCY_RATES.AED_TO_USD;
+    }
+  }
+  
+  if (toCurrency === 'EUR') {
+    // Convert to AED first, then to EUR
+    let amountInAED = 0;
+    if (fromCurrency === 'USD') {
+      // USD → AED: 1 USD = 3.6735 AED
+      amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+    } else if (fromCurrency === 'AED') {
+      amountInAED = amount;
+    }
+    // AED → EUR: 1 AED = 1/4.3119 EUR
+    return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+  }
+  
+  // For non-EUR conversions, convert through USD
+  // Convert to USD first
+  let amountInUSD = 0;
+  if (fromCurrency === 'USD') {
+    amountInUSD = amount;
+  } else if (fromCurrency === 'AED') {
+    // 1 AED = 1/3.6735 USD
+    amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+  }
+  
+  // Convert from USD to target currency
+  if (toCurrency === 'USD') {
+    return amountInUSD;
+  } else if (toCurrency === 'AED') {
+    // 1 USD = 3.6735 AED
+    return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+  }
+  
+  return amount;
+}
+
 // Toggle section visibility
 function toggleSection(sectionId) {
   const content = document.getElementById(`content-${sectionId}`);
@@ -211,6 +310,7 @@ async function loadExpenses(preserveExpandedState = false) {
     const invoiceId = window.location.pathname.split('/').pop();
     const response = await apiRequest(`/api/invoices/${invoiceId}/expenses`);
     const expenses = await response.json();
+    invoiceExpensesCache = Array.isArray(expenses) ? expenses : [];
     
     const container = document.getElementById('expenses-container');
     const summaryContainer = document.getElementById('expenses-summary');
@@ -243,67 +343,6 @@ async function loadExpenses(preserveExpandedState = false) {
       return;
     }
 
-    // Currency conversion rates
-    // EUR conversions always go through AED (not directly to USD)
-    const CURRENCY_RATES = {
-      AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
-      AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
-    };
-    
-    // Convert currency function
-    // EUR conversions always go through AED (not directly to USD)
-    function convertCurrency(amount, fromCurrency, toCurrency) {
-      if (fromCurrency === toCurrency) {
-        return amount;
-      }
-      
-      // Handle EUR conversions - always through AED
-      if (fromCurrency === 'EUR') {
-        // EUR → AED: 1 EUR = 4.3119 AED
-        const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
-        
-        if (toCurrency === 'AED') {
-          return amountInAED;
-        } else if (toCurrency === 'USD') {
-          // EUR → AED → USD: 1 AED = 1/3.6735 USD
-          return amountInAED / CURRENCY_RATES.AED_TO_USD;
-        }
-      }
-      
-      if (toCurrency === 'EUR') {
-        // Convert to AED first, then to EUR
-        let amountInAED = 0;
-        if (fromCurrency === 'USD') {
-          // USD → AED: 1 USD = 3.6735 AED
-          amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
-        } else if (fromCurrency === 'AED') {
-          amountInAED = amount;
-        }
-        // AED → EUR: 1 AED = 1/4.3119 EUR
-        return amountInAED / CURRENCY_RATES.AED_TO_EUR;
-      }
-      
-      // For non-EUR conversions, convert through USD
-      // Convert to USD first
-      let amountInUSD = 0;
-      if (fromCurrency === 'USD') {
-        amountInUSD = amount;
-      } else if (fromCurrency === 'AED') {
-        // 1 AED = 1/3.6735 USD
-        amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
-      }
-      
-      // Convert from USD to target currency
-      if (toCurrency === 'USD') {
-        return amountInUSD;
-      } else if (toCurrency === 'AED') {
-        // 1 USD = 3.6735 AED
-        return amountInUSD * CURRENCY_RATES.AED_TO_USD;
-      }
-      
-      return amount;
-    }
-    
     // Calculate totals - convert all expenses to USD and AED
     let totalUSD = 0;
     let totalAED = 0;
@@ -1442,11 +1481,45 @@ async function deleteExpense(expenseId) {
   }
 }
 
+const INVOICE_STATUS_FLOW = ['in-progress', 'inc-ats', 'completed'];
+
+function getNextInvoiceStatus(currentStatus) {
+  const currentIndex = INVOICE_STATUS_FLOW.indexOf(currentStatus);
+  const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+  return INVOICE_STATUS_FLOW[(safeIndex + 1) % INVOICE_STATUS_FLOW.length];
+}
+
+function getInvoiceStatusPayload(status) {
+  return {
+    inv_filled: status === 'completed',
+    inv_disputed: status === 'inc-ats',
+  };
+}
+
+function applyInvoiceStatusToButton(statusBtn, status) {
+  const statusText = statusBtn.querySelector('.status-text');
+
+  if (status === 'completed') {
+    statusBtn.className = 'btn btn-status completed';
+    if (statusText) statusText.textContent = 'Completed';
+    return;
+  }
+
+  if (status === 'inc-ats') {
+    statusBtn.className = 'btn btn-status inc-ats';
+    if (statusText) statusText.textContent = 'Inc. for ATS';
+    return;
+  }
+
+  statusBtn.className = 'btn btn-status in-progress';
+  if (statusText) statusText.textContent = 'In Progress';
+}
+
 // Toggle invoice status
 async function toggleInvoiceStatus() {
   const statusBtn = document.getElementById('statusBtn');
-  const currentStatus = statusBtn.getAttribute('data-status') === 'true';
-  const newStatus = !currentStatus;
+  const currentStatus = statusBtn.getAttribute('data-status') || 'in-progress';
+  const newStatus = getNextInvoiceStatus(currentStatus);
   const invoiceId = window.location.pathname.split('/').pop();
   
   console.log('Toggle status - Current:', currentStatus, 'New:', newStatus, 'Invoice ID:', invoiceId);
@@ -1457,9 +1530,7 @@ async function toggleInvoiceStatus() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        inv_filled: newStatus
-      }),
+      body: JSON.stringify(getInvoiceStatusPayload(newStatus)),
     });
     
     console.log('Response status:', response.status);
@@ -1467,15 +1538,7 @@ async function toggleInvoiceStatus() {
     if (response.ok) {
       // Update button appearance and data
       statusBtn.setAttribute('data-status', newStatus);
-      const statusText = statusBtn.querySelector('.status-text');
-      
-      if (newStatus) {
-        statusBtn.className = 'btn btn-status completed';
-        statusText.textContent = 'Completed';
-      } else {
-        statusBtn.className = 'btn btn-status in-progress';
-        statusText.textContent = 'In Progress';
-      }
+      applyInvoiceStatusToButton(statusBtn, newStatus);
       
       console.log('Status updated successfully');
     } else {
@@ -1487,6 +1550,509 @@ async function toggleInvoiceStatus() {
     console.error('Error updating invoice status:', error);
     alert('Error updating invoice status. Please try again.');
   }
+}
+
+function getExpenseMonthDate(expense) {
+  if (expense.exp_period_start) {
+    return new Date(expense.exp_period_start);
+  }
+  if (expense.flights && expense.flights.flt_date) {
+    return new Date(expense.flights.flt_date);
+  }
+  return null;
+}
+
+function getMonthlyGroupingKey(expense) {
+  const date = getExpenseMonthDate(expense);
+  if (!date || Number.isNaN(date.getTime())) {
+    return 'unknown';
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(monthKey) {
+  if (monthKey === 'unknown') {
+    return 'Unknown period';
+  }
+  const [year, month] = monthKey.split('-');
+  return new Date(parseInt(year), parseInt(month) - 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function formatExpensePeriod(expense) {
+  let period = '-';
+  if (expense.exp_period_start && expense.exp_period_end) {
+    const startDate = new Date(expense.exp_period_start);
+    const endDate = new Date(expense.exp_period_end);
+    
+    const startMonth = startDate.getMonth();
+    const startYear = startDate.getFullYear();
+    const endMonth = endDate.getMonth();
+    const endYear = endDate.getFullYear();
+    
+    const isSingleMonth = (
+      endDate.getDate() === 1 && 
+      ((endMonth === (startMonth + 1) % 12 && endYear === startYear) ||
+       (endMonth === 0 && endYear === startYear + 1))
+    );
+    
+    const startDateFormatted = startDate.toLocaleDateString('en-GB', { 
+      month: 'short', 
+      year: 'numeric' 
+    });
+    
+    if (isSingleMonth) {
+      period = startDateFormatted;
+    } else {
+      const endDateFormatted = endDate.toLocaleDateString('en-GB', { 
+        month: 'short', 
+        year: 'numeric' 
+      });
+      period = `${startDateFormatted} - ${endDateFormatted}`;
+    }
+  }
+  return period;
+}
+
+function getExpenseCategory(expense) {
+  return expense.invoice_types?.name || expense.exp_invoice_type || 'Other';
+}
+
+function isDisbursementExpense(expense) {
+  const typeName = (expense.expense_types?.name || expense.exp_type || '').toString().toLowerCase();
+  return typeName.includes('disbursement');
+}
+
+function getAmountVariants(amountValue) {
+  if (amountValue === null || amountValue === undefined) {
+    return [];
+  }
+  const raw = String(amountValue).trim();
+  if (!raw) {
+    return [];
+  }
+  const parsed = parseFloat(raw);
+  const variants = new Set([raw]);
+  if (!Number.isNaN(parsed)) {
+    variants.add(parsed.toFixed(2));
+    variants.add(parsed.toString());
+  }
+  return Array.from(variants);
+}
+
+function findMatchingBaseExpense(feeExpense, baseExpenses) {
+  const comments = (feeExpense.exp_comments || '').toLowerCase();
+  return baseExpenses.find(base => {
+    if (feeExpense.exp_flight || base.exp_flight) {
+      if (feeExpense.exp_flight !== base.exp_flight) {
+        return false;
+      }
+    }
+    
+    if (feeExpense.exp_period_start || feeExpense.exp_period_end) {
+      if (feeExpense.exp_period_start !== base.exp_period_start ||
+          feeExpense.exp_period_end !== base.exp_period_end) {
+        return false;
+      }
+    }
+    
+    if (feeExpense.exp_place || base.exp_place) {
+      if (feeExpense.exp_place !== base.exp_place) {
+        return false;
+      }
+    }
+    
+    const amountVariants = getAmountVariants(base.exp_amount);
+    const currency = (base.exp_currency || 'AED').toLowerCase();
+    const amountMatch = amountVariants.length === 0
+      ? false
+      : amountVariants.some(value => comments.includes(value.toLowerCase()));
+    const currencyMatch = comments.includes(currency);
+    if (amountMatch && currencyMatch) {
+      return true;
+    }
+    
+    const typeName = (base.expense_types?.name || base.exp_type || '').toString().toLowerCase();
+    if (typeName && comments.includes(typeName)) {
+      return true;
+    }
+    
+    return false;
+  });
+}
+
+function formatAmount(amount) {
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function renderMonthlyExpensesModal(expenses) {
+  const content = document.getElementById('monthlyExpensesContent');
+  if (!content) {
+    return;
+  }
+  
+  if (!expenses || expenses.length === 0) {
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">
+          <i class="bi bi-receipt"></i>
+        </div>
+        <h3>No Expenses</h3>
+        <p>No expenses found for this invoice.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const grouped = {};
+  expenses.forEach(expense => {
+    const key = getMonthlyGroupingKey(expense);
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+    grouped[key].push(expense);
+  });
+  
+  let invoiceTotalUSD = 0;
+  let invoiceTotalAED = 0;
+  expenses.forEach(expense => {
+    if (expense.exp_amount) {
+      const amount = parseFloat(expense.exp_amount);
+      const currency = expense.exp_currency || 'USD';
+      invoiceTotalUSD += convertCurrency(amount, currency, 'USD');
+      invoiceTotalAED += convertCurrency(amount, currency, 'AED');
+    }
+  });
+  
+  const sortedKeys = Object.keys(grouped).sort((a, b) => {
+    if (a === 'unknown') return 1;
+    if (b === 'unknown') return -1;
+    return a.localeCompare(b);
+  });
+  
+  let sectionsTotalUSD = 0;
+  let sectionsTotalAED = 0;
+  
+  const html = sortedKeys.map(monthKey => {
+    const monthExpenses = grouped[monthKey];
+    const baseExpenses = monthExpenses.filter(expense => !isDisbursementExpense(expense));
+    const feeExpenses = monthExpenses.filter(expense => isDisbursementExpense(expense));
+    const categoryGroups = {};
+    
+    const categoryTotals = {};
+    const ensureCategory = category => {
+      if (!categoryTotals[category]) {
+        categoryTotals[category] = { usd: 0, aed: 0, count: 0 };
+      }
+    };
+    const addToCategory = (expense, category) => {
+      ensureCategory(category);
+      if (!categoryGroups[category]) {
+        categoryGroups[category] = [];
+      }
+      categoryGroups[category].push(expense);
+      if (expense.exp_amount) {
+        const amount = parseFloat(expense.exp_amount);
+        const currency = expense.exp_currency || 'USD';
+        categoryTotals[category].usd += convertCurrency(amount, currency, 'USD');
+        categoryTotals[category].aed += convertCurrency(amount, currency, 'AED');
+      }
+      categoryTotals[category].count += 1;
+    };
+    
+    baseExpenses.forEach(expense => {
+      addToCategory(expense, getExpenseCategory(expense));
+    });
+    
+    feeExpenses.forEach(expense => {
+      const match = findMatchingBaseExpense(expense, baseExpenses);
+      const category = match ? getExpenseCategory(match) : 'Disbursement fee';
+      addToCategory(expense, category);
+    });
+    
+    let monthTotalUSD = 0;
+    let monthTotalAED = 0;
+    monthExpenses.forEach(expense => {
+      if (expense.exp_amount) {
+        const amount = parseFloat(expense.exp_amount);
+        const currency = expense.exp_currency || 'USD';
+        monthTotalUSD += convertCurrency(amount, currency, 'USD');
+        monthTotalAED += convertCurrency(amount, currency, 'AED');
+      }
+    });
+    
+    sectionsTotalUSD += monthTotalUSD;
+    sectionsTotalAED += monthTotalAED;
+    
+    const categoryRows = Object.keys(categoryTotals).sort().map(category => {
+      const totals = categoryTotals[category];
+      return `
+        <tr>
+          <td>${category}</td>
+          <td>${totals.count}</td>
+          <td>$${formatAmount(totals.usd)} USD / ${formatAmount(totals.aed)} AED</td>
+        </tr>
+      `;
+    }).join('');
+    
+    const categorySections = Object.keys(categoryGroups).sort().map(category => {
+      const expensesForCategory = categoryGroups[category];
+      const categoryBaseExpenses = expensesForCategory.filter(expense => !isDisbursementExpense(expense));
+      const categoryFeeExpenses = expensesForCategory.filter(expense => isDisbursementExpense(expense));
+      
+      categoryBaseExpenses.sort((a, b) => {
+        const dateA = getExpenseMonthDate(a);
+        const dateB = getExpenseMonthDate(b);
+        const timeA = dateA && !Number.isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+        const timeB = dateB && !Number.isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+        return timeB - timeA;
+      });
+      
+      const matchedFeeMap = new Map();
+      const unmatchedFees = [];
+      categoryFeeExpenses.forEach(fee => {
+        const match = findMatchingBaseExpense(fee, categoryBaseExpenses);
+        if (match && match.id) {
+          if (!matchedFeeMap.has(match.id)) {
+            matchedFeeMap.set(match.id, []);
+          }
+          matchedFeeMap.get(match.id).push(fee);
+        } else if (match) {
+          const key = `${match.exp_type || ''}:${match.exp_subtype || ''}:${match.exp_amount || ''}:${match.exp_currency || ''}:${match.exp_flight || ''}:${match.exp_period_start || ''}`;
+          if (!matchedFeeMap.has(key)) {
+            matchedFeeMap.set(key, []);
+          }
+          matchedFeeMap.get(key).push(fee);
+        } else {
+          unmatchedFees.push(fee);
+        }
+      });
+      
+      const orderedExpenses = [];
+      categoryBaseExpenses.forEach(baseExpense => {
+        orderedExpenses.push(baseExpense);
+        const matchKey = baseExpense.id ? baseExpense.id : `${baseExpense.exp_type || ''}:${baseExpense.exp_subtype || ''}:${baseExpense.exp_amount || ''}:${baseExpense.exp_currency || ''}:${baseExpense.exp_flight || ''}:${baseExpense.exp_period_start || ''}`;
+        const relatedFees = matchedFeeMap.get(matchKey) || [];
+        relatedFees.forEach(fee => orderedExpenses.push(fee));
+      });
+      
+      if (unmatchedFees.length) {
+        unmatchedFees.sort((a, b) => {
+          const dateA = getExpenseMonthDate(a);
+          const dateB = getExpenseMonthDate(b);
+          const timeA = dateA && !Number.isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+          const timeB = dateB && !Number.isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+          return timeB - timeA;
+        });
+        unmatchedFees.forEach(fee => orderedExpenses.push(fee));
+      }
+      
+      const rows = orderedExpenses.map(expense => {
+        const amount = expense.exp_amount && expense.exp_currency 
+          ? `${expense.exp_amount} ${expense.exp_currency}` 
+          : (expense.exp_amount || '-');
+        const place = expense.exp_place || '-';
+        const period = formatExpensePeriod(expense);
+        const comments = expense.exp_comments || '-';
+        const flight = expense.flights
+          ? `${expense.flights.flt_number || '-'}${expense.flights.flt_dep && expense.flights.flt_arr ? ` (${expense.flights.flt_dep} - ${expense.flights.flt_arr})` : ''}`
+          : '-';
+        
+        return `
+          <tr>
+            <td>${expense.expense_types?.name || expense.exp_type || '-'}</td>
+            <td>${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</td>
+            <td>${amount}</td>
+            <td>${place}</td>
+            <td>${period}</td>
+            <td>${flight}</td>
+            <td>${comments}</td>
+          </tr>
+        `;
+      }).join('');
+      
+      return `
+        <div class="monthly-category">
+          <div class="monthly-category-header">
+            <span>${category}</span>
+            <span class="monthly-count">${expensesForCategory.length} items</span>
+          </div>
+          <div class="table-container">
+            <table class="expenses-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Subtype</th>
+                  <th>Amount</th>
+                  <th>Place</th>
+                  <th>Period</th>
+                  <th>Flight</th>
+                  <th>Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    return `
+      <div class="monthly-section">
+        <div class="monthly-header">
+          <h4>${formatMonthLabel(monthKey)}</h4>
+          <span class="monthly-count">${monthExpenses.length} items</span>
+        </div>
+        <div class="monthly-summary">
+          <div class="monthly-total">
+            Total: $${formatAmount(monthTotalUSD)} USD / ${formatAmount(monthTotalAED)} AED
+          </div>
+          <table class="monthly-summary-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Items</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${categoryRows || '<tr><td colspan="3">No data</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        ${categorySections}
+      </div>
+    `;
+  }).join('');
+  
+  const summaryHtml = `
+    <div class="monthly-summary">
+      <div class="monthly-total">
+        Invoice total: $${formatAmount(invoiceTotalUSD)} USD / ${formatAmount(invoiceTotalAED)} AED
+      </div>
+      <div class="monthly-total">
+        Sections total: $${formatAmount(sectionsTotalUSD)} USD / ${formatAmount(sectionsTotalAED)} AED
+      </div>
+    </div>
+  `;
+  
+  content.innerHTML = summaryHtml + html;
+}
+
+function openMonthlyExpensesModal() {
+  const modal = document.getElementById('monthlyExpensesModal');
+  if (modal) {
+    renderMonthlyExpensesModal(invoiceExpensesCache);
+    modal.classList.add('show');
+  }
+}
+
+function closeMonthlyExpensesModal() {
+  const modal = document.getElementById('monthlyExpensesModal');
+  if (modal) {
+    modal.classList.remove('show');
+  }
+}
+
+function openMonthlyPrintWindow() {
+  renderMonthlyExpensesModal(invoiceExpensesCache);
+  const content = document.getElementById('monthlyExpensesContent');
+  if (!content) {
+    return;
+  }
+  
+  const styleTags = Array.from(document.querySelectorAll('style'))
+    .map(style => style.textContent)
+    .join('\n');
+  
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    return;
+  }
+  
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Invoice ${invoiceNumberLabel} Expenses by Month</title>
+        <style>
+          ${styleTags}
+          body {
+            margin: 12px;
+            background: #fff;
+            font-size: 0.62rem;
+          }
+          .modal-header-actions,
+          .modal-close,
+          #openMonthlyPrintBtn {
+            display: none !important;
+          }
+          #monthlyExpensesModal {
+            font-size: 0.62rem !important;
+          }
+          #monthlyExpensesContent {
+            padding: 0 !important;
+          }
+          .monthly-header {
+            margin-bottom: 0.25rem !important;
+            padding: 0.2rem 0.35rem !important;
+          }
+          .monthly-summary {
+            margin-bottom: 0.35rem !important;
+          }
+          .monthly-summary-table {
+            font-size: 0.6rem !important;
+          }
+          .monthly-summary-table th,
+          .monthly-summary-table td {
+            padding: 0.2rem 0.35rem !important;
+          }
+          .monthly-section {
+            page-break-after: always;
+            break-after: page;
+          }
+          .monthly-section:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+          .monthly-category-header {
+            padding: 0.2rem 0.35rem !important;
+            margin-bottom: 0.2rem !important;
+          }
+          .expenses-table {
+            font-size: 0.6rem !important;
+          }
+          .expenses-table th,
+          .expenses-table td {
+            padding: 0.18rem 0.3rem !important;
+          }
+          @media print {
+            @page {
+              size: A4 landscape;
+              margin: 10mm;
+            }
+            body {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <h2 style="margin: 0 0 0.75rem 0;">Expenses by Month — ${invoiceNumberLabel}</h2>
+        ${content.innerHTML}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1501,12 +2067,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const statusBtn = document.getElementById('statusBtn');
   if (statusBtn) {
     // Set initial button class based on status
-    const isCompleted = statusBtn.getAttribute('data-status') === 'true';
-    if (isCompleted) {
-      statusBtn.className = 'btn btn-status completed';
-    } else {
-      statusBtn.className = 'btn btn-status in-progress';
-    }
+    const initialStatus = statusBtn.getAttribute('data-status') || 'in-progress';
+    applyInvoiceStatusToButton(statusBtn, initialStatus);
     
     statusBtn.addEventListener('click', toggleInvoiceStatus);
   }
@@ -1515,6 +2077,11 @@ document.addEventListener('DOMContentLoaded', function() {
   const addExpenseBtn = document.getElementById('addExpenseBtn');
   if (addExpenseBtn) {
     addExpenseBtn.addEventListener('click', openAddExpenseModal);
+  }
+
+  const monthlyViewBtn = document.getElementById('monthlyViewBtn');
+  if (monthlyViewBtn) {
+    monthlyViewBtn.addEventListener('click', openMonthlyExpensesModal);
   }
   
   // Expense type change handler
@@ -1534,6 +2101,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const cancelExpenseBtn = document.getElementById('cancelExpenseBtn');
   if (cancelExpenseBtn) {
     cancelExpenseBtn.addEventListener('click', closeAddExpenseModal);
+  }
+
+  const closeMonthlyExpensesBtn = document.getElementById('closeMonthlyExpensesBtn');
+  if (closeMonthlyExpensesBtn) {
+    closeMonthlyExpensesBtn.addEventListener('click', closeMonthlyExpensesModal);
+  }
+
+  const openMonthlyPrintBtn = document.getElementById('openMonthlyPrintBtn');
+  if (openMonthlyPrintBtn) {
+    openMonthlyPrintBtn.addEventListener('click', openMonthlyPrintWindow);
   }
   
   // Form submission
@@ -1818,6 +2395,42 @@ document.addEventListener('DOMContentLoaded', function() {
   max-width: 600px !important;
   max-height: 90vh !important;
   overflow-y: hidden !important;
+}
+
+.modal-container-wide {
+  max-width: 1200px !important;
+  width: 95% !important;
+  overflow-y: auto !important;
+}
+
+#monthlyExpensesModal {
+  font-size: 0.72rem !important;
+}
+
+#monthlyExpensesModal .modal-header {
+  padding: 0.75rem 1rem 0 1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+#monthlyExpensesModal .modal-header h2 {
+  font-size: 0.9rem !important;
+}
+
+#monthlyExpensesModal .modal-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+#monthlyExpensesModal .btn-print {
+  height: 26px !important;
+  padding: 0 0.5rem !important;
+  font-size: 0.65rem !important;
+  min-width: auto !important;
+}
+
+#monthlyExpensesModal .modal-body {
+  padding: 0 1rem 0.75rem 1rem !important;
 }
 
 .modal-header {
@@ -2186,6 +2799,108 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow: visible !important;
 }
 
+/* Monthly modal styles */
+.monthly-section {
+  margin-bottom: 0.9rem !important;
+}
+
+.monthly-section:last-child {
+  margin-bottom: 0 !important;
+}
+
+.monthly-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 0.35rem !important;
+  padding-bottom: 0.25rem !important;
+  border-bottom: 2px solid hsl(210, 11%, 90%) !important;
+  background-color: hsl(200, 50%, 95%) !important;
+  padding: 0.25rem 0.4rem !important;
+  border-radius: 0.3rem !important;
+}
+
+.monthly-header h4 {
+  margin: 0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 21%) !important;
+}
+
+.monthly-count {
+  font-size: 0.65rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  background-color: hsl(210, 11%, 95%) !important;
+  padding: 0.1rem 0.3rem !important;
+  border-radius: 0.3rem !important;
+}
+
+.monthly-summary {
+  margin-bottom: 0.5rem !important;
+}
+
+.monthly-total {
+  font-weight: 600 !important;
+  color: hsl(142, 76%, 36%) !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.monthly-summary-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.68rem !important;
+  background: white !important;
+  border: 1px solid hsl(210, 11%, 90%) !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+}
+
+.monthly-summary-table th,
+.monthly-summary-table td {
+  padding: 0.25rem 0.4rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 95%) !important;
+}
+
+#monthlyExpensesModal .monthly-category {
+  margin-bottom: 0.5rem !important;
+}
+
+#monthlyExpensesModal .monthly-category:last-child {
+  margin-bottom: 0 !important;
+}
+
+#monthlyExpensesModal .monthly-category-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background-color: hsl(210, 11%, 97%) !important;
+  padding: 0.25rem 0.4rem !important;
+  border-radius: 0.3rem !important;
+  margin-bottom: 0.25rem !important;
+  font-weight: 600 !important;
+  color: hsl(210, 6%, 25%) !important;
+}
+
+#monthlyExpensesModal .expenses-table {
+  font-size: 0.68rem !important;
+}
+
+#monthlyExpensesModal .expenses-table th,
+#monthlyExpensesModal .expenses-table td {
+  padding: 0.2rem 0.35rem !important;
+  line-height: 1.1 !important;
+}
+
+#monthlyExpensesModal .expenses-table th {
+  font-size: 0.6rem !important;
+  line-height: 1.05 !important;
+}
+
+#monthlyExpensesModal .expenses-table td {
+  font-size: 0.62rem !important;
+  line-height: 1.1 !important;
+}
+
 /* Responsive design */
 @media (max-width: 640px) {
   .page-header {
@@ -2263,6 +2978,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .btn-status.completed:hover {
   background-color: #5dd670 !important;
+}
+
+.btn-status.inc-ats {
+  background-color: #5b8def !important;
+  color: white !important;
+}
+
+.btn-status.inc-ats:hover {
+  background-color: #4b7ede !important;
 }
 
 /* Section total styles */

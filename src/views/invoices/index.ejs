@@ -124,6 +124,32 @@
 <script>
 // Global variable to track current sort order
 let currentSortOrder = 'newest'; // 'newest' or 'oldest' - default: newest first
+const INVOICE_STATUS_FLOW = ['in-progress', 'inc-ats', 'completed'];
+
+function getInvoiceStatusFromInvoice(invoice) {
+  if (invoice.inv_filled) return 'completed';
+  if (invoice.inv_disputed) return 'inc-ats';
+  return 'in-progress';
+}
+
+function getInvoiceStatusLabel(status) {
+  if (status === 'completed') return 'Completed';
+  if (status === 'inc-ats') return 'Inc. for ATS';
+  return 'In Progress';
+}
+
+function getNextInvoiceStatus(currentStatus) {
+  const currentIndex = INVOICE_STATUS_FLOW.indexOf(currentStatus);
+  const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+  return INVOICE_STATUS_FLOW[(safeIndex + 1) % INVOICE_STATUS_FLOW.length];
+}
+
+function getInvoiceStatusPayload(status) {
+  return {
+    inv_filled: status === 'completed',
+    inv_disputed: status === 'inc-ats',
+  };
+}
 
 // Load invoices data from API
 async function loadInvoices() {
@@ -197,6 +223,8 @@ async function loadInvoices() {
       
       // Add invoices for this month
       monthData.invoices.forEach(invoice => {
+      const invoiceStatus = getInvoiceStatusFromInvoice(invoice);
+      const statusLabel = getInvoiceStatusLabel(invoiceStatus);
       const row = document.createElement('tr');
       
       // Format date
@@ -243,10 +271,10 @@ async function loadInvoices() {
         </td>
         <td>
           <div class="status-container">
-            <button class="status-btn ${invoice.inv_filled ? 'completed' : 'in-progress'}" 
+            <button class="status-btn ${invoiceStatus}" 
                     data-id="${invoice.id}" 
-                    data-status="${invoice.inv_filled}">
-              ${invoice.inv_filled ? 'Completed' : 'In Progress'}
+                    data-status="${invoiceStatus}">
+              ${statusLabel}
             </button>
           </div>
         </td>
@@ -378,28 +406,20 @@ async function deleteInvoice(id) {
 // Toggle invoice status
 async function toggleInvoiceStatus(button) {
   const invoiceId = button.getAttribute('data-id');
-  const currentStatus = button.getAttribute('data-status') === 'true';
-  const newStatus = !currentStatus;
+  const currentStatus = button.getAttribute('data-status') || 'in-progress';
+  const newStatus = getNextInvoiceStatus(currentStatus);
   
   try {
     const response = await apiRequest(`/api/invoices/${invoiceId}/status`, {
       method: 'PUT',
-      body: JSON.stringify({
-        inv_filled: newStatus
-      }),
+      body: JSON.stringify(getInvoiceStatusPayload(newStatus)),
     });
     
     if (response.ok) {
       // Update button appearance and data
       button.setAttribute('data-status', newStatus);
-      
-      if (newStatus) {
-        button.className = 'status-btn completed';
-        button.textContent = 'Completed';
-      } else {
-        button.className = 'status-btn in-progress';
-        button.textContent = 'In Progress';
-      }
+      button.className = `status-btn ${newStatus}`;
+      button.textContent = getInvoiceStatusLabel(newStatus);
     } else {
       console.error('Failed to update invoice status');
       alert('Failed to update invoice status. Please try again.');
@@ -854,6 +874,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .status-btn.completed:hover {
   background-color: #5dd670 !important;
+}
+
+.status-btn.inc-ats {
+  background-color: #5b8def !important;
+  color: white !important;
+}
+
+.status-btn.inc-ats:hover {
+  background-color: #4b7ede !important;
 }
 
 /* Discrepancies styles */
