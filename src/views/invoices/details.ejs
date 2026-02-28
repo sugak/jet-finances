@@ -36,6 +36,10 @@
       <i class="bi bi-calendar3"></i>
       Monthly View
     </button>
+    <button class="btn btn-secondary" id="accountsViewBtn">
+      <i class="bi bi-bank"></i>
+      Accounts View
+    </button>
   </div>
 </div>
 
@@ -171,6 +175,29 @@
         </button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Accounts View Modal -->
+<div class="modal-overlay" id="accountsViewModal" style="display: none;">
+  <div class="modal-container modal-container-wide">
+    <div class="modal-header">
+      <h2>Expenses by Account — <%= invoice.inv_number || invoice.inv_code || invoice.id %></h2>
+      <div class="modal-header-actions">
+        <button class="btn btn-secondary btn-print" id="openAccountsPrintBtn" type="button">
+          <i class="bi bi-box-arrow-up-right"></i>
+          Open Print View
+        </button>
+        <button class="modal-close" id="closeAccountsViewBtn">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="accountsViewContent">
+        <!-- Accounts view content will be loaded here -->
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1688,6 +1715,288 @@ function formatAmount(amount) {
   });
 }
 
+const ATS_PERIOD_CUTOFF = '2025-10';
+const ATS_FLIGHT_CUTOFF = '2025-09-30';
+
+function isATSExpense(expense) {
+  if (expense.flights && expense.flights.flt_date) {
+    const fltDate = new Date(expense.flights.flt_date);
+    const cutoff = new Date(ATS_FLIGHT_CUTOFF);
+    return !Number.isNaN(fltDate.getTime()) && fltDate >= cutoff;
+  }
+  if (expense.exp_period_start) {
+    const period = String(expense.exp_period_start).substring(0, 7);
+    return period >= ATS_PERIOD_CUTOFF;
+  }
+  return false;
+}
+
+function renderAccountsViewModal(expenses) {
+  const content = document.getElementById('accountsViewContent');
+  if (!content) return;
+
+  if (!expenses || expenses.length === 0) {
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-receipt"></i></div>
+        <h3>No Expenses</h3>
+        <p>No expenses found for this invoice.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const atsExpenses = expenses.filter(isATSExpense);
+  const rtsigExpenses = expenses.filter(e => !isATSExpense(e));
+
+  let invoiceTotalUSD = 0;
+  let invoiceTotalAED = 0;
+  expenses.forEach(expense => {
+    if (expense.exp_amount) {
+      const amount = parseFloat(expense.exp_amount);
+      const currency = expense.exp_currency || 'USD';
+      invoiceTotalUSD += convertCurrency(amount, currency, 'USD');
+      invoiceTotalAED += convertCurrency(amount, currency, 'AED');
+    }
+  });
+
+  function renderAccountSection(accountExpenses, accountName) {
+    if (accountExpenses.length === 0) {
+      return `
+        <div class="accounts-section">
+          <h2 class="accounts-section-title">${accountName}</h2>
+          <p class="accounts-empty">No expenses in this account.</p>
+          <div class="accounts-section-total">Total: $0.00 USD</div>
+        </div>
+      `;
+    }
+
+    const baseExpenses = accountExpenses.filter(e => !isDisbursementExpense(e));
+    const feeExpenses = accountExpenses.filter(e => isDisbursementExpense(e));
+
+    const byMonth = {};
+    accountExpenses.forEach(expense => {
+      const key = getMonthlyGroupingKey(expense);
+      if (!byMonth[key]) byMonth[key] = [];
+      byMonth[key].push(expense);
+    });
+
+    const sortedMonths = Object.keys(byMonth).sort((a, b) => {
+      if (a === 'unknown') return 1;
+      if (b === 'unknown') return -1;
+      return a.localeCompare(b);
+    });
+
+    let sectionTotalUSD = 0;
+    let sectionTotalAED = 0;
+
+    const monthBlocks = sortedMonths.map(monthKey => {
+      const monthExpenses = byMonth[monthKey];
+      const monthBase = monthExpenses.filter(e => !isDisbursementExpense(e));
+      const byInvoiceType = {};
+      const addToType = (expense, category) => {
+        if (!byInvoiceType[category]) byInvoiceType[category] = [];
+        byInvoiceType[category].push(expense);
+      };
+      monthExpenses.forEach(expense => {
+        const category = isDisbursementExpense(expense)
+          ? (findMatchingBaseExpense(expense, monthBase) ? getExpenseCategory(findMatchingBaseExpense(expense, monthBase)) : 'Disbursement fee')
+          : getExpenseCategory(expense);
+        addToType(expense, category);
+      });
+
+      const typeBlocks = Object.keys(byInvoiceType).sort().map(invoiceType => {
+        const typeExpenses = byInvoiceType[invoiceType];
+        const typeBase = typeExpenses.filter(e => !isDisbursementExpense(e));
+        const typeFees = typeExpenses.filter(e => isDisbursementExpense(e));
+
+        typeBase.sort((a, b) => {
+          const dateA = getExpenseMonthDate(a);
+          const dateB = getExpenseMonthDate(b);
+          const timeA = dateA && !Number.isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+          const timeB = dateB && !Number.isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+          return timeB - timeA;
+        });
+
+        const matchedFeeMap = new Map();
+        const unmatchedFees = [];
+        typeFees.forEach(fee => {
+          const match = findMatchingBaseExpense(fee, typeBase);
+          if (match && match.id) {
+            if (!matchedFeeMap.has(match.id)) matchedFeeMap.set(match.id, []);
+            matchedFeeMap.get(match.id).push(fee);
+          } else if (match) {
+            const key = `${match.exp_type || ''}:${match.exp_subtype || ''}:${match.exp_amount || ''}:${match.exp_currency || ''}:${match.exp_flight || ''}:${match.exp_period_start || ''}`;
+            if (!matchedFeeMap.has(key)) matchedFeeMap.set(key, []);
+            matchedFeeMap.get(key).push(fee);
+          } else {
+            unmatchedFees.push(fee);
+          }
+        });
+
+        const ordered = [];
+        typeBase.forEach(baseExpense => {
+          ordered.push(baseExpense);
+          const matchKey = baseExpense.id ? baseExpense.id : `${baseExpense.exp_type || ''}:${baseExpense.exp_subtype || ''}:${baseExpense.exp_amount || ''}:${baseExpense.exp_currency || ''}:${baseExpense.exp_flight || ''}:${baseExpense.exp_period_start || ''}`;
+          (matchedFeeMap.get(matchKey) || []).forEach(fee => ordered.push(fee));
+        });
+        unmatchedFees.sort((a, b) => {
+          const dateA = getExpenseMonthDate(a);
+          const dateB = getExpenseMonthDate(b);
+          const timeA = dateA && !Number.isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+          const timeB = dateB && !Number.isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+          return timeB - timeA;
+        });
+        unmatchedFees.forEach(fee => ordered.push(fee));
+
+        const rows = ordered.map(expense => {
+          const amount = expense.exp_amount && expense.exp_currency
+            ? `${expense.exp_amount} ${expense.exp_currency}`
+            : (expense.exp_amount || '-');
+          const place = expense.exp_place || '-';
+          const period = formatExpensePeriod(expense);
+          const comments = expense.exp_comments || '-';
+          const flight = expense.flights
+            ? `${expense.flights.flt_number || '-'}${expense.flights.flt_dep && expense.flights.flt_arr ? ` (${expense.flights.flt_dep} - ${expense.flights.flt_arr})` : ''}`
+            : '-';
+          return `
+            <tr>
+              <td>${expense.expense_types?.name || expense.exp_type || '-'}</td>
+              <td>${expense.expense_subtypes?.name || expense.exp_subtype || '-'}</td>
+              <td>${amount}</td>
+              <td>${place}</td>
+              <td>${period}</td>
+              <td>${flight}</td>
+              <td>${comments}</td>
+            </tr>
+          `;
+        }).join('');
+
+        return `
+          <div class="accounts-invoice-type">
+            <h3 class="accounts-invoice-type-header">${invoiceType}</h3>
+            <div class="table-container">
+              <table class="expenses-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Subtype</th>
+                    <th>Amount</th>
+                    <th>Place</th>
+                    <th>Period</th>
+                    <th>Flight</th>
+                    <th>Comments</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      let monthUSD = 0, monthAED = 0;
+      monthExpenses.forEach(expense => {
+        if (expense.exp_amount) {
+          const amt = parseFloat(expense.exp_amount);
+          const cur = expense.exp_currency || 'USD';
+          monthUSD += convertCurrency(amt, cur, 'USD');
+          monthAED += convertCurrency(amt, cur, 'AED');
+        }
+      });
+      sectionTotalUSD += monthUSD;
+      sectionTotalAED += monthAED;
+
+      return `
+        <div class="accounts-month-block">
+          <div class="accounts-month-header">${formatMonthLabel(monthKey)}</div>
+          ${typeBlocks}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="accounts-section">
+        <h2 class="accounts-section-title">${accountName}</h2>
+        ${monthBlocks}
+        <div class="accounts-section-total">Total: $${formatAmount(sectionTotalUSD)} USD</div>
+      </div>
+    `;
+  }
+
+  const summaryHtml = `
+    <div class="accounts-summary">
+      <div class="accounts-invoice-total">Invoice total: $${formatAmount(invoiceTotalUSD)} USD / ${formatAmount(invoiceTotalAED)} AED</div>
+    </div>
+  `;
+
+  content.innerHTML = summaryHtml
+    + renderAccountSection(atsExpenses, 'ATS account')
+    + renderAccountSection(rtsigExpenses, 'RTSIG account');
+}
+
+function openAccountsViewModal() {
+  const modal = document.getElementById('accountsViewModal');
+  if (modal) {
+    renderAccountsViewModal(invoiceExpensesCache);
+    modal.classList.add('show');
+  }
+}
+
+function closeAccountsViewModal() {
+  const modal = document.getElementById('accountsViewModal');
+  if (modal) {
+    modal.classList.remove('show');
+  }
+}
+
+function openAccountsPrintWindow() {
+  renderAccountsViewModal(invoiceExpensesCache);
+  const content = document.getElementById('accountsViewContent');
+  if (!content) return;
+
+  const styleTags = Array.from(document.querySelectorAll('style'))
+    .map(style => style.textContent)
+    .join('\n');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Invoice ${invoiceNumberLabel} Expenses by Account</title>
+        <style>
+          ${styleTags}
+          body { margin: 12px; background: #fff; font-size: 0.62rem; }
+          .modal-header-actions, .modal-close, #openAccountsPrintBtn { display: none !important; }
+          #accountsViewModal { font-size: 0.62rem !important; }
+          #accountsViewContent { padding: 0 !important; }
+          .accounts-section { page-break-after: always; break-after: page; }
+          .accounts-section:last-child { page-break-after: auto; break-after: auto; }
+          .accounts-section-title { margin-bottom: 0.35rem !important; }
+          .accounts-invoice-type-header { padding: 0.2rem 0.35rem !important; }
+          .expenses-table { font-size: 0.6rem !important; }
+          .expenses-table th, .expenses-table td { padding: 0.18rem 0.3rem !important; }
+          @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <h2 style="margin: 0 0 0.75rem 0;">Expenses by Account — ${invoiceNumberLabel}</h2>
+        ${content.innerHTML}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+}
+
 function renderMonthlyExpensesModal(expenses) {
   const content = document.getElementById('monthlyExpensesContent');
   if (!content) {
@@ -2083,6 +2392,11 @@ document.addEventListener('DOMContentLoaded', function() {
   if (monthlyViewBtn) {
     monthlyViewBtn.addEventListener('click', openMonthlyExpensesModal);
   }
+
+  const accountsViewBtn = document.getElementById('accountsViewBtn');
+  if (accountsViewBtn) {
+    accountsViewBtn.addEventListener('click', openAccountsViewModal);
+  }
   
   // Expense type change handler
   const expTypeSelect = document.getElementById('expType');
@@ -2108,9 +2422,19 @@ document.addEventListener('DOMContentLoaded', function() {
     closeMonthlyExpensesBtn.addEventListener('click', closeMonthlyExpensesModal);
   }
 
+  const closeAccountsViewBtn = document.getElementById('closeAccountsViewBtn');
+  if (closeAccountsViewBtn) {
+    closeAccountsViewBtn.addEventListener('click', closeAccountsViewModal);
+  }
+
   const openMonthlyPrintBtn = document.getElementById('openMonthlyPrintBtn');
   if (openMonthlyPrintBtn) {
     openMonthlyPrintBtn.addEventListener('click', openMonthlyPrintWindow);
+  }
+
+  const openAccountsPrintBtn = document.getElementById('openAccountsPrintBtn');
+  if (openAccountsPrintBtn) {
+    openAccountsPrintBtn.addEventListener('click', openAccountsPrintWindow);
   }
   
   // Form submission
@@ -2898,6 +3222,130 @@ document.addEventListener('DOMContentLoaded', function() {
 
 #monthlyExpensesModal .expenses-table td {
   font-size: 0.62rem !important;
+  line-height: 1.1 !important;
+}
+
+/* Accounts view modal styles */
+#accountsViewModal {
+  font-size: 0.72rem !important;
+}
+
+#accountsViewModal .modal-header {
+  padding: 0.75rem 1rem 0 1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+#accountsViewModal .modal-header h2 {
+  font-size: 0.9rem !important;
+}
+
+#accountsViewModal .modal-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+#accountsViewModal .btn-print {
+  height: 26px !important;
+  padding: 0 0.5rem !important;
+  font-size: 0.65rem !important;
+  min-width: auto !important;
+}
+
+#accountsViewModal .modal-body {
+  padding: 0 1rem 0.75rem 1rem !important;
+}
+
+.accounts-summary {
+  margin-bottom: 1rem !important;
+}
+
+.accounts-invoice-total {
+  font-weight: 600 !important;
+  color: hsl(142, 76%, 36%) !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.accounts-section {
+  margin-bottom: 1.5rem !important;
+  padding-bottom: 1rem !important;
+  border-bottom: 1px solid hsl(210, 11%, 92%) !important;
+}
+
+.accounts-section:last-child {
+  border-bottom: none !important;
+  margin-bottom: 0 !important;
+}
+
+.accounts-section-title {
+  font-weight: 700 !important;
+  font-size: 1.25rem !important;
+  color: #8b0000 !important;
+  margin: 0 0 0.75rem 0 !important;
+}
+
+.accounts-empty {
+  font-size: 0.8rem !important;
+  color: hsl(210, 6%, 46%) !important;
+  margin: 0 0 0.5rem 0 !important;
+}
+
+.accounts-section-total {
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  color: hsl(142, 76%, 36%) !important;
+  margin-top: 1rem !important;
+  padding-top: 0.75rem !important;
+  border-top: 1px solid hsl(210, 11%, 88%) !important;
+}
+
+.accounts-invoice-type {
+  margin-bottom: 1rem !important;
+}
+
+.accounts-invoice-type-header {
+  font-weight: 600 !important;
+  font-size: 0.9rem !important;
+  color: hsl(210, 6%, 21%) !important;
+  margin: 0 0 0.4rem 0 !important;
+  padding: 0 !important;
+  background: none !important;
+}
+
+.accounts-month-block {
+  margin-bottom: 1rem !important;
+}
+
+.accounts-month-block > .accounts-invoice-type {
+  margin-top: 0.4rem !important;
+}
+
+.accounts-month-header {
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  color: #000 !important;
+  padding: 0.3rem 0 0.25rem 0 !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.accounts-count {
+  font-size: 0.62rem !important;
+  font-weight: normal !important;
+  color: hsl(210, 6%, 55%) !important;
+}
+
+#accountsViewModal .expenses-table {
+  font-size: 0.68rem !important;
+}
+
+#accountsViewModal .expenses-table th {
+  font-size: 0.55rem !important;
+  padding: 0.15rem 0.25rem !important;
+  line-height: 1.05 !important;
+}
+
+#accountsViewModal .expenses-table td {
+  padding: 0.18rem 0.25rem !important;
   line-height: 1.1 !important;
 }
 
