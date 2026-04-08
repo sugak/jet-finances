@@ -196,13 +196,20 @@ async function authenticateSession(
   res: Response,
   next: NextFunction
 ) {
+  const rejectUnauthorized = () => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return res.redirect('/login');
+  };
+
   try {
     const sessionToken =
       req.cookies['sb-access-token'] || req.cookies['supabase-auth-token'];
     const refreshToken = req.cookies['sb-refresh-token'];
 
     if (!sessionToken) {
-      return res.redirect('/login');
+      return rejectUnauthorized();
     }
 
     if (!supabase) {
@@ -233,7 +240,7 @@ async function authenticateSession(
           res.clearCookie('sb-access-token');
           res.clearCookie('sb-refresh-token');
           res.clearCookie('supabase-auth-token');
-          return res.redirect('/login');
+          return rejectUnauthorized();
         }
 
         // Set new tokens in cookies
@@ -268,7 +275,7 @@ async function authenticateSession(
           res.clearCookie('sb-access-token');
           res.clearCookie('sb-refresh-token');
           res.clearCookie('supabase-auth-token');
-          return res.redirect('/login');
+          return rejectUnauthorized();
         }
 
         // Get user role from database
@@ -282,7 +289,7 @@ async function authenticateSession(
           res.clearCookie('sb-access-token');
           res.clearCookie('sb-refresh-token');
           res.clearCookie('supabase-auth-token');
-          return res.redirect('/login');
+          return rejectUnauthorized();
         }
 
         // Add user info to response locals for EJS templates
@@ -299,7 +306,7 @@ async function authenticateSession(
         res.clearCookie('sb-access-token');
         res.clearCookie('sb-refresh-token');
         res.clearCookie('supabase-auth-token');
-        return res.redirect('/login');
+        return rejectUnauthorized();
       }
     }
 
@@ -308,7 +315,7 @@ async function authenticateSession(
       res.clearCookie('sb-access-token');
       res.clearCookie('sb-refresh-token');
       res.clearCookie('supabase-auth-token');
-      return res.redirect('/login');
+      return rejectUnauthorized();
     }
 
     // Get user role from database
@@ -322,7 +329,7 @@ async function authenticateSession(
       res.clearCookie('sb-access-token');
       res.clearCookie('sb-refresh-token');
       res.clearCookie('supabase-auth-token');
-      return res.redirect('/login');
+      return rejectUnauthorized();
     }
 
     // Add user info to response locals for EJS templates
@@ -339,7 +346,7 @@ async function authenticateSession(
     res.clearCookie('sb-access-token');
     res.clearCookie('sb-refresh-token');
     res.clearCookie('supabase-auth-token');
-    return res.redirect('/login');
+    return rejectUnauthorized();
   }
 }
 
@@ -1593,7 +1600,8 @@ app.get('/api/flights', authenticateToken, async (_req, res) => {
       let { data, error } = await supabase.from('flights').select(`
         *,
         expenses!exp_flight (
-          exp_type
+          exp_type,
+          exp_subtype
         )
       `);
 
@@ -1621,20 +1629,41 @@ app.get('/api/flights', authenticateToken, async (_req, res) => {
       // Enrich expenses with type names if exp_type is an ID
       if (data && data.length > 0) {
         try {
-          // Get all unique expense type IDs
-          const expenseTypeIds = new Set<number>();
+          const isUuidString = (s: string) =>
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              s
+            );
+
+          // Get all unique expense type IDs and subtype IDs (UUID or number only)
+          const expenseTypeIds = new Set<string>();
+          const expenseSubtypeIds = new Set<string>();
           data.forEach((flight: any) => {
             if (flight.expenses && Array.isArray(flight.expenses)) {
               flight.expenses.forEach((expense: any) => {
-                if (expense.exp_type && typeof expense.exp_type === 'number') {
-                  expenseTypeIds.add(expense.exp_type);
+                if (
+                  expense.exp_type != null &&
+                  expense.exp_type !== '' &&
+                  typeof expense.exp_type === 'number'
+                ) {
+                  expenseTypeIds.add(String(expense.exp_type));
+                }
+                const rawSub = expense.exp_subtype;
+                if (rawSub != null && rawSub !== '') {
+                  if (typeof rawSub === 'number') {
+                    expenseSubtypeIds.add(String(rawSub));
+                  } else if (
+                    typeof rawSub === 'string' &&
+                    isUuidString(rawSub)
+                  ) {
+                    expenseSubtypeIds.add(rawSub);
+                  }
                 }
               });
             }
           });
 
           // Fetch expense type names if we have IDs
-          const expenseTypeMap: { [key: number]: string } = {};
+          const expenseTypeMap: { [key: string]: string } = {};
           if (expenseTypeIds.size > 0) {
             const { data: expenseTypes, error: typesError } = await supabase
               .from('expense_types')
@@ -1643,24 +1672,48 @@ app.get('/api/flights', authenticateToken, async (_req, res) => {
 
             if (!typesError && expenseTypes) {
               expenseTypes.forEach((et: any) => {
-                expenseTypeMap[et.id] = et.name;
+                expenseTypeMap[String(et.id)] = et.name;
               });
             }
           }
 
-          // Enrich flights with expense type names
+          const expenseSubtypeMap: { [key: string]: string } = {};
+          if (expenseSubtypeIds.size > 0) {
+            const { data: expenseSubtypes, error: subtypesError } =
+              await supabase
+                .from('expense_subtypes')
+                .select('id, name')
+                .in('id', Array.from(expenseSubtypeIds));
+
+            if (!subtypesError && expenseSubtypes) {
+              expenseSubtypes.forEach((st: any) => {
+                expenseSubtypeMap[String(st.id)] = st.name;
+              });
+            }
+          }
+
+          // Enrich flights with expense type / subtype names (keep all fields)
           const enrichedData = data.map((flight: any) => {
             if (flight.expenses && Array.isArray(flight.expenses)) {
               flight.expenses = flight.expenses.map((expense: any) => {
-                // If exp_type is a number (ID), look up the name
-                if (
-                  typeof expense.exp_type === 'number' &&
-                  expenseTypeMap[expense.exp_type]
-                ) {
-                  return { exp_type: expenseTypeMap[expense.exp_type] };
-                }
-                // If exp_type is already a string, use it directly
-                return { exp_type: expense.exp_type };
+                const typeKey =
+                  expense.exp_type != null ? String(expense.exp_type) : '';
+                const subtypeKey =
+                  expense.exp_subtype != null
+                    ? String(expense.exp_subtype)
+                    : '';
+                return {
+                  ...expense,
+                  exp_type:
+                    typeof expense.exp_type === 'number' &&
+                    expenseTypeMap[typeKey]
+                      ? expenseTypeMap[typeKey]
+                      : expense.exp_type,
+                  exp_subtype:
+                    expenseSubtypeMap[subtypeKey] != null
+                      ? expenseSubtypeMap[subtypeKey]
+                      : expense.exp_subtype,
+                };
               });
             }
             return flight;
@@ -1732,6 +1785,220 @@ app.get('/api/flights/expenses', authenticateToken, async (_req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Heuristic duplicate check: same flight + same economic fingerprint (fuel uplift or line item)
+app.get(
+  '/api/flights/expense-duplicate-check',
+  authenticateToken,
+  async (_req, res) => {
+    try {
+      if (!supabase) {
+        return res.status(503).json({ error: 'Database not available' });
+      }
+
+      const pageSize = 1000;
+      let from = 0;
+      const allRows: any[] = [];
+      let moreRows = true;
+
+      while (moreRows) {
+        const { data: page, error } = await supabase
+          .from('expenses')
+          .select(
+            `
+            id,
+            exp_type,
+            exp_subtype,
+            exp_amount,
+            exp_currency,
+            exp_invoice,
+            exp_flight,
+            exp_fuel_quan,
+            exp_fuel_provider,
+            exp_period_start,
+            exp_period_end,
+            exp_invoice_type,
+            created_at,
+            flights!exp_flight (
+              id,
+              flt_number,
+              flt_date,
+              flt_dep,
+              flt_arr
+            ),
+            invoices!exp_invoice (
+              id,
+              inv_number
+            )
+          `
+          )
+          .not('exp_flight', 'is', null)
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.log('duplicate-check fetch error:', error.message);
+          return res
+            .status(500)
+            .json({ error: 'Failed to load flight expenses' });
+        }
+
+        if (!page || page.length === 0) {
+          moreRows = false;
+        } else {
+          allRows.push(...page);
+          if (page.length < pageSize) {
+            moreRows = false;
+          } else {
+            from += pageSize;
+          }
+        }
+      }
+
+      const norm = (v: unknown) =>
+        String(v ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, ' ');
+      const money = (v: unknown) =>
+        Math.round((parseFloat(String(v ?? '0')) || 0) * 100) / 100;
+      const fuelQuan = (v: unknown) =>
+        Math.round((parseFloat(String(v ?? '0')) || 0) * 100) / 100;
+
+      const isDisbursement = (type: string) =>
+        norm(type).includes('disbursement');
+      const isCredit = (type: string) => norm(type).includes('credit');
+
+      type Finding = {
+        kind: string;
+        severity: 'high' | 'medium';
+        reason: string;
+        signature: string;
+        flightId: string;
+        flightLabel: string;
+        expenses: any[];
+      };
+
+      const byKey = new Map<string, any[]>();
+
+      for (const row of allRows) {
+        const flightId = row.exp_flight;
+        if (!flightId) continue;
+
+        const typeStr = norm(row.exp_type);
+        const subStr = norm(row.exp_subtype);
+        if (isDisbursement(row.exp_type) || isCredit(row.exp_type)) continue;
+
+        const amt = money(row.exp_amount);
+        const cur = (row.exp_currency || 'USD').toUpperCase();
+        const flt = row.flights || {};
+        const inv = row.invoices || {};
+
+        let key: string;
+        if (typeStr.includes('fuel')) {
+          const q = fuelQuan(row.exp_fuel_quan);
+          const prov = norm(row.exp_fuel_provider);
+          key = `fuel|${flightId}|${q}|${amt}|${cur}|${prov}`;
+        } else {
+          key = `line|${flightId}|${typeStr}|${subStr}|${amt}|${cur}`;
+        }
+
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key)!.push({
+          id: row.id,
+          exp_type: row.exp_type,
+          exp_subtype: row.exp_subtype,
+          exp_amount: row.exp_amount,
+          exp_currency: row.exp_currency,
+          exp_invoice: row.exp_invoice,
+          exp_period_start: row.exp_period_start,
+          exp_period_end: row.exp_period_end,
+          exp_fuel_quan: row.exp_fuel_quan,
+          exp_fuel_provider: row.exp_fuel_provider,
+          exp_invoice_type: row.exp_invoice_type,
+          created_at: row.created_at,
+          flight: {
+            id: flt.id,
+            flt_number: flt.flt_number,
+            flt_date: flt.flt_date,
+            flt_dep: flt.flt_dep,
+            flt_arr: flt.flt_arr,
+          },
+          invoice: {
+            id: inv.id,
+            inv_number: inv.inv_number,
+          },
+        });
+      }
+
+      const findings: Finding[] = [];
+
+      for (const [signature, group] of byKey) {
+        if (group.length < 2) continue;
+
+        const flightId = group[0].flight?.id || '';
+        const f = group[0].flight || {};
+        const flightLabel = f.flt_number
+          ? `${f.flt_number} (${f.flt_date || '—'}) ${f.flt_dep || ''} → ${f.flt_arr || ''}`.trim()
+          : flightId;
+
+        const invSet = new Set(
+          group.map((e: any) => e.invoice?.id || e.exp_invoice || 'none')
+        );
+        const periodSet = new Set(
+          group.map((e: any) =>
+            e.exp_period_start ? String(e.exp_period_start).slice(0, 7) : '—'
+          )
+        );
+
+        const isFuel = signature.startsWith('fuel|');
+        let reason: string;
+        if (isFuel) {
+          reason =
+            invSet.size > 1
+              ? 'Same flight, fuel quantity, amount and currency appear in multiple invoices — possible double billing.'
+              : 'Two or more fuel lines with identical quantity/amount/currency on the same flight.';
+        } else {
+          reason =
+            invSet.size > 1 && periodSet.size > 1
+              ? 'Same category and amount on the same flight across invoices and different service periods — check for the same charge in two months.'
+              : invSet.size > 1
+                ? 'Same category and amount on the same flight in multiple invoices.'
+                : 'Duplicate lines (type, subtype, amount, currency) on one flight.';
+        }
+
+        findings.push({
+          kind: isFuel ? 'duplicate_fuel' : 'duplicate_line',
+          severity: invSet.size > 1 ? 'high' : 'medium',
+          reason,
+          signature,
+          flightId,
+          flightLabel,
+          expenses: group.sort((a: any, b: any) =>
+            String(a.invoice?.inv_number || '').localeCompare(
+              String(b.invoice?.inv_number || '')
+            )
+          ),
+        });
+      }
+
+      findings.sort((a, b) => {
+        if (a.severity !== b.severity) return a.severity === 'high' ? -1 : 1;
+        return a.flightLabel.localeCompare(b.flightLabel);
+      });
+
+      return res.json({
+        scannedExpenses: allRows.length,
+        findingsCount: findings.length,
+        findings,
+        note: 'Heuristic check; Disbursement fee and Credit note rows are skipped. False positives are possible when two different services share the same price.',
+      });
+    } catch (error) {
+      console.log('Error in expense-duplicate-check:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
 
 // API endpoint for single flight expenses by flight number
 app.get(
@@ -2658,10 +2925,17 @@ app.delete('/api/invoice-types/:id', async (req, res) => {
 app.get('/api/expenses', async (_req, res) => {
   try {
     if (supabase) {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select(
-          `
+      // Supabase can cap response size per request, so we fetch expenses in pages.
+      const pageSize = 1000;
+      let from = 0;
+      const allExpenses: any[] = [];
+      let moreExpenses = true;
+
+      while (moreExpenses) {
+        const { data: pageData, error } = await supabase
+          .from('expenses')
+          .select(
+            `
                  *,
                  invoices!exp_invoice (
                    id,
@@ -2674,13 +2948,28 @@ app.get('/api/expenses', async (_req, res) => {
                    flt_arr
                  )
                `
-        )
-        .order('id', { ascending: false });
+          )
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
 
-      if (error) {
-        console.log('Supabase error, using mock data:', error.message);
-        return res.json(mockData.expenses);
+        if (error) {
+          console.log('Supabase error, using mock data:', error.message);
+          return res.json(mockData.expenses);
+        }
+
+        if (!pageData || pageData.length === 0) {
+          moreExpenses = false;
+        } else {
+          allExpenses.push(...pageData);
+          if (pageData.length < pageSize) {
+            moreExpenses = false;
+          } else {
+            from += pageSize;
+          }
+        }
       }
+
+      const data = allExpenses;
 
       // Enrich expenses with invoice type names
       if (data && data.length > 0) {
@@ -2802,10 +3091,23 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
       }));
     }
 
-    // Currency conversion rates (same as client)
+    // Currency conversion rates (date-dependent: until Oct 2025 inclusive 3.6735, from Nov 2025 3.6725)
+    const AED_TO_USD_UNTIL_OCT2025 = 3.6735;
+    const AED_TO_USD_FROM_NOV2025 = 3.6725;
+    const CURRENCY_RATES_NOV2025_CUTOFF = new Date('2025-11-01');
+
+    const getAEDToUSDRate = (asOfDate: Date): number =>
+      asOfDate < CURRENCY_RATES_NOV2025_CUTOFF
+        ? AED_TO_USD_UNTIL_OCT2025
+        : AED_TO_USD_FROM_NOV2025;
+
     const CURRENCY_RATES = {
-      AED_TO_USD: 3.6735,
-      AED_TO_EUR: 4.3119,
+      EUR_TO_USD: 1.16,
+    };
+
+    const parseMonthKeyToDate = (monthKey: string): Date => {
+      const [y, m] = monthKey.split('-').map(Number);
+      return new Date(y, (m || 1) - 1, 1);
     };
 
     // Expense categories (same as client)
@@ -3045,39 +3347,42 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
     const convertCurrency = (
       amount: number,
       fromCurrency: string,
-      toCurrency: string
+      toCurrency: string,
+      asOfDate?: Date
     ): number => {
       if (!amount || !fromCurrency || !toCurrency) return 0;
       if (fromCurrency === toCurrency) return amount;
 
+      const aedToUsd = getAEDToUSDRate(asOfDate || new Date());
+
       if (fromCurrency === 'EUR') {
-        const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
-        if (toCurrency === 'AED') {
-          return amountInAED;
-        } else if (toCurrency === 'USD') {
-          return amountInAED / CURRENCY_RATES.AED_TO_USD;
+        const amountInUSD = amount * CURRENCY_RATES.EUR_TO_USD;
+        if (toCurrency === 'USD') {
+          return amountInUSD;
+        } else if (toCurrency === 'AED') {
+          return amountInUSD * aedToUsd;
         }
       }
 
       if (toCurrency === 'EUR') {
-        let amountInAED = 0;
+        let amountInUSD = 0;
         if (fromCurrency === 'USD') {
-          amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+          amountInUSD = amount;
         } else if (fromCurrency === 'AED') {
-          amountInAED = amount;
+          amountInUSD = amount / aedToUsd;
         }
-        return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+        return amountInUSD / CURRENCY_RATES.EUR_TO_USD;
       }
 
       let amountInUSD = amount;
       if (fromCurrency === 'AED') {
-        amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+        amountInUSD = amount / aedToUsd;
       }
 
       if (toCurrency === 'USD') {
         return amountInUSD;
       } else if (toCurrency === 'AED') {
-        return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+        return amountInUSD * aedToUsd;
       }
 
       return amount;
@@ -3261,41 +3566,48 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
           }
 
           // Add amount in original currency and convert to fill both columns
+          const asOfDate = parseMonthKeyToDate(monthKey);
           if (currency === 'USD') {
             incomeItems[incomeType][monthKey].USD += amount;
             incomeItems[incomeType][monthKey].AED += convertCurrency(
               amount,
               'USD',
-              'AED'
+              'AED',
+              asOfDate
             );
           } else if (currency === 'AED') {
             incomeItems[incomeType][monthKey].AED += amount;
             incomeItems[incomeType][monthKey].USD += convertCurrency(
               amount,
               'AED',
-              'USD'
+              'USD',
+              asOfDate
             );
           } else if (currency === 'EUR') {
             incomeItems[incomeType][monthKey].USD += convertCurrency(
               amount,
               'EUR',
-              'USD'
+              'USD',
+              asOfDate
             );
             incomeItems[incomeType][monthKey].AED += convertCurrency(
               amount,
               'EUR',
-              'AED'
+              'AED',
+              asOfDate
             );
           } else {
             incomeItems[incomeType][monthKey].USD += convertCurrency(
               amount,
               currency,
-              'USD'
+              'USD',
+              asOfDate
             );
             incomeItems[incomeType][monthKey].AED += convertCurrency(
               amount,
               currency,
-              'AED'
+              'AED',
+              asOfDate
             );
           }
         }
@@ -3404,43 +3716,50 @@ app.get('/api/expenses/export-excel', authenticateSession, async (req, res) => {
         // Calculate monthly amount (same as client)
         const totalMonths = monthKeys.length || 1;
         const monthlyAmount = totalMonths > 0 ? amount / totalMonths : amount;
+        const asOfDate = parseMonthKeyToDate(monthKey);
 
         if (currency === 'USD') {
           group[finalCategory][monthKey].USD += monthlyAmount;
           group[finalCategory][monthKey].AED += convertCurrency(
             monthlyAmount,
             'USD',
-            'AED'
+            'AED',
+            asOfDate
           );
         } else if (currency === 'AED') {
           group[finalCategory][monthKey].AED += monthlyAmount;
           group[finalCategory][monthKey].USD += convertCurrency(
             monthlyAmount,
             'AED',
-            'USD'
+            'USD',
+            asOfDate
           );
         } else if (currency === 'EUR') {
           group[finalCategory][monthKey].USD += convertCurrency(
             monthlyAmount,
             'EUR',
-            'USD'
+            'USD',
+            asOfDate
           );
           group[finalCategory][monthKey].AED += convertCurrency(
             monthlyAmount,
             'EUR',
-            'AED'
+            'AED',
+            asOfDate
           );
         } else {
           // Unknown currency, try to convert to USD and AED
           group[finalCategory][monthKey].USD += convertCurrency(
             monthlyAmount,
             currency,
-            'USD'
+            'USD',
+            asOfDate
           );
           group[finalCategory][monthKey].AED += convertCurrency(
             monthlyAmount,
             currency,
-            'AED'
+            'AED',
+            asOfDate
           );
         }
       }
@@ -6364,6 +6683,9 @@ app.get('/api/backup/info', async (req, res) => {
 
 // 404
 app.use((_req, res) => {
+  if (_req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
   res.status(404).render('dashboard/index', { title: 'Not Found' });
 });
 

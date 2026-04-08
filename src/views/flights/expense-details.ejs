@@ -1,51 +1,75 @@
-<!-- Page Header -->
-<div class="page-header">
-  <div>
-    <h1 class="page-title" id="flight-title">Flight <%= flight.flt_number %> Expenses</h1>
-    <p class="page-description" id="flight-info-description">
-      Loading flight information...
-    </p>
-  </div>
-  <div class="page-actions">
-    <button class="btn btn-secondary" id="backBtn">
-      <i class="bi bi-arrow-left"></i>
-      Back to Flights
-    </button>
-  </div>
-</div>
+<!-- Hero + summary -->
+<div class="flight-exp-page">
+  <section class="flight-exp-hero">
+    <div class="flight-exp-hero__main">
+      <p class="flight-exp-eyebrow">Flight expenses</p>
+      <h1 class="flight-exp-title" id="flight-title">Flight <%= flight.flt_number %></h1>
+      <div class="flight-exp-chips" id="flight-meta-chips" aria-label="Flight legs"></div>
+      <p class="flight-exp-sub" id="flight-info-description">Loading flight information…</p>
+    </div>
+    <div class="flight-exp-hero__actions">
+      <button type="button" class="btn flight-exp-back-btn" id="backBtn">
+        <i class="bi bi-arrow-left"></i>
+        Back to Flights
+      </button>
+    </div>
+  </section>
 
-<!-- Loading Spinner -->
-<div id="loading-spinner" class="loading-container">
-  <div class="spinner-border text-primary" role="status">
-    <span class="visually-hidden">Loading...</span>
+  <div class="flight-exp-summary-bar" id="flight-exp-summary-bar" style="display: none;" role="status">
+    <div class="flight-exp-summary-bar__item">
+      <span class="flight-exp-summary-bar__label">Lines</span>
+      <span class="flight-exp-summary-bar__value" data-line-count>0</span>
+    </div>
+    <div class="flight-exp-summary-bar__divider" aria-hidden="true"></div>
+    <div class="flight-exp-summary-bar__item flight-exp-summary-bar__item--primary">
+      <span class="flight-exp-summary-bar__label">Estimated total (USD)</span>
+      <span class="flight-exp-summary-bar__value" data-grand-usd>$0.00</span>
+    </div>
+    <p class="flight-exp-summary-bar__hint">Amounts in other currencies converted for reference (same rules as the rest of the app).</p>
   </div>
-  <p class="loading-text">Loading flight expenses...</p>
-</div>
 
-<!-- Content Container -->
-<div id="content-container" class="content-container" style="display: none;">
-  <div id="expenses-sections-container">
-    <!-- Expense sections will be populated by JavaScript -->
+  <!-- Loading -->
+  <div id="loading-spinner" class="flight-exp-loading">
+    <div class="flight-exp-loading__card">
+      <div class="spinner-border text-primary flight-exp-spinner" role="status">
+        <span class="visually-hidden">Loading…</span>
+      </div>
+      <p class="flight-exp-loading__text">Loading expenses for this flight…</p>
+    </div>
   </div>
-</div>
 
-<!-- No Data Message -->
-<div id="no-data-message" class="no-data-container" style="display: none;">
-  <div class="text-center py-5">
-    <i class="bi bi-receipt text-muted" style="font-size: 3rem;"></i>
-    <h3 class="text-muted mt-3">No Expenses Found</h3>
-    <p class="text-muted">This flight has no associated expenses.</p>
+  <!-- Content -->
+  <div id="content-container" class="flight-exp-content" style="display: none;">
+    <div id="expenses-sections-container" class="flight-exp-categories"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="no-data-message" class="flight-exp-empty" style="display: none;">
+    <div class="flight-exp-empty__card">
+      <i class="bi bi-inbox flight-exp-empty__icon" aria-hidden="true"></i>
+      <h2 class="flight-exp-empty__title">No expenses linked</h2>
+      <p class="flight-exp-empty__text">There are no expense lines tied to this flight number yet.</p>
+      <button type="button" class="btn flight-exp-back-btn" id="emptyBackBtn">
+        <i class="bi bi-arrow-left"></i>
+        Back to Flights
+      </button>
+    </div>
   </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   loadFlightExpenses();
-  
-  // Back button handler
+
   document.getElementById('backBtn').addEventListener('click', function() {
     window.location.href = '/flights';
   });
+  const emptyBack = document.getElementById('emptyBackBtn');
+  if (emptyBack) {
+    emptyBack.addEventListener('click', function() {
+      window.location.href = '/flights';
+    });
+  }
 });
 
 async function loadFlightExpenses() {
@@ -55,30 +79,28 @@ async function loadFlightExpenses() {
     const response = await apiRequest(`/api/flights/${encodedFlightNumber}/expenses`);
     const flightData = await response.json();
     
-    // Hide loading spinner
     document.getElementById('loading-spinner').style.display = 'none';
-    
-    // Update flight info description with all flights
+
     updateFlightInfoDescription(flightData.flights || []);
-    
+    updateFlightMetaChips(flightData.flights || []);
+
+    const summaryBar = document.getElementById('flight-exp-summary-bar');
+    if (summaryBar) summaryBar.style.display = 'none';
+
     if (!flightData || !flightData.expenses || flightData.expenses.length === 0) {
-      document.getElementById('no-data-message').style.display = 'block';
+      document.getElementById('no-data-message').style.display = 'flex';
       return;
     }
-    
-    // Show content
+
     document.getElementById('content-container').style.display = 'block';
-    
-    // Group expenses by category
+
     const groupedExpenses = groupExpensesByCategory(flightData.expenses);
-    
-    // Render expense cards
     renderExpenseCards(groupedExpenses);
     
   } catch (error) {
     console.error('Error loading flight expenses:', error);
     document.getElementById('loading-spinner').style.display = 'none';
-    document.getElementById('no-data-message').style.display = 'block';
+    document.getElementById('no-data-message').style.display = 'flex';
   }
 }
 
@@ -90,8 +112,7 @@ function updateFlightInfoDescription(flights) {
     return;
   }
   
-  // Sort flights by date
-  const sortedFlights = flights.sort((a, b) => {
+  const sortedFlights = [...flights].sort((a, b) => {
     const dateA = new Date(a.flt_date);
     const dateB = new Date(b.flt_date);
     return dateA - dateB;
@@ -109,7 +130,67 @@ function updateFlightInfoDescription(flights) {
     return `${formattedDate} • ${route}`;
   });
   
-  descriptionElement.textContent = flightInfoParts.join(' | ');
+  descriptionElement.textContent =
+    flightInfoParts.length > 1
+      ? `${sortedFlights.length} legs: ` + flightInfoParts.join(' · ')
+      : flightInfoParts[0] || '';
+}
+
+function updateFlightMetaChips(flights) {
+  const chips = document.getElementById('flight-meta-chips');
+  if (!chips) return;
+  chips.innerHTML = '';
+  if (!flights || flights.length === 0) return;
+
+  const sorted = [...flights].sort(
+    (a, b) => new Date(a.flt_date) - new Date(b.flt_date)
+  );
+
+  sorted.forEach(f => {
+    const date = new Date(f.flt_date);
+    const dStr = date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    const span = document.createElement('span');
+    span.className = 'flight-exp-chip';
+    span.innerHTML = `<i class="bi bi-calendar3" aria-hidden="true"></i> ${dStr}<span class="flight-exp-chip__route">${f.flt_dep || '—'} <i class="bi bi-arrow-right" aria-hidden="true"></i> ${f.flt_arr || '—'}</span>`;
+    chips.appendChild(span);
+  });
+}
+
+function formatUsd(value) {
+  return '$' + Number(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatOriginalAmount(amount, currency) {
+  const n = parseFloat(amount) || 0;
+  const cur = (currency || 'USD').toUpperCase();
+  return (
+    n.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) +
+    ' ' +
+    cur
+  );
+}
+
+function getCategoryVisual(category) {
+  const c = (category || '').toLowerCase();
+  if (c.includes('ground handling'))
+    return { icon: 'bi-building', accent: '217 91% 45%' };
+  if (c.includes('fuel'))
+    return { icon: 'bi-fuel-pump', accent: '32 95% 44%' };
+  if (c.includes('disbursement'))
+    return { icon: 'bi-percent', accent: '262 83% 58%' };
+  if (c.includes('catering'))
+    return { icon: 'bi-cup-hot', accent: '350 89% 60%' };
+  return { icon: 'bi-receipt', accent: '215 16% 47%' };
 }
 
 function groupExpensesByCategory(expenses) {
@@ -176,11 +257,7 @@ function getExpenseCategory(expense) {
   return 'Other Charges';
 }
 
-function renderExpenseCards(groupedExpenses) {
-  const container = document.getElementById('expenses-sections-container');
-  container.innerHTML = '';
-  
-  // Define category order
+function sortCategoryKeys(groupedExpenses) {
   const categoryOrder = [
     'Ground Handling',
     'Ground Handling - Departure',
@@ -188,29 +265,22 @@ function renderExpenseCards(groupedExpenses) {
     'Fuel',
     'Disbursement Fee',
     'Catering',
-    'Other Charges'
+    'Other Charges',
   ];
-  
-  // Get all categories
   const allCategories = Object.keys(groupedExpenses);
-  
-  // Sort categories according to defined order
   const sortedCategories = [];
   const usedCategories = new Set();
-  
-  // First, add categories in defined order
+
   categoryOrder.forEach(orderedCategory => {
-    // Check for exact match first
     if (allCategories.includes(orderedCategory) && !usedCategories.has(orderedCategory)) {
       sortedCategories.push(orderedCategory);
       usedCategories.add(orderedCategory);
     } else {
-      // Check for partial match (e.g., "Ground Handling" matches "Ground Handling - Departure")
-      const matchingCategory = allCategories.find(cat => 
-        !usedCategories.has(cat) && (
-          cat.toLowerCase().includes(orderedCategory.toLowerCase()) ||
-          orderedCategory.toLowerCase().includes(cat.toLowerCase())
-        )
+      const matchingCategory = allCategories.find(
+        cat =>
+          !usedCategories.has(cat) &&
+          (cat.toLowerCase().includes(orderedCategory.toLowerCase()) ||
+            orderedCategory.toLowerCase().includes(cat.toLowerCase()))
       );
       if (matchingCategory) {
         sortedCategories.push(matchingCategory);
@@ -218,155 +288,188 @@ function renderExpenseCards(groupedExpenses) {
       }
     }
   });
-  
-  // Add remaining categories that weren't in the order list
+
   allCategories.forEach(category => {
     if (!usedCategories.has(category)) {
       sortedCategories.push(category);
       usedCategories.add(category);
     }
   });
-  
+  return sortedCategories;
+}
+
+function renderExpenseCards(groupedExpenses) {
+  const container = document.getElementById('expenses-sections-container');
+  container.innerHTML = '';
+
+  const sortedCategories = sortCategoryKeys(groupedExpenses);
+  let grandUSD = 0;
+  let lineCount = 0;
+
   sortedCategories.forEach(category => {
     const expenses = groupedExpenses[category];
-    
-    // Create category section
-    const categorySection = document.createElement('div');
-    categorySection.className = 'expense-category-section';
-    
-    const categoryTitle = document.createElement('h3');
-    categoryTitle.className = 'expense-category-title';
-    categoryTitle.textContent = category;
-    categorySection.appendChild(categoryTitle);
-    
-    // Create expenses table with total
-    const expensesTable = createExpensesTable(expenses, category);
-    categorySection.appendChild(expensesTable);
-    
-    container.appendChild(categorySection);
+    const { table, totalUSD, count } = createExpensesTable(expenses, category);
+    grandUSD += totalUSD;
+    lineCount += count;
+
+    const visual = getCategoryVisual(category);
+    const card = document.createElement('article');
+    card.className = 'flight-cat-card';
+    card.style.setProperty('--cat-accent', visual.accent);
+
+    const header = document.createElement('header');
+    header.className = 'flight-cat-card__header';
+    header.innerHTML = `
+      <div class="flight-cat-card__icon-wrap" aria-hidden="true">
+        <i class="bi ${visual.icon}"></i>
+      </div>
+      <div class="flight-cat-card__titles">
+        <h2 class="flight-cat-card__title">${category}</h2>
+        <p class="flight-cat-card__meta">${count} line${count === 1 ? '' : 's'} · ${formatUsd(totalUSD)} <span class="flight-cat-card__meta-hint">(USD ref.)</span></p>
+      </div>
+    `;
+
+    const body = document.createElement('div');
+    body.className = 'flight-cat-card__body';
+    const wrap = document.createElement('div');
+    wrap.className = 'flight-exp-table-wrap';
+    wrap.appendChild(table);
+    body.appendChild(wrap);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    container.appendChild(card);
   });
+
+  const summaryBar = document.getElementById('flight-exp-summary-bar');
+  if (summaryBar) {
+    summaryBar.style.display = 'flex';
+    const lc = summaryBar.querySelector('[data-line-count]');
+    const gu = summaryBar.querySelector('[data-grand-usd]');
+    if (lc) lc.textContent = String(lineCount);
+    if (gu) gu.textContent = formatUsd(grandUSD);
+  }
 }
 
 function createExpensesTable(expenses, category) {
   const table = document.createElement('table');
-  table.className = 'expenses-table';
-  
-  // Create header
+  table.className = 'flight-exp-table';
+
   const thead = document.createElement('thead');
   thead.innerHTML = `
     <tr>
-      <th>Amount</th>
-      <th>Place</th>
-      <th>Subtype</th>
-      <th>Invoice</th>
-      <th>Comments</th>
+      <th scope="col">Type</th>
+      <th scope="col">Amount</th>
+      <th scope="col">Place</th>
+      <th scope="col">Subtype</th>
+      <th scope="col">Invoice</th>
+      <th scope="col">Notes</th>
     </tr>
   `;
   table.appendChild(thead);
-  
-  // Create body
+
   const tbody = document.createElement('tbody');
-  
   let totalUSD = 0;
   const currencyTotals = {};
-  
+
   expenses.forEach(expense => {
     const amount = parseFloat(expense.exp_amount) || 0;
     const currency = expense.exp_currency || 'USD';
-    const amountInUSD = convertToUSD(amount, currency);
+    const expenseDate = getExpenseDate(expense);
+    const amountInUSD = convertToUSD(amount, currency, expenseDate);
     totalUSD += amountInUSD;
-    
-    // Track totals by currency
-    if (!currencyTotals[currency]) {
-      currencyTotals[currency] = 0;
-    }
+
+    if (!currencyTotals[currency]) currencyTotals[currency] = 0;
     currencyTotals[currency] += amount;
-    
-    const invoiceNumber = expense.invoices?.inv_number || 'N/A';
+
+    const invoiceNumber = expense.invoices?.inv_number || '—';
     const invoiceId = expense.invoices?.id || null;
     const place = expense.exp_place || '';
-    const fuelQuantity = expense.exp_fuel_quan || '';
+    const fuelQuantity = expense.exp_fuel_quan;
     const fuelProvider = expense.exp_fuel_provider || '';
     const comments = expense.exp_comments || '';
     const subtype = expense.exp_subtype || '';
-    
-    // Create invoice link if available
-    const invoiceLink = invoiceId 
-      ? `<a href="/invoices/${invoiceId}" class="expense-invoice-link">${invoiceNumber}</a>`
-      : `<span class="expense-invoice-text">${invoiceNumber}</span>`;
-    
-    // Combine comments with fuel info if available
-    let combinedComments = comments;
-    const fuelInfoParts = [];
-    if (fuelQuantity) {
-      fuelInfoParts.push(`Fuel Qty: ${fuelQuantity} L`);
+    const expType = expense.exp_type || '';
+
+    const invoiceLink = invoiceId
+      ? `<a href="/invoices/${invoiceId}" class="flight-exp-invoice-pill" target="_blank" rel="noopener">${invoiceNumber}</a>`
+      : `<span class="flight-exp-invoice-muted">${invoiceNumber}</span>`;
+
+    let combinedNotes = comments;
+    const fuelParts = [];
+    if (fuelQuantity != null && fuelQuantity !== '')
+      fuelParts.push(`Fuel: ${fuelQuantity} L`);
+    if (fuelProvider) fuelParts.push(fuelProvider);
+    if (fuelParts.length) {
+      combinedNotes = comments
+        ? `${comments}<br><span class="flight-exp-fuel-meta">${fuelParts.join(' · ')}</span>`
+        : `<span class="flight-exp-fuel-meta">${fuelParts.join(' · ')}</span>`;
     }
-    if (fuelProvider) {
-      fuelInfoParts.push(`Fuel Provider: ${fuelProvider}`);
-    }
-    if (fuelInfoParts.length > 0) {
-      const fuelInfo = fuelInfoParts.join(', ');
-      combinedComments = comments 
-        ? `${comments} | ${fuelInfo}`
-        : fuelInfo;
-    }
-    
+
     const row = document.createElement('tr');
-    row.className = 'expense-row';
+    row.className = 'flight-exp-row';
     row.innerHTML = `
-      <td class="expense-amount-cell">
-        <span class="expense-amount-value">$${amountInUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        <span class="expense-amount-currency">${currency}</span>
+      <td class="flight-exp-cell flight-exp-cell--type">${expType || '—'}</td>
+      <td class="flight-exp-cell flight-exp-cell--amount">
+        <span class="flight-exp-amt-main">${formatOriginalAmount(amount, currency)}</span>
+        <span class="flight-exp-amt-usd">≈ ${formatUsd(amountInUSD)}</span>
       </td>
-      <td>${place || '-'}</td>
-      <td>${subtype || '-'}</td>
-      <td>${invoiceLink}</td>
-      <td class="expense-comments-cell">${combinedComments || '-'}</td>
+      <td class="flight-exp-cell">${place || '—'}</td>
+      <td class="flight-exp-cell">${subtype || '—'}</td>
+      <td class="flight-exp-cell flight-exp-cell--invoice">${invoiceLink}</td>
+      <td class="flight-exp-cell flight-exp-cell--notes">${combinedNotes || '—'}</td>
     `;
     tbody.appendChild(row);
   });
-  
-  // Add total row
-  const totalRow = document.createElement('tr');
-  totalRow.className = 'expense-total-row';
-  
-  // Format currency totals
+
   const currencyTotalsText = Object.keys(currencyTotals)
     .sort()
-    .map(currency => {
-      const total = currencyTotals[currency];
-      return `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+    .map(c => {
+      const total = currencyTotals[c];
+      return `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}`;
     })
-    .join(' + ');
-  
+    .join(' · ');
+
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'flight-exp-table__total';
   totalRow.innerHTML = `
-    <td class="expense-amount-cell expense-total-cell">
-      <span class="expense-total-label">Total</span>
-      <span class="expense-amount-value expense-total-value">$${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-      <span class="expense-amount-currency expense-total-currency">${currencyTotalsText}</span>
+    <td class="flight-exp-cell flight-exp-cell--total-label" colspan="2">
+      <span class="flight-exp-total-word">Category total</span>
+      <span class="flight-exp-total-usd">${formatUsd(totalUSD)}</span>
+      <span class="flight-exp-total-native">${currencyTotalsText}</span>
     </td>
-    <td colspan="4" class="expense-total-empty"></td>
+    <td class="flight-exp-cell" colspan="4"></td>
   `;
   tbody.appendChild(totalRow);
-  
+
   table.appendChild(tbody);
-  return table;
+  return { table, totalUSD, count: expenses.length };
 }
 
-function convertToUSD(amount, currency) {
+function getExpenseDate(expense) {
+  if (expense.flights?.flt_date) return new Date(expense.flights.flt_date);
+  if (expense.exp_period_start) return new Date(expense.exp_period_start);
+  return new Date();
+}
+
+function getAEDToUSDRate(asOfDate) {
+  return asOfDate < new Date('2025-11-01') ? 3.6735 : 3.6725;
+}
+
+function convertToUSD(amount, currency, asOfDate) {
   if (!amount) return 0;
   
   const numAmount = parseFloat(amount);
+  const aedToUsd = getAEDToUSDRate(asOfDate || new Date());
+  const eurToUsd = 1.16;
   
   switch (currency?.toUpperCase()) {
     case 'USD':
       return numAmount;
     case 'AED':
-      return numAmount / 3.6735; // AED to USD
+      return numAmount / aedToUsd;
     case 'EUR':
-      // EUR conversions always go through AED (not directly to USD)
-      // EUR → AED: 1 EUR = 4.3119 AED, then AED → USD: 1 AED = 1/3.6735 USD
-      return (numAmount * 4.3119) / 3.6735; // EUR → AED → USD
+      return numAmount * eurToUsd;
     default:
       return numAmount;
   }
@@ -374,190 +477,431 @@ function convertToUSD(amount, currency) {
 </script>
 
 <style>
-.loading-container {
+.flight-exp-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: 2.5rem;
+}
+
+.flight-exp-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(
+    145deg,
+    hsl(210, 40%, 99%) 0%,
+    hsl(214, 32%, 97%) 100%
+  );
+  border: 1px solid hsl(210, 16%, 90%);
+  border-radius: 0.875rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.flight-exp-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsl(210, 10%, 48%);
+  margin: 0 0 0.35rem 0;
+}
+
+.flight-exp-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: hsl(222, 47%, 18%);
+  margin: 0 0 0.75rem 0;
+  letter-spacing: -0.02em;
+}
+
+.flight-exp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.flight-exp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  color: hsl(222, 22%, 32%);
+  background: #fff;
+  border: 1px solid hsl(210, 14%, 88%);
+  border-radius: 999px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.flight-exp-chip .bi-calendar3 {
+  color: hsl(217, 91%, 45%);
+  font-size: 0.85rem;
+}
+
+.flight-exp-chip__route {
+  margin-left: 0.25rem;
+  color: hsl(215, 14%, 40%);
+}
+
+.flight-exp-sub {
+  margin: 0;
+  font-size: 0.875rem;
+  color: hsl(215, 12%, 42%);
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.flight-exp-back-btn {
+  border: 1px solid hsl(210, 14%, 85%) !important;
+  background: #fff !important;
+  color: hsl(222, 22%, 28%) !important;
+  font-weight: 500 !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 0.5rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+}
+
+.flight-exp-back-btn:hover {
+  background: hsl(210, 20%, 98%) !important;
+  border-color: hsl(210, 14%, 78%) !important;
+}
+
+.flight-exp-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: #fff;
+  border: 1px solid hsl(210, 14%, 90%);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.flight-exp-summary-bar__item {
   display: flex;
   flex-direction: column;
+  gap: 0.15rem;
+}
+
+.flight-exp-summary-bar__label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(215, 10%, 48%);
+}
+
+.flight-exp-summary-bar__value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: hsl(222, 47%, 20%);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-exp-summary-bar__item--primary .flight-exp-summary-bar__value {
+  color: hsl(152, 69%, 28%);
+}
+
+.flight-exp-summary-bar__divider {
+  width: 1px;
+  height: 2.25rem;
+  background: hsl(210, 14%, 88%);
+}
+
+.flight-exp-summary-bar__hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.72rem;
+  color: hsl(215, 10%, 50%);
+  line-height: 1.4;
+}
+
+.flight-exp-loading {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+.flight-exp-loading__card {
+  text-align: center;
+  padding: 2rem 2.5rem;
+  background: #fff;
+  border-radius: 0.875rem;
+  border: 1px solid hsl(210, 14%, 90%);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.flight-exp-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.flight-exp-loading__text {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: hsl(215, 12%, 42%);
+}
+
+.flight-exp-content {
+  margin-top: 0.25rem;
+}
+
+.flight-exp-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.flight-cat-card {
+  --cat-accent: 215 16% 47%;
+  background: #fff;
+  border: 1px solid hsl(210, 14%, 90%);
+  border-radius: 0.875rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.flight-cat-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--cat-accent) / 0.08) 0%,
+    transparent 55%
+  );
+  border-bottom: 1px solid hsl(210, 14%, 92%);
+}
+
+.flight-cat-card__icon-wrap {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.6rem;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
-  text-align: center;
+  background: hsl(var(--cat-accent) / 0.15);
+  color: hsl(var(--cat-accent));
+  font-size: 1.15rem;
+  flex-shrink: 0;
 }
 
-.loading-text {
-  margin-top: 0.75rem;
-  color: #6c757d;
-  font-size: 0.9375rem;
+.flight-cat-card__titles {
+  min-width: 0;
 }
 
-.content-container {
-  margin-top: 0.5rem;
+.flight-cat-card__title {
+  margin: 0 0 0.2rem 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: hsl(222, 35%, 18%);
 }
 
-.no-data-container {
-  padding: 2rem 1rem;
-  text-align: center;
+.flight-cat-card__meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: hsl(215, 12%, 40%);
+  font-variant-numeric: tabular-nums;
 }
 
-.expense-category-section {
-  margin-bottom: 1rem;
-}
-
-.expense-category-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: hsl(210, 6%, 21%);
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.375rem;
-  border-bottom: 1px solid hsl(210, 11%, 85%);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.expenses-table {
-  width: 75%;
-  border-collapse: collapse;
-  background-color: white;
-  font-size: 0.75rem;
-  border-radius: 0.375rem;
-  overflow: hidden;
-}
-
-.expenses-table thead {
-  background-color: hsl(210, 11%, 96%);
-}
-
-.expenses-table th {
-  text-align: left;
-  padding: 0.25rem 0.5rem;
-  font-weight: 600;
-  color: hsl(210, 6%, 21%);
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  border-bottom: 1px solid hsl(210, 11%, 90%);
-}
-
-.expenses-table td {
-  padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid hsl(210, 11%, 95%);
-  color: hsl(210, 6%, 21%);
-  vertical-align: top;
+.flight-cat-card__meta-hint {
+  font-weight: 400;
+  color: hsl(215, 10%, 52%);
   font-size: 0.75rem;
 }
 
-.expenses-table tbody tr:hover {
-  background-color: hsl(210, 11%, 98%);
-}
-
-.expense-amount-cell {
-  white-space: nowrap;
-}
-
-.expense-amount-value {
-  font-weight: 600;
-  color: hsl(210, 6%, 21%);
-  display: block;
-  font-size: 0.75rem;
-}
-
-.expense-amount-currency {
-  font-size: 0.625rem;
-  color: hsl(210, 6%, 46%);
-  font-weight: normal;
-}
-
-.expense-comments-cell {
-  max-width: 300px;
-  font-style: italic;
-  color: hsl(210, 6%, 46%);
-  word-wrap: break-word;
-  font-size: 0.75rem;
-}
-
-.expense-invoice-link {
-  color: hsl(210, 76%, 36%);
-  text-decoration: underline;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.expense-invoice-link:hover {
-  color: hsl(210, 76%, 30%);
-}
-
-.expense-invoice-text {
-  color: hsl(210, 6%, 46%);
-}
-
-/* Total row styles */
-.expense-total-row {
-  background-color: hsl(210, 11%, 97%);
-  border-top: 2px solid hsl(210, 11%, 85%);
-  font-weight: 600;
-}
-
-.expense-total-cell {
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 0.125rem !important;
-}
-
-.expense-total-label {
-  font-weight: 600 !important;
-  color: hsl(210, 6%, 21%) !important;
-  text-transform: uppercase !important;
-  font-size: 0.6875rem !important;
-  letter-spacing: 0.05em !important;
-  margin-bottom: 0.125rem !important;
-}
-
-.expense-total-value {
-  font-size: 0.875rem !important;
-  color: hsl(210, 6%, 21%) !important;
-  font-weight: 700 !important;
-}
-
-.expense-total-currency {
-  font-size: 0.625rem !important;
-  color: hsl(210, 6%, 46%) !important;
-  font-weight: 500 !important;
-}
-
-.expense-total-empty {
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
-}
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: hsl(210, 6%, 21%);
-  margin: 0 0 0.25rem 0;
+.flight-cat-card__body {
   padding: 0;
 }
 
-.page-header {
-  position: sticky;
-  top: 4rem;
-  z-index: 90;
-  background-color: hsl(210, 11%, 98%);
-  padding: 0.75rem 0;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid hsl(210, 11%, 90%);
+.flight-exp-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.page-description {
-  color: hsl(210, 6%, 46%);
-  font-size: 0.875rem;
-  margin-top: 0.125rem;
+.flight-exp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
 }
 
-.page-actions {
+.flight-exp-table thead th {
+  text-align: left;
+  padding: 0.65rem 1rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(215, 10%, 42%);
+  background: hsl(210, 20%, 97%);
+  border-bottom: 1px solid hsl(210, 14%, 90%);
+}
+
+.flight-exp-table tbody .flight-exp-row td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid hsl(210, 16%, 94%);
+  vertical-align: top;
+  color: hsl(222, 22%, 22%);
+  line-height: 1.45;
+}
+
+.flight-exp-row:hover td {
+  background: hsl(210, 40%, 99%);
+}
+
+.flight-exp-cell--type {
+  font-weight: 600;
+  color: hsl(222, 30%, 26%);
+  max-width: 11rem;
+}
+
+.flight-exp-cell--amount {
+  white-space: nowrap;
+}
+
+.flight-exp-amt-main {
+  display: block;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: hsl(222, 35%, 18%);
+}
+
+.flight-exp-amt-usd {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: hsl(215, 10%, 48%);
+  margin-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-exp-cell--notes {
+  max-width: 22rem;
+  font-size: 0.78rem;
+  color: hsl(215, 12%, 38%);
+}
+
+.flight-exp-fuel-meta {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: hsl(215, 10%, 48%);
+}
+
+.flight-exp-invoice-pill {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(217, 91%, 38%);
+  background: hsl(217, 91%, 97%);
+  border-radius: 0.35rem;
+  text-decoration: none !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.flight-exp-invoice-pill:hover {
+  background: hsl(217, 91%, 93%);
+  color: hsl(217, 91%, 30%);
+}
+
+.flight-exp-invoice-muted {
+  font-size: 0.78rem;
+  color: hsl(215, 10%, 55%);
+}
+
+.flight-exp-table__total td {
+  padding: 0.85rem 1rem !important;
+  background: hsl(210, 24%, 97%);
+  border-bottom: none !important;
+  border-top: 1px solid hsl(210, 14%, 88%);
+}
+
+.flight-exp-cell--total-label {
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.flight-exp-total-word {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(215, 10%, 45%);
+}
+
+.flight-exp-total-usd {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: hsl(152, 69%, 26%);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-exp-total-native {
+  font-size: 0.72rem;
+  color: hsl(215, 12%, 42%);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-exp-empty {
+  display: none;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+}
+
+.flight-exp-empty__card {
+  text-align: center;
+  max-width: 24rem;
+  padding: 2.25rem 1.75rem;
+  background: #fff;
+  border: 1px solid hsl(210, 14%, 90%);
+  border-radius: 0.875rem;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.flight-exp-empty__icon {
+  font-size: 2.75rem;
+  color: hsl(210, 14%, 78%);
+  margin-bottom: 0.75rem;
+}
+
+.flight-exp-empty__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: hsl(222, 25%, 28%);
+  margin: 0 0 0.5rem 0;
+}
+
+.flight-exp-empty__text {
+  font-size: 0.875rem;
+  color: hsl(215, 12%, 44%);
+  margin: 0 0 1.25rem 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .flight-exp-hero {
+    padding: 1.15rem;
+  }
+
+  .flight-exp-table {
+    min-width: 36rem;
+  }
+
+  .flight-exp-summary-bar__divider {
+    display: none;
+  }
 }
 </style>
 

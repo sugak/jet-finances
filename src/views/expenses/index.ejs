@@ -113,6 +113,10 @@
               INV. TYPE
               <i class="bi bi-chevron-down sort-icon"></i>
             </th>
+            <th class="sortable" data-sort-field="exp_comments" onclick="sortExpenses('exp_comments')">
+              COMMENTS
+              <i class="bi bi-chevron-down sort-icon"></i>
+            </th>
             <th class="sortable" data-sort-field="created_at" onclick="sortExpenses('created_at')">
               INV. #
               <i class="bi bi-chevron-down sort-icon"></i>
@@ -259,7 +263,7 @@
 let allExpenses = [];
 
 // Global sorting state
-let currentSortField = 'created_at';
+let currentSortField = 'exp_period_start';
 let currentSortOrder = 'desc';
 
 // Load expenses data from API
@@ -279,13 +283,6 @@ async function loadExpenses() {
     // Store all expenses globally for filtering
     allExpenses = expenses;
     
-    // Sort expenses by creation date (newest first)
-    expenses.sort((a, b) => {
-      const dateA = new Date(a.created_at);
-      const dateB = new Date(b.created_at);
-      return dateB - dateA; // Descending order (newest first)
-    });
-    
     // Apply current filters
     applyFilters();
   } catch (error) {
@@ -295,7 +292,7 @@ async function loadExpenses() {
     const tbody = document.getElementById('expenses-table-body');
     tbody.innerHTML = `
       <tr>
-        <td colspan="12" style="text-align: center; padding: 2rem; color: #6b7280;">
+        <td colspan="14" style="text-align: center; padding: 2rem; color: #6b7280;">
           <i class="bi bi-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
           Failed to load expenses. Please try again.
           <br><small>Error: ${error.message}</small>
@@ -392,6 +389,9 @@ function applyFilters() {
         </td>
         <td>
           <div class="invoice-type-compact">${expense.exp_invoice_type || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="comments-compact">${expense.exp_comments || 'N/A'}</div>
         </td>
         <td>
           <div class="invoice-number-compact">${expense.invoices?.inv_number || 'N/A'}</div>
@@ -1143,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* Compact styles for all elements */
 .expense-type-compact, .expense-subtype-compact, .expense-place-compact, .amount-compact, .currency-compact, .period-compact,
-.fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact,
+.fuel-quantity-compact, .fuel-provider-compact, .invoice-type-compact, .comments-compact,
 .invoice-number-compact, .flight-number-compact {
   font-size: 0.8rem !important;
   font-weight: 500 !important;

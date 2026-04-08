@@ -104,6 +104,10 @@
           <i class="bi bi-airplane"></i>
           Flight expenses
         </a>
+        <button type="button" class="btn btn-secondary flights-action-btn" id="duplicateExpenseCheckBtn" style="margin-right: 0.5rem;" title="Find possible duplicate flight-linked expenses">
+          <i class="bi bi-shield-exclamation"></i>
+          Duplicate check
+        </button>
         <% if (user && user.role === 'superadmin') { %>
         <button class="btn btn-primary" id="addFlightBtn">
           <i class="bi bi-plus-lg"></i>
@@ -181,6 +185,36 @@
       <button type="button" class="btn btn-cancel" id="closeScheduleBtn">
         Close
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicate expense check (same flight + same economic fingerprint) -->
+<div id="duplicateCheckModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container duplicate-check-modal-wide" style="max-height: 90vh; display: flex; flex-direction: column;">
+    <div class="modal-header" style="flex-shrink: 0;">
+      <h3>Flight expense duplicate check</h3>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button type="button" class="btn btn-sm btn-secondary" id="duplicateCheckRefreshBtn">
+          <i class="bi bi-arrow-clockwise"></i>
+          Refresh
+        </button>
+        <button class="modal-close" id="closeDuplicateCheckModalBtn" type="button">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding: 1rem 1.5rem; overflow-y: auto; flex: 1; min-height: 0;">
+      <p class="duplicate-check-intro" style="font-size: 0.875rem; color: hsl(210, 6%, 40%); margin-bottom: 1rem;">
+        We flag expenses tied to the <strong>same flight</strong> that share the same billing fingerprint:
+        for fuel — quantity, amount and currency; for everything else — type, subtype, amount and currency.
+        Rows classified as Disbursement fee or Credit note are excluded.
+      </p>
+      <div id="duplicateCheckSummary" style="margin-bottom: 1rem; font-size: 0.875rem;"></div>
+      <div id="duplicateCheckContent"></div>
+    </div>
+    <div class="modal-actions" style="flex-shrink: 0;">
+      <button type="button" class="btn btn-cancel" id="duplicateCheckCloseFooterBtn">Close</button>
     </div>
   </div>
 </div>
@@ -370,13 +404,28 @@ async function loadStats() {
   }
 }
 
-// Check if flight has expenses for specific categories
+function isGroundHandlingType(expType) {
+  const t = (expType || '').toString().toLowerCase();
+  return t.includes('ground handling') || t.includes('groundhandling');
+}
+
+// Check if flight has expenses for specific categories (GH split: arrival vs departure)
 function checkExpenseCategories(flight) {
   const expenses = flight.expenses || [];
-  const expenseTypes = expenses.map(e => (e.exp_type || '').toLowerCase());
+  const expenseTypes = expenses.map(e => (e.exp_type || '').toString().toLowerCase());
   
+  let hasGHA = false;
+  let hasGHD = false;
+  expenses.forEach(e => {
+    if (!isGroundHandlingType(e.exp_type)) return;
+    const sub = (e.exp_subtype || '').toString().toLowerCase();
+    if (sub.includes('arrival')) hasGHA = true;
+    if (sub.includes('departure')) hasGHD = true;
+  });
+
   return {
-    hasGH: expenseTypes.some(type => type.includes('ground handling') || type.includes('groundhandling')),
+    hasGHA,
+    hasGHD,
     hasFuel: expenseTypes.some(type => type.includes('fuel')),
     hasCAT: expenseTypes.some(type => type.includes('catering') || type.includes('food'))
   };
@@ -389,8 +438,11 @@ function renderExpenseBar(flight) {
   return `
     <div class="expense-bar-container">
       <div class="expense-bar">
-        <div class="expense-bar-section ${categories.hasGH ? 'filled' : 'empty'}" title="Ground Handling">
-          <span class="expense-bar-label">GH</span>
+        <div class="expense-bar-section ${categories.hasGHA ? 'filled' : 'empty'}" title="Ground handling — arrival">
+          <span class="expense-bar-label">GH-A</span>
+        </div>
+        <div class="expense-bar-section ${categories.hasGHD ? 'filled' : 'empty'}" title="Ground handling — departure">
+          <span class="expense-bar-label">GH-D</span>
         </div>
         <div class="expense-bar-section ${categories.hasFuel ? 'filled' : 'empty'}" title="Fuel">
           <span class="expense-bar-label">F</span>
@@ -844,6 +896,127 @@ function closeScheduleModal() {
   }
 }
 
+function openDuplicateCheckModal() {
+  const modal = document.getElementById('duplicateCheckModal');
+  if (modal) {
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    runDuplicateExpenseCheck();
+  }
+}
+
+function closeDuplicateCheckModal() {
+  const modal = document.getElementById('duplicateCheckModal');
+  if (modal) {
+    modal.classList.remove('show');
+    document.body.style.overflow = 'auto';
+  }
+}
+
+function formatPeriodShort(start, end) {
+  if (!start || !end) return '—';
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    const sm = s.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    const em = e.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    return sm === em ? sm : `${sm} – ${em}`;
+  } catch {
+    return '—';
+  }
+}
+
+async function runDuplicateExpenseCheck() {
+  const summaryEl = document.getElementById('duplicateCheckSummary');
+  const contentEl = document.getElementById('duplicateCheckContent');
+  if (!summaryEl || !contentEl) return;
+
+  summaryEl.innerHTML = '<span class="text-muted">Loading…</span>';
+  contentEl.innerHTML = '';
+
+  try {
+    const response = await apiRequest('/api/flights/expense-duplicate-check');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      summaryEl.innerHTML = `<span style="color:#b91c1c;">Error: ${err.error || response.status}</span>`;
+      return;
+    }
+    const data = await response.json();
+    const n = data.findingsCount || 0;
+    summaryEl.innerHTML = `
+      <div><strong>Flight-linked expenses scanned:</strong> ${data.scannedExpenses ?? '—'}</div>
+      <div><strong>Suspect groups found:</strong> ${n}</div>
+      <div style="margin-top:0.35rem;color:hsl(210,6%,45%);font-size:0.8rem;">${data.note || ''}</div>
+    `;
+
+    if (!data.findings || data.findings.length === 0) {
+      contentEl.innerHTML = `
+        <div class="duplicate-check-empty" style="padding:2rem;text-align:center;color:hsl(142,76%,32%);">
+          <i class="bi bi-check-circle" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+          No matches under the current rules.
+        </div>`;
+      return;
+    }
+
+    const kindLabel = {
+      duplicate_fuel: 'Fuel',
+      duplicate_line: 'Expense line',
+    };
+    const sevLabel = { high: 'High risk', medium: 'Medium risk' };
+    const sevClass = { high: 'duplicate-sev-high', medium: 'duplicate-sev-medium' };
+
+    contentEl.innerHTML = data.findings.map((f, idx) => {
+      const rows = (f.expenses || []).map(e => {
+        const invId = e.invoice?.id || e.exp_invoice;
+        const invNum = e.invoice?.inv_number || '—';
+        const invLink = invId
+          ? `<a href="/invoices/${invId}" target="_blank" rel="noopener">${invNum}</a>`
+          : invNum;
+        return `
+          <tr>
+            <td><code style="font-size:0.7rem;">${e.id || ''}</code></td>
+            <td>${invLink}</td>
+            <td>${e.exp_type || '—'} / ${e.exp_subtype || '—'}</td>
+            <td>${e.exp_amount ?? '—'} ${e.exp_currency || ''}</td>
+            <td>${e.exp_fuel_quan != null ? e.exp_fuel_quan + ' L' : '—'}</td>
+            <td>${formatPeriodShort(e.exp_period_start, e.exp_period_end)}</td>
+          </tr>`;
+      }).join('');
+
+      return `
+        <div class="duplicate-finding-card" style="border:1px solid hsl(210,11%,88%);border-radius:0.5rem;margin-bottom:1rem;overflow:hidden;">
+          <div style="padding:0.65rem 1rem;background:hsl(210,11%,96%);display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;justify-content:space-between;">
+            <div>
+              <span class="duplicate-sev-badge ${sevClass[f.severity] || ''}">${sevLabel[f.severity] || f.severity}</span>
+              <strong style="margin-left:0.5rem;">${kindLabel[f.kind] || f.kind}</strong>
+              <span style="color:hsl(210,6%,40%);font-size:0.8rem;margin-left:0.35rem;">#${idx + 1}</span>
+            </div>
+            <div style="font-size:0.8rem;color:hsl(210,6%,30%);max-width:100%;">${f.flightLabel || f.flightId || ''}</div>
+          </div>
+          <div style="padding:0.75rem 1rem;font-size:0.85rem;color:hsl(210,6%,25%);">${f.reason || ''}</div>
+          <div class="table-container" style="padding:0 1rem 1rem;">
+            <table class="flights-table" style="font-size:0.75rem;">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Invoice</th>
+                  <th>Type / subtype</th>
+                  <th>Amount</th>
+                  <th>Fuel</th>
+                  <th>Period</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    console.error(e);
+    summaryEl.innerHTML = `<span style="color:#b91c1c;">Could not run the check.</span>`;
+  }
+}
+
 // Copy schedule to clipboard
 function copyScheduleToClipboard() {
   const scheduleTextArea = document.getElementById('scheduleText');
@@ -1225,6 +1398,31 @@ document.addEventListener('DOMContentLoaded', function() {
     scheduleModal.addEventListener('click', function(e) {
       if (e.target === this) {
         closeScheduleModal();
+      }
+    });
+  }
+
+  const duplicateExpenseCheckBtn = document.getElementById('duplicateExpenseCheckBtn');
+  if (duplicateExpenseCheckBtn) {
+    duplicateExpenseCheckBtn.addEventListener('click', openDuplicateCheckModal);
+  }
+  const closeDuplicateCheckModalBtn = document.getElementById('closeDuplicateCheckModalBtn');
+  if (closeDuplicateCheckModalBtn) {
+    closeDuplicateCheckModalBtn.addEventListener('click', closeDuplicateCheckModal);
+  }
+  const duplicateCheckCloseFooterBtn = document.getElementById('duplicateCheckCloseFooterBtn');
+  if (duplicateCheckCloseFooterBtn) {
+    duplicateCheckCloseFooterBtn.addEventListener('click', closeDuplicateCheckModal);
+  }
+  const duplicateCheckRefreshBtn = document.getElementById('duplicateCheckRefreshBtn');
+  if (duplicateCheckRefreshBtn) {
+    duplicateCheckRefreshBtn.addEventListener('click', runDuplicateExpenseCheck);
+  }
+  const duplicateCheckModal = document.getElementById('duplicateCheckModal');
+  if (duplicateCheckModal) {
+    duplicateCheckModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeDuplicateCheckModal();
       }
     });
   }
@@ -1721,7 +1919,7 @@ document.addEventListener('DOMContentLoaded', function() {
 .expense-bar {
   display: flex;
   width: 100%;
-  max-width: 120px;
+  max-width: 200px;
   height: 24px;
   border-radius: 0.375rem;
   overflow: hidden;
@@ -1752,7 +1950,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .expense-bar-label {
-  font-size: 0.625rem;
+  font-size: 0.55rem;
   font-weight: 600;
   color: white;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -1796,5 +1994,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
 #stats-cards .finance-card-content {
   gap: 0.5rem !important;
+}
+
+.duplicate-sev-badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.duplicate-sev-high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.duplicate-sev-medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Wider than default .modal-container (500px !important) */
+#duplicateCheckModal .modal-container.duplicate-check-modal-wide {
+  width: min(1600px, 96vw) !important;
+  max-width: 96vw !important;
 }
 </style>

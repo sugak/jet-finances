@@ -48,9 +48,61 @@
 
 <script>
 const CURRENCY_RATES = {
-  AED_TO_USD: 3.6735,
-  AED_TO_EUR: 4.3119,
+  EUR_TO_USD: 1.16,
 };
+
+const AED_TO_USD_UNTIL_OCT2025 = 3.6735;
+const AED_TO_USD_FROM_NOV2025 = 3.6725;
+const CURRENCY_RATES_NOV2025_CUTOFF = new Date('2025-11-01');
+
+function getAEDToUSDRate(asOfDate) {
+  return asOfDate < CURRENCY_RATES_NOV2025_CUTOFF ? AED_TO_USD_UNTIL_OCT2025 : AED_TO_USD_FROM_NOV2025;
+}
+
+function parseMonthKeyToDate(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, 1);
+}
+
+function convertCurrency(amount, fromCurrency, toCurrency, asOfDate) {
+  if (!amount || !fromCurrency || !toCurrency) return 0;
+  if (fromCurrency === toCurrency) return amount;
+  const aedToUsd = getAEDToUSDRate(asOfDate || new Date());
+
+  if (fromCurrency === 'EUR') {
+    const amountInUSD = amount * CURRENCY_RATES.EUR_TO_USD;
+    if (toCurrency === 'USD') {
+      return amountInUSD;
+    }
+    if (toCurrency === 'AED') {
+      return amountInUSD * aedToUsd;
+    }
+  }
+
+  if (toCurrency === 'EUR') {
+    let amountInUSD = 0;
+    if (fromCurrency === 'USD') {
+      amountInUSD = amount;
+    } else if (fromCurrency === 'AED') {
+      amountInUSD = amount / aedToUsd;
+    }
+    return amountInUSD / CURRENCY_RATES.EUR_TO_USD;
+  }
+
+  let amountInUSD = amount;
+  if (fromCurrency === 'AED') {
+    amountInUSD = amount / aedToUsd;
+  }
+
+  if (toCurrency === 'USD') {
+    return amountInUSD;
+  }
+  if (toCurrency === 'AED') {
+    return amountInUSD * aedToUsd;
+  }
+
+  return amount;
+}
 
 const MONTH_COUNT = 6;
 
@@ -107,37 +159,34 @@ function getCategoryGroup(category) {
 function convertCurrency(amount, fromCurrency, toCurrency) {
   if (!amount || !fromCurrency || !toCurrency) return 0;
   if (fromCurrency === toCurrency) return amount;
+  const aedToUsd = getAEDToUSDRate(new Date());
 
   if (fromCurrency === 'EUR') {
-    const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
-    if (toCurrency === 'AED') {
-      return amountInAED;
-    }
-    if (toCurrency === 'USD') {
-      return amountInAED / CURRENCY_RATES.AED_TO_USD;
-    }
+    const amountInUSD = amount * CURRENCY_RATES.EUR_TO_USD;
+    if (toCurrency === 'USD') return amountInUSD;
+    if (toCurrency === 'AED') return amountInUSD * aedToUsd;
   }
 
   if (toCurrency === 'EUR') {
-    let amountInAED = 0;
+    let amountInUSD = 0;
     if (fromCurrency === 'USD') {
-      amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+      amountInUSD = amount;
     } else if (fromCurrency === 'AED') {
-      amountInAED = amount;
+      amountInUSD = amount / aedToUsd;
     }
-    return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+    return amountInUSD / CURRENCY_RATES.EUR_TO_USD;
   }
 
   let amountInUSD = amount;
   if (fromCurrency === 'AED') {
-    amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+    amountInUSD = amount / aedToUsd;
   }
 
   if (toCurrency === 'USD') {
     return amountInUSD;
   }
   if (toCurrency === 'AED') {
-    return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+    return amountInUSD * aedToUsd;
   }
 
   return amount;
@@ -753,7 +802,8 @@ async function loadExpensesReport() {
         }
 
         incomeMonthsInRange.forEach(({ monthKey, amount, currency }) => {
-          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+          const asOfDate = parseMonthKeyToDate(monthKey);
+          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD', asOfDate);
           incomeTotals[incomeType][monthKey] -= usdAmount;
 
           const detailKey = getDetailsKey(INCOME_TYPES[incomeType], monthKey, 'income');
@@ -810,6 +860,7 @@ async function loadExpensesReport() {
       if (expense.exp_invoice) {
         const invoiceFees = feesByInvoice[expense.exp_invoice] || [];
         expenseMonthsInRange.forEach(({ monthKey, amount, currency }) => {
+          const asOfDate = parseMonthKeyToDate(monthKey);
           const relatedFees = invoiceFees.filter(
             fee => !usedFeeIds.has(fee.id) && feeMatchesExpenseComment(fee, expense, monthKey)
           );
@@ -817,10 +868,10 @@ async function loadExpensesReport() {
           relatedFees.forEach(fee => {
             usedFeeIds.add(fee.id);
             const feeAmount = parseFloat(fee.exp_amount) || 0;
-            feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD');
+            feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD', asOfDate);
           });
 
-          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+          const usdAmount = convertCurrency(amount, currency || 'USD', 'USD', asOfDate);
           categoryTotals[category][monthKey] += usdAmount + feeTotalUSD;
 
           const detailKey = getDetailsKey(category, monthKey, 'expense');
@@ -852,19 +903,22 @@ async function loadExpensesReport() {
 
       const relatedFees = findRelatedDisbursementFees(expense, noInvoiceFees);
       let feeTotalUSD = 0;
+      const firstMonthKey = expenseMonthsInRange[0]?.monthKey;
+      const feeAsOfDate = firstMonthKey ? parseMonthKeyToDate(firstMonthKey) : new Date();
       relatedFees.forEach(fee => {
         if (usedFeeIds.has(fee.id)) {
           return;
         }
         usedFeeIds.add(fee.id);
         const feeAmount = parseFloat(fee.exp_amount) || 0;
-        feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD');
+        feeTotalUSD += convertCurrency(feeAmount, fee.exp_currency || 'USD', 'USD', feeAsOfDate);
       });
 
       const feePerMonth = expenseMonthsInRange.length ? feeTotalUSD / expenseMonthsInRange.length : 0;
 
       expenseMonthsInRange.forEach(({ monthKey, amount, currency }) => {
-        const usdAmount = convertCurrency(amount, currency || 'USD', 'USD');
+        const asOfDate = parseMonthKeyToDate(monthKey);
+        const usdAmount = convertCurrency(amount, currency || 'USD', 'USD', asOfDate);
         categoryTotals[category][monthKey] += usdAmount + feePerMonth;
 
         const detailKey = getDetailsKey(category, monthKey, 'expense');

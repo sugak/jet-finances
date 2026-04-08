@@ -5,6 +5,7 @@
   const invoiceStatusLabel = invoiceStatus === 'completed'
     ? 'Completed'
     : (invoiceStatus === 'inc-ats' ? 'Inc. for ATS' : 'In Progress');
+  const isSpecialRateInvoice = invoice.inv_number === 'FAS/26-2482';
 %>
 <!-- Page Header -->
 <div class="page-header">
@@ -16,6 +17,11 @@
         day: 'numeric' 
       }) %>
     </p>
+    <% if (isSpecialRateInvoice) { %>
+      <div style="margin-top: 0.25rem; display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; background-color: #fee2e2; color: #b91c1c; font-size: 0.8rem; font-weight: 600;">
+        This invoice rate is 3.6735
+      </div>
+    <% } %>
     <div id="expenses-summary" class="expenses-summary">
       <!-- Expenses summary will be loaded here -->
     </div>
@@ -150,7 +156,10 @@
           <div class="form-group full-width">
             <label class="checkbox-label" style="display: flex !important; align-items: center; gap: 0.5rem; cursor: pointer;">
               <input type="checkbox" id="includeDisbursementFee" name="include_disbursement_fee" style="width: auto !important; margin: 0; flex-shrink: 0; vertical-align: middle;">
-              <span style="font-weight: bold; color: #1e3a8a;">Include disbursement fee</span>
+              <span style="font-weight: bold; color: #1e3a8a;">
+                Include disbursement fee
+                <span style="font-weight: normal; color: #b91c1c; margin-left: 0.35rem;">(VAT 5% will be applied)</span>
+              </span>
             </label>
           </div>
         </div>
@@ -227,66 +236,73 @@
 <script>
 let invoiceExpensesCache = [];
 const invoiceNumberLabel = '<%= invoice.inv_number || invoice.inv_code || invoice.id %>';
+const isSpecialRateInvoice = '<%= invoice.inv_number %>' === 'FAS/26-2482';
 
-// Currency conversion rates
-// EUR conversions always go through AED (not directly to USD)
+// Currency conversion: until Oct 2025 inclusive USD/AED = 3.6735, from Nov 2025 = 3.6725
+// EUR conversions use fixed EUR/USD for account reporting consistency.
+const AED_TO_USD_UNTIL_OCT2025 = 3.6735;
+const AED_TO_USD_FROM_NOV2025 = 3.6725;
+const CURRENCY_RATES_NOV2025_CUTOFF = new Date('2025-11-01');
+
+function getAEDToUSDRate(asOfDate) {
+  if (isSpecialRateInvoice) {
+    return AED_TO_USD_UNTIL_OCT2025;
+  }
+  return asOfDate < CURRENCY_RATES_NOV2025_CUTOFF ? AED_TO_USD_UNTIL_OCT2025 : AED_TO_USD_FROM_NOV2025;
+}
+
+// Fixed EUR conversion rates
 const CURRENCY_RATES = {
-  AED_TO_USD: 3.6735, // 1 USD = 3.6735 AED
-  AED_TO_EUR: 4.3119, // 1 EUR = 4.3119 AED
+  EUR_TO_USD: 1.16, // 1 EUR = 1.16 USD (fixed)
 };
 
-// Convert currency function
-// EUR conversions always go through AED (not directly to USD)
-function convertCurrency(amount, fromCurrency, toCurrency) {
+function roundTo4(amount) {
+  return Math.round((amount + Number.EPSILON) * 10000) / 10000;
+}
+
+function convertCurrency(amount, fromCurrency, toCurrency, asOfDate) {
   if (fromCurrency === toCurrency) {
-    return amount;
+    return roundTo4(amount);
   }
+  const aedToUsd = getAEDToUSDRate(asOfDate || new Date());
   
-  // Handle EUR conversions - always through AED
+  // Handle EUR conversions with fixed EUR/USD rate.
   if (fromCurrency === 'EUR') {
-    // EUR → AED: 1 EUR = 4.3119 AED
-    const amountInAED = amount * CURRENCY_RATES.AED_TO_EUR;
-    
+    const amountInUSD = amount * CURRENCY_RATES.EUR_TO_USD;
     if (toCurrency === 'AED') {
-      return amountInAED;
+      const amountInAED = amountInUSD * aedToUsd;
+      return roundTo4(amountInAED);
     } else if (toCurrency === 'USD') {
-      // EUR → AED → USD: 1 AED = 1/3.6735 USD
-      return amountInAED / CURRENCY_RATES.AED_TO_USD;
+      return roundTo4(amountInUSD);
     }
   }
   
   if (toCurrency === 'EUR') {
-    // Convert to AED first, then to EUR
-    let amountInAED = 0;
+    let amountInUSD = 0;
     if (fromCurrency === 'USD') {
-      // USD → AED: 1 USD = 3.6735 AED
-      amountInAED = amount * CURRENCY_RATES.AED_TO_USD;
+      amountInUSD = amount;
     } else if (fromCurrency === 'AED') {
-      amountInAED = amount;
+      amountInUSD = amount / aedToUsd;
     }
-    // AED → EUR: 1 AED = 1/4.3119 EUR
-    return amountInAED / CURRENCY_RATES.AED_TO_EUR;
+    const amountInEUR = amountInUSD / CURRENCY_RATES.EUR_TO_USD;
+    return roundTo4(amountInEUR);
   }
   
-  // For non-EUR conversions, convert through USD
-  // Convert to USD first
   let amountInUSD = 0;
   if (fromCurrency === 'USD') {
     amountInUSD = amount;
   } else if (fromCurrency === 'AED') {
-    // 1 AED = 1/3.6735 USD
-    amountInUSD = amount / CURRENCY_RATES.AED_TO_USD;
+    amountInUSD = amount / aedToUsd;
   }
   
-  // Convert from USD to target currency
   if (toCurrency === 'USD') {
-    return amountInUSD;
+    return roundTo4(amountInUSD);
   } else if (toCurrency === 'AED') {
-    // 1 USD = 3.6735 AED
-    return amountInUSD * CURRENCY_RATES.AED_TO_USD;
+    const amountInAED = amountInUSD * aedToUsd;
+    return roundTo4(amountInAED);
   }
   
-  return amount;
+  return roundTo4(amount);
 }
 
 // Toggle section visibility
@@ -380,10 +396,9 @@ async function loadExpenses(preserveExpandedState = false) {
         const currency = expense.exp_currency || 'USD';
         
         // Convert to USD
-        totalUSD += convertCurrency(amount, currency, 'USD');
-        
+        totalUSD += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
         // Convert to AED
-        totalAED += convertCurrency(amount, currency, 'AED');
+        totalAED += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
       }
     });
     
@@ -444,10 +459,10 @@ async function loadExpenses(preserveExpandedState = false) {
           const currency = expense.exp_currency || 'USD';
           
           // Convert to USD
-          typeTotalUSD += convertCurrency(amount, currency, 'USD');
+          typeTotalUSD += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
           
           // Convert to AED
-          typeTotalAED += convertCurrency(amount, currency, 'AED');
+          typeTotalAED += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
         }
       });
       
@@ -1755,8 +1770,8 @@ function renderAccountsViewModal(expenses) {
     if (expense.exp_amount) {
       const amount = parseFloat(expense.exp_amount);
       const currency = expense.exp_currency || 'USD';
-      invoiceTotalUSD += convertCurrency(amount, currency, 'USD');
-      invoiceTotalAED += convertCurrency(amount, currency, 'AED');
+      invoiceTotalUSD += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
+      invoiceTotalAED += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
     }
   });
 
@@ -1900,8 +1915,8 @@ function renderAccountsViewModal(expenses) {
         if (expense.exp_amount) {
           const amt = parseFloat(expense.exp_amount);
           const cur = expense.exp_currency || 'USD';
-          monthUSD += convertCurrency(amt, cur, 'USD');
-          monthAED += convertCurrency(amt, cur, 'AED');
+          monthUSD += convertCurrency(amt, cur, 'USD', getExpenseMonthDate(expense) || new Date());
+          monthAED += convertCurrency(amt, cur, 'AED', getExpenseMonthDate(expense) || new Date());
         }
       });
       sectionTotalUSD += monthUSD;
@@ -2031,11 +2046,11 @@ function renderMonthlyExpensesModal(expenses) {
     if (expense.exp_amount) {
       const amount = parseFloat(expense.exp_amount);
       const currency = expense.exp_currency || 'USD';
-      invoiceTotalUSD += convertCurrency(amount, currency, 'USD');
-      invoiceTotalAED += convertCurrency(amount, currency, 'AED');
+      invoiceTotalUSD += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
+      invoiceTotalAED += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
     }
   });
-  
+
   const sortedKeys = Object.keys(grouped).sort((a, b) => {
     if (a === 'unknown') return 1;
     if (b === 'unknown') return -1;
@@ -2066,8 +2081,8 @@ function renderMonthlyExpensesModal(expenses) {
       if (expense.exp_amount) {
         const amount = parseFloat(expense.exp_amount);
         const currency = expense.exp_currency || 'USD';
-        categoryTotals[category].usd += convertCurrency(amount, currency, 'USD');
-        categoryTotals[category].aed += convertCurrency(amount, currency, 'AED');
+        categoryTotals[category].usd += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
+        categoryTotals[category].aed += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
       }
       categoryTotals[category].count += 1;
     };
@@ -2088,8 +2103,8 @@ function renderMonthlyExpensesModal(expenses) {
       if (expense.exp_amount) {
         const amount = parseFloat(expense.exp_amount);
         const currency = expense.exp_currency || 'USD';
-        monthTotalUSD += convertCurrency(amount, currency, 'USD');
-        monthTotalAED += convertCurrency(amount, currency, 'AED');
+        monthTotalUSD += convertCurrency(amount, currency, 'USD', getExpenseMonthDate(expense) || new Date());
+        monthTotalAED += convertCurrency(amount, currency, 'AED', getExpenseMonthDate(expense) || new Date());
       }
     });
     
@@ -2510,14 +2525,16 @@ document.addEventListener('DOMContentLoaded', function() {
           const subtypeName = expSubtypeSelect.options[expSubtypeSelect.selectedIndex]?.textContent || '';
           
           // Calculate disbursement fee amount (5% of expense amount)
-          const disbursementAmount = parseFloat(data.exp_amount) * 0.05;
+          const baseDisbursementAmount = parseFloat(data.exp_amount) * 0.05;
+          const disbursementVatAmount = baseDisbursementAmount * 0.05; // 5% VAT on disbursement fee
+          const disbursementAmount = baseDisbursementAmount + disbursementVatAmount;
           
           // Build comment
           let comment = `${typeName}`;
           if (subtypeName && subtypeName !== 'Select Subtype') {
             comment += ` - ${subtypeName}`;
           }
-          comment += `, ${data.exp_amount} ${data.exp_currency || 'AED'}`;
+          comment += `, ${data.exp_amount} ${data.exp_currency || 'AED'} — VAT is applied`;
           
           // Add period or flight info
           if (data.exp_period_start && data.exp_period_end) {

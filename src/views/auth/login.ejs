@@ -262,6 +262,19 @@
             if (btnText) btnText.style.display = loading ? 'none' : 'inline';
             if (btnSpinner) btnSpinner.style.display = loading ? 'block' : 'none';
           }
+
+          async function parseJsonSafely(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              const text = await response.text();
+              throw new Error(
+                text.startsWith('<!DOCTYPE') || text.startsWith('<html')
+                  ? 'Server returned HTML instead of JSON'
+                  : 'Server returned a non-JSON response'
+              );
+            }
+            return response.json();
+          }
           
           // Handle form submission
           loginForm.addEventListener('submit', async (e) => {
@@ -287,18 +300,7 @@
                 })
               });
               
-              // Проверяем Content-Type перед парсингом JSON
-              const contentType = response.headers.get('content-type');
-              let result;
-              
-              if (contentType && contentType.includes('application/json')) {
-                result = await response.json();
-              } else {
-                // Если ответ не JSON, читаем как текст
-                const text = await response.text();
-                console.error('Non-JSON response:', text);
-                throw new Error('Server returned an invalid response. Please try again.');
-              }
+              const result = await parseJsonSafely(response);
               
               console.log('Login response:', result);
               
@@ -332,7 +334,7 @@
               });
               
               if (response.ok) {
-                const data = await response.json();
+                const data = await parseJsonSafely(response);
                 if (data.authenticated) {
                   // User is authenticated, redirect to dashboard
                   window.location.href = '/';
